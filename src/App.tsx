@@ -26,6 +26,7 @@ const App = () => (
             <Route path="/clientes" element={<Clients />} />
             <Route path="/faturas" element={<Invoices />} />
             <Route path="/faturas/nova" element={<NewInvoice />} />
+            <Route path="/pagamentos" element={<Payments />} />
             <Route path="/subscricoes" element={<Subscriptions />} />
           </Route>
           <Route path="*" element={<NotFound />} />
