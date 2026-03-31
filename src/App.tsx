@@ -9,6 +9,7 @@ import Clients from "@/pages/Clients";
 import Invoices from "@/pages/Invoices";
 import NewInvoice from "@/pages/NewInvoice";
 import Subscriptions from "@/pages/Subscriptions";
+import Payments from "@/pages/Payments";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
