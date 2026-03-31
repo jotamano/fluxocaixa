@@ -9,6 +9,7 @@ import Clients from "@/pages/Clients";
 import Invoices from "@/pages/Invoices";
 import NewInvoice from "@/pages/NewInvoice";
 import Subscriptions from "@/pages/Subscriptions";
+import Payments from "@/pages/Payments";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const App = () => (
             <Route path="/clientes" element={<Clients />} />
             <Route path="/faturas" element={<Invoices />} />
             <Route path="/faturas/nova" element={<NewInvoice />} />
+            <Route path="/pagamentos" element={<Payments />} />
             <Route path="/subscricoes" element={<Subscriptions />} />
           </Route>
           <Route path="*" element={<NotFound />} />
