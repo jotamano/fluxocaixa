@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { FileText, Search, Filter } from "lucide-react";
+import { FileText, Search, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
 import { sampleInvoices, sampleClients, getInvoiceTotal, formatCurrency, type InvoiceStatus } from "@/lib/data";
+import { generateInvoicePDF } from "@/lib/pdf";
 import { Link } from "react-router-dom";
 
 export default function Invoices() {
