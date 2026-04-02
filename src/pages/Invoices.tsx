@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { FileText, Search, Filter } from "lucide-react";
+import { FileText, Search, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
 import { sampleInvoices, sampleClients, getInvoiceTotal, formatCurrency, type InvoiceStatus } from "@/lib/data";
+import { generateInvoicePDF } from "@/lib/pdf";
 import { Link } from "react-router-dom";
 
 export default function Invoices() {
@@ -67,6 +68,7 @@ export default function Invoices() {
               <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Vencimento</th>
               <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Estado</th>
               <th className="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Valor</th>
+              <th className="px-6 py-3 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">PDF</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -83,6 +85,20 @@ export default function Invoices() {
                   <td className="px-6 py-4 text-sm text-muted-foreground">{new Date(invoice.dueDate).toLocaleDateString('pt-PT')}</td>
                   <td className="px-6 py-4"><StatusBadge status={invoice.status} /></td>
                   <td className="px-6 py-4 text-right text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceTotal(invoice))}</td>
+                  <td className="px-6 py-4 text-center">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      title="Exportar PDF"
+                      onClick={() => {
+                        const client = sampleClients.find(c => c.id === invoice.clientId);
+                        if (client) generateInvoicePDF(invoice, client);
+                      }}
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </td>
                 </tr>
               );
             })}
