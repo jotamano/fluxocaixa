@@ -1,0 +1,110 @@
+import { Invoice, Client, getInvoiceTotal, formatCurrency, serviceLabels } from "./data";
+
+export function generateInvoicePDF(invoice: Invoice, client: Client) {
+  const total = getInvoiceTotal(invoice);
+  const iva = total * 0.23;
+  const totalComIva = total + iva;
+
+  const itemsRows = invoice.items.map(item => `
+    <tr>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;">${item.description}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:center;">${serviceLabels[item.serviceType]}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:center;">${item.quantity}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;">${formatCurrency(item.unitPrice)}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;font-weight:600;">${formatCurrency(item.quantity * item.unitPrice)}</td>
+    </tr>
+  `).join("");
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>${invoice.number}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1a1a2e; background: #fff; }
+        @media print { body { -webkit-print-color-adjust: exact; } }
+      </style>
+    </head>
+    <body>
+      <div style="max-width:800px;margin:0 auto;padding:40px;">
+        <!-- Header -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;">
+          <div>
+            <h1 style="font-size:28px;font-weight:800;color:#1e40af;margin-bottom:4px;">FacturaDigital</h1>
+            <p style="font-size:12px;color:#6b7280;">Marketing Digital & Gestão de Redes Sociais</p>
+          </div>
+          <div style="text-align:right;">
+            <h2 style="font-size:22px;font-weight:700;color:#1a1a2e;">${invoice.number}</h2>
+            <p style="font-size:12px;color:#6b7280;margin-top:4px;">
+              Emissão: ${new Date(invoice.issueDate).toLocaleDateString('pt-PT')}<br/>
+              Vencimento: ${new Date(invoice.dueDate).toLocaleDateString('pt-PT')}
+            </p>
+          </div>
+        </div>
+
+        <!-- Client info -->
+        <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin-bottom:30px;">
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:8px;">Faturado a</p>
+          <p style="font-size:16px;font-weight:700;">${client.company}</p>
+          <p style="font-size:13px;color:#4b5563;margin-top:4px;">${client.name}</p>
+          <p style="font-size:13px;color:#4b5563;">${client.email} · ${client.phone}</p>
+          <p style="font-size:13px;color:#4b5563;">NIF: ${client.nif}</p>
+        </div>
+
+        <!-- Items table -->
+        <table style="width:100%;border-collapse:collapse;margin-bottom:30px;">
+          <thead>
+            <tr style="background:#1e40af;color:#fff;">
+              <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;">Descrição</th>
+              <th style="padding:10px 12px;text-align:center;font-size:12px;font-weight:600;">Serviço</th>
+              <th style="padding:10px 12px;text-align:center;font-size:12px;font-weight:600;">Qtd</th>
+              <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:600;">Preço Unit.</th>
+              <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:600;">Total</th>
+            </tr>
+          </thead>
+          <tbody>${itemsRows}</tbody>
+        </table>
+
+        <!-- Totals -->
+        <div style="display:flex;justify-content:flex-end;">
+          <div style="width:260px;">
+            <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;">
+              <span style="color:#6b7280;">Subtotal</span>
+              <span>${formatCurrency(total)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;border-bottom:1px solid #e5e7eb;">
+              <span style="color:#6b7280;">IVA (23%)</span>
+              <span>${formatCurrency(iva)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:12px 0;font-size:18px;font-weight:700;">
+              <span>Total</span>
+              <span style="color:#1e40af;">${formatCurrency(totalComIva)}</span>
+            </div>
+          </div>
+        </div>
+
+        ${invoice.notes ? `
+          <div style="margin-top:30px;padding:16px;background:#f8fafc;border-radius:8px;border:1px solid #e5e7eb;">
+            <p style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:6px;">Notas</p>
+            <p style="font-size:13px;color:#4b5563;">${invoice.notes}</p>
+          </div>
+        ` : ""}
+
+        <!-- Footer -->
+        <div style="margin-top:50px;padding-top:20px;border-top:1px solid #e5e7eb;text-align:center;">
+          <p style="font-size:11px;color:#9ca3af;">FacturaDigital · Documento gerado automaticamente</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const printWindow = window.open("", "_blank");
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setTimeout(() => printWindow.print(), 500);
+  }
+}
