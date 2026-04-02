@@ -29,6 +29,7 @@ const App = () => (
             <Route path="/faturas/nova" element={<NewInvoice />} />
             <Route path="/pagamentos" element={<Payments />} />
             <Route path="/subscricoes" element={<Subscriptions />} />
+            <Route path="/calendario" element={<CalendarPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

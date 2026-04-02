@@ -12,6 +12,7 @@ const navItems = [
   { to: "/faturas", icon: FileText, label: "Faturas" },
   { to: "/pagamentos", icon: CreditCard, label: "Pagamentos" },
   { to: "/subscricoes", icon: RefreshCw, label: "Subscrições" },
+  { to: "/calendario", icon: CalendarDays, label: "Calendário" },
 ];
 
 interface SidebarContextType {
