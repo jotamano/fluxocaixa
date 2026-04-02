@@ -68,6 +68,7 @@ export default function Invoices() {
               <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Vencimento</th>
               <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Estado</th>
               <th className="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Valor</th>
+              <th className="px-6 py-3 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">PDF</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
