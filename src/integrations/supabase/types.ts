@@ -14,7 +14,207 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      clients: {
+        Row: {
+          company: string
+          created_at: string
+          email: string
+          id: string
+          name: string
+          nif: string
+          phone: string
+        }
+        Insert: {
+          company: string
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          nif?: string
+          phone?: string
+        }
+        Update: {
+          company?: string
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          nif?: string
+          phone?: string
+        }
+        Relationships: []
+      }
+      invoice_items: {
+        Row: {
+          description: string
+          id: string
+          invoice_id: string
+          quantity: number
+          service_type: Database["public"]["Enums"]["service_type"]
+          unit_price: number
+        }
+        Insert: {
+          description: string
+          id?: string
+          invoice_id: string
+          quantity?: number
+          service_type: Database["public"]["Enums"]["service_type"]
+          unit_price?: number
+        }
+        Update: {
+          description?: string
+          id?: string
+          invoice_id?: string
+          quantity?: number
+          service_type?: Database["public"]["Enums"]["service_type"]
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          client_id: string
+          created_at: string
+          due_date: string
+          id: string
+          issue_date: string
+          notes: string | null
+          number: string
+          status: Database["public"]["Enums"]["invoice_status"]
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          due_date?: string
+          id?: string
+          issue_date?: string
+          notes?: string | null
+          number: string
+          status?: Database["public"]["Enums"]["invoice_status"]
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          due_date?: string
+          id?: string
+          issue_date?: string
+          notes?: string | null
+          number?: string
+          status?: Database["public"]["Enums"]["invoice_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          client_id: string
+          created_at: string
+          date: string
+          id: string
+          invoice_id: string | null
+          method: Database["public"]["Enums"]["payment_method"]
+          notes: string | null
+        }
+        Insert: {
+          amount: number
+          client_id: string
+          created_at?: string
+          date?: string
+          id?: string
+          invoice_id?: string | null
+          method?: Database["public"]["Enums"]["payment_method"]
+          notes?: string | null
+        }
+        Update: {
+          amount?: number
+          client_id?: string
+          created_at?: string
+          date?: string
+          id?: string
+          invoice_id?: string | null
+          method?: Database["public"]["Enums"]["payment_method"]
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          active: boolean
+          amount: number
+          client_id: string
+          created_at: string
+          frequency: Database["public"]["Enums"]["subscription_frequency"]
+          id: string
+          name: string
+          next_billing_date: string
+          service_type: Database["public"]["Enums"]["service_type"]
+          start_date: string
+        }
+        Insert: {
+          active?: boolean
+          amount?: number
+          client_id: string
+          created_at?: string
+          frequency?: Database["public"]["Enums"]["subscription_frequency"]
+          id?: string
+          name: string
+          next_billing_date?: string
+          service_type: Database["public"]["Enums"]["service_type"]
+          start_date?: string
+        }
+        Update: {
+          active?: boolean
+          amount?: number
+          client_id?: string
+          created_at?: string
+          frequency?: Database["public"]["Enums"]["subscription_frequency"]
+          id?: string
+          name?: string
+          next_billing_date?: string
+          service_type?: Database["public"]["Enums"]["service_type"]
+          start_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +223,10 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      invoice_status: "paid" | "pending" | "overdue" | "draft"
+      payment_method: "transfer" | "mbway" | "cash" | "card"
+      service_type: "social_media" | "website" | "marketing" | "subscription"
+      subscription_frequency: "monthly" | "quarterly" | "yearly"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +353,11 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      invoice_status: ["paid", "pending", "overdue", "draft"],
+      payment_method: ["transfer", "mbway", "cash", "card"],
+      service_type: ["social_media", "website", "marketing", "subscription"],
+      subscription_frequency: ["monthly", "quarterly", "yearly"],
+    },
   },
 } as const
