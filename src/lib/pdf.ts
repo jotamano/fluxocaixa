@@ -1,17 +1,21 @@
-import { Invoice, Client, getInvoiceTotal, formatCurrency, serviceLabels } from "./data";
+import type { Tables } from "@/integrations/supabase/types";
+import type { Invoice } from "@/hooks/use-data";
+import { getInvoiceItemsTotal, formatCurrency, serviceLabels } from "./data";
+
+type Client = Tables<"clients">;
 
 export function generateInvoicePDF(invoice: Invoice, client: Client) {
-  const total = getInvoiceTotal(invoice);
+  const total = getInvoiceItemsTotal(invoice.invoice_items);
   const iva = total * 0.23;
   const totalComIva = total + iva;
 
-  const itemsRows = invoice.items.map(item => `
+  const itemsRows = invoice.invoice_items.map(item => `
     <tr>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;">${item.description}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:center;">${serviceLabels[item.serviceType]}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:center;">${serviceLabels[item.service_type]}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:center;">${item.quantity}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;">${formatCurrency(item.unitPrice)}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;font-weight:600;">${formatCurrency(item.quantity * item.unitPrice)}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;">${formatCurrency(Number(item.unit_price))}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;font-weight:600;">${formatCurrency(item.quantity * Number(item.unit_price))}</td>
     </tr>
   `).join("");
 
@@ -29,7 +33,6 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
     </head>
     <body>
       <div style="max-width:800px;margin:0 auto;padding:40px;">
-        <!-- Header -->
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;">
           <div>
             <h1 style="font-size:28px;font-weight:800;color:#1e40af;margin-bottom:4px;">FacturaDigital</h1>
@@ -38,13 +41,12 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
           <div style="text-align:right;">
             <h2 style="font-size:22px;font-weight:700;color:#1a1a2e;">${invoice.number}</h2>
             <p style="font-size:12px;color:#6b7280;margin-top:4px;">
-              Emissão: ${new Date(invoice.issueDate).toLocaleDateString('pt-PT')}<br/>
-              Vencimento: ${new Date(invoice.dueDate).toLocaleDateString('pt-PT')}
+              Emissão: ${new Date(invoice.issue_date).toLocaleDateString('pt-PT')}<br/>
+              Vencimento: ${new Date(invoice.due_date).toLocaleDateString('pt-PT')}
             </p>
           </div>
         </div>
 
-        <!-- Client info -->
         <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin-bottom:30px;">
           <p style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:8px;">Faturado a</p>
           <p style="font-size:16px;font-weight:700;">${client.company}</p>
@@ -53,7 +55,6 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
           <p style="font-size:13px;color:#4b5563;">NIF: ${client.nif}</p>
         </div>
 
-        <!-- Items table -->
         <table style="width:100%;border-collapse:collapse;margin-bottom:30px;">
           <thead>
             <tr style="background:#1e40af;color:#fff;">
@@ -67,7 +68,6 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
           <tbody>${itemsRows}</tbody>
         </table>
 
-        <!-- Totals -->
         <div style="display:flex;justify-content:flex-end;">
           <div style="width:260px;">
             <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;">
@@ -92,7 +92,6 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
           </div>
         ` : ""}
 
-        <!-- Footer -->
         <div style="margin-top:50px;padding-top:20px;border-top:1px solid #e5e7eb;text-align:center;">
           <p style="font-size:11px;color:#9ca3af;">FacturaDigital · Documento gerado automaticamente</p>
         </div>

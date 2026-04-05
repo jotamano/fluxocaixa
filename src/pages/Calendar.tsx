@@ -1,8 +1,12 @@
 import { useState, useMemo } from "react";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { sampleSubscriptions, sampleClients, serviceLabels, frequencyLabels, formatCurrency, type Subscription } from "@/lib/data";
+import { useSubscriptions } from "@/hooks/use-data";
+import { serviceLabels, frequencyLabels, formatCurrency } from "@/lib/data";
 import { cn } from "@/lib/utils";
+import type { Tables } from "@/integrations/supabase/types";
+
+type Subscription = Tables<"subscriptions">;
 
 const DAYS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS_PT = [
@@ -16,38 +20,30 @@ function getDaysInMonth(year: number, month: number) {
 
 function getFirstDayOfMonth(year: number, month: number) {
   const day = new Date(year, month, 1).getDay();
-  return day === 0 ? 6 : day - 1; // Monday = 0
+  return day === 0 ? 6 : day - 1;
 }
 
 function getSubscriptionDatesForMonth(sub: Subscription, year: number, month: number): number[] {
   if (!sub.active) return [];
-
-  const startDate = new Date(sub.startDate);
-  const billingDay = new Date(sub.nextBillingDate).getDate();
+  const startDate = new Date(sub.start_date);
+  const billingDay = new Date(sub.next_billing_date).getDate();
   const daysInMonth = getDaysInMonth(year, month);
   const effectiveDay = Math.min(billingDay, daysInMonth);
-
   const checkDate = new Date(year, month, effectiveDay);
   if (checkDate < startDate) return [];
 
-  if (sub.frequency === 'monthly') {
-    return [effectiveDay];
-  }
-
+  if (sub.frequency === 'monthly') return [effectiveDay];
   if (sub.frequency === 'quarterly') {
-    const nextBilling = new Date(sub.nextBillingDate);
-    // Check if this month aligns with quarterly billing
+    const nextBilling = new Date(sub.next_billing_date);
     const monthDiff = (year * 12 + month) - (nextBilling.getFullYear() * 12 + nextBilling.getMonth());
     if (monthDiff % 3 === 0) return [effectiveDay];
     return [];
   }
-
   if (sub.frequency === 'yearly') {
-    const nextBilling = new Date(sub.nextBillingDate);
+    const nextBilling = new Date(sub.next_billing_date);
     if (nextBilling.getMonth() === month) return [effectiveDay];
     return [];
   }
-
   return [];
 }
 
@@ -64,20 +60,20 @@ export default function CalendarPage() {
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
-  const activeSubscriptions = sampleSubscriptions.filter(s => s.active);
+  const { data: allSubscriptions = [] } = useSubscriptions();
+  const activeSubscriptions = allSubscriptions.filter(s => s.active);
 
   const subscriptionsByDay = useMemo(() => {
     const map = new Map<number, { sub: Subscription; client: string }[]>();
     activeSubscriptions.forEach(sub => {
       const days = getSubscriptionDatesForMonth(sub, currentYear, currentMonth);
-      const client = sampleClients.find(c => c.id === sub.clientId);
       days.forEach(day => {
         if (!map.has(day)) map.set(day, []);
-        map.get(day)!.push({ sub, client: client?.company || "—" });
+        map.get(day)!.push({ sub, client: (sub as any).clients?.company || "—" });
       });
     });
     return map;
-  }, [currentMonth, currentYear]);
+  }, [currentMonth, currentYear, activeSubscriptions]);
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
@@ -105,7 +101,7 @@ export default function CalendarPage() {
   const totalBillingThisMonth = useMemo(() => {
     let total = 0;
     subscriptionsByDay.forEach(subs => {
-      subs.forEach(({ sub }) => { total += sub.amount; });
+      subs.forEach(({ sub }) => { total += Number(sub.amount); });
     });
     return total;
   }, [subscriptionsByDay]);
@@ -125,29 +121,18 @@ export default function CalendarPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        {/* Calendar Grid */}
         <div className="rounded-xl border border-border bg-card shadow-card">
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
-            <Button variant="ghost" size="icon" onClick={prevMonth}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <h2 className="font-display font-semibold text-card-foreground text-lg">
-              {MONTHS_PT[currentMonth]} {currentYear}
-            </h2>
-            <Button variant="ghost" size="icon" onClick={nextMonth}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <Button variant="ghost" size="icon" onClick={prevMonth}><ChevronLeft className="h-4 w-4" /></Button>
+            <h2 className="font-display font-semibold text-card-foreground text-lg">{MONTHS_PT[currentMonth]} {currentYear}</h2>
+            <Button variant="ghost" size="icon" onClick={nextMonth}><ChevronRight className="h-4 w-4" /></Button>
           </div>
-
           <div className="p-4">
-            {/* Day headers */}
             <div className="grid grid-cols-7 mb-2">
               {DAYS_PT.map(d => (
                 <div key={d} className="text-center text-xs font-medium text-muted-foreground py-2">{d}</div>
               ))}
             </div>
-
-            {/* Day cells */}
             <div className="grid grid-cols-7 gap-1">
               {Array.from({ length: firstDay }).map((_, i) => (
                 <div key={`empty-${i}`} className="aspect-square" />
@@ -157,7 +142,6 @@ export default function CalendarPage() {
                 const daySubs = subscriptionsByDay.get(day) || [];
                 const isToday = day === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear();
                 const isSelected = day === selectedDay;
-
                 return (
                   <button
                     key={day}
@@ -170,16 +154,11 @@ export default function CalendarPage() {
                       !isSelected && daySubs.length > 0 && "bg-accent/50"
                     )}
                   >
-                    <span className={cn("font-medium", isSelected ? "text-primary-foreground" : "text-card-foreground")}>
-                      {day}
-                    </span>
+                    <span className={cn("font-medium", isSelected ? "text-primary-foreground" : "text-card-foreground")}>{day}</span>
                     {daySubs.length > 0 && (
                       <div className="flex gap-0.5">
                         {daySubs.slice(0, 3).map(({ sub }, idx) => (
-                          <div
-                            key={idx}
-                            className={cn("h-1.5 w-1.5 rounded-full", isSelected ? "bg-primary-foreground/80" : serviceColors[sub.serviceType])}
-                          />
+                          <div key={idx} className={cn("h-1.5 w-1.5 rounded-full", isSelected ? "bg-primary-foreground/80" : serviceColors[sub.service_type])} />
                         ))}
                       </div>
                     )}
@@ -188,8 +167,6 @@ export default function CalendarPage() {
               })}
             </div>
           </div>
-
-          {/* Legend */}
           <div className="border-t border-border px-6 py-3 flex flex-wrap gap-4">
             {Object.entries(serviceColors).map(([key, color]) => (
               <div key={key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -200,13 +177,10 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* Sidebar detail */}
         <div className="space-y-4">
           <div className="rounded-xl border border-border bg-card shadow-card p-6">
             <h3 className="font-display font-semibold text-card-foreground mb-1">
-              {selectedDay
-                ? `${selectedDay} ${MONTHS_PT[currentMonth]}`
-                : "Seleciona um dia"}
+              {selectedDay ? `${selectedDay} ${MONTHS_PT[currentMonth]}` : "Seleciona um dia"}
             </h3>
             {selectedDay && selectedSubs.length === 0 && (
               <p className="text-sm text-muted-foreground mt-3">Sem faturações neste dia.</p>
@@ -220,11 +194,11 @@ export default function CalendarPage() {
                         <p className="text-sm font-semibold text-card-foreground">{sub.name}</p>
                         <p className="text-xs text-muted-foreground">{client}</p>
                       </div>
-                      <div className={cn("h-2 w-2 rounded-full mt-1.5", serviceColors[sub.serviceType])} />
+                      <div className={cn("h-2 w-2 rounded-full mt-1.5", serviceColors[sub.service_type])} />
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Valor</span>
-                      <span className="font-semibold text-card-foreground">{formatCurrency(sub.amount)}</span>
+                      <span className="font-semibold text-card-foreground">{formatCurrency(Number(sub.amount))}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Frequência</span>
@@ -236,7 +210,6 @@ export default function CalendarPage() {
             )}
           </div>
 
-          {/* Monthly summary */}
           <div className="rounded-xl border border-border bg-card shadow-card p-6">
             <h3 className="font-display font-semibold text-card-foreground mb-3">Resumo do mês</h3>
             <div className="space-y-2">

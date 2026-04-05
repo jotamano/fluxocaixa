@@ -3,18 +3,19 @@ import { FileText, Search, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
-import { sampleInvoices, sampleClients, getInvoiceTotal, formatCurrency, type InvoiceStatus } from "@/lib/data";
+import { useInvoices } from "@/hooks/use-data";
+import { formatCurrency, getInvoiceItemsTotal, type InvoiceStatus } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { Link } from "react-router-dom";
 
 export default function Invoices() {
+  const { data: invoices = [] } = useInvoices();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "all">("all");
 
-  const filtered = sampleInvoices.filter(invoice => {
-    const client = sampleClients.find(c => c.id === invoice.clientId);
+  const filtered = invoices.filter(invoice => {
     const matchesSearch = invoice.number.toLowerCase().includes(search.toLowerCase()) ||
-      client?.company.toLowerCase().includes(search.toLowerCase());
+      invoice.clients?.company?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || invoice.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -32,7 +33,7 @@ export default function Invoices() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold font-display text-foreground">Faturas</h1>
-          <p className="mt-1 text-muted-foreground">{sampleInvoices.length} faturas emitidas</p>
+          <p className="mt-1 text-muted-foreground">{invoices.length} faturas emitidas</p>
         </div>
         <Link to="/faturas/nova">
           <Button className="gap-2"><FileText className="h-4 w-4" /> Nova Fatura</Button>
@@ -46,12 +47,7 @@ export default function Invoices() {
         </div>
         <div className="flex gap-1">
           {statuses.map(s => (
-            <Button
-              key={s.value}
-              variant={statusFilter === s.value ? "default" : "outline"}
-              size="sm"
-              onClick={() => setStatusFilter(s.value)}
-            >
+            <Button key={s.value} variant={statusFilter === s.value ? "default" : "outline"} size="sm" onClick={() => setStatusFilter(s.value)}>
               {s.label}
             </Button>
           ))}
@@ -72,36 +68,32 @@ export default function Invoices() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {filtered.map(invoice => {
-              const client = sampleClients.find(c => c.id === invoice.clientId);
-              return (
-                <tr key={invoice.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-6 py-4 text-sm font-medium text-card-foreground">{invoice.number}</td>
-                  <td className="px-6 py-4">
-                    <p className="text-sm font-medium text-card-foreground">{client?.company}</p>
-                    <p className="text-xs text-muted-foreground">{client?.name}</p>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">{new Date(invoice.issueDate).toLocaleDateString('pt-PT')}</td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">{new Date(invoice.dueDate).toLocaleDateString('pt-PT')}</td>
-                  <td className="px-6 py-4"><StatusBadge status={invoice.status} /></td>
-                  <td className="px-6 py-4 text-right text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceTotal(invoice))}</td>
-                  <td className="px-6 py-4 text-center">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      title="Exportar PDF"
-                      onClick={() => {
-                        const client = sampleClients.find(c => c.id === invoice.clientId);
-                        if (client) generateInvoicePDF(invoice, client);
-                      }}
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  </td>
-                </tr>
-              );
-            })}
+            {filtered.map(invoice => (
+              <tr key={invoice.id} className="hover:bg-muted/30 transition-colors">
+                <td className="px-6 py-4 text-sm font-medium text-card-foreground">{invoice.number}</td>
+                <td className="px-6 py-4">
+                  <p className="text-sm font-medium text-card-foreground">{invoice.clients?.company}</p>
+                  <p className="text-xs text-muted-foreground">{invoice.clients?.name}</p>
+                </td>
+                <td className="px-6 py-4 text-sm text-muted-foreground">{new Date(invoice.issue_date).toLocaleDateString('pt-PT')}</td>
+                <td className="px-6 py-4 text-sm text-muted-foreground">{new Date(invoice.due_date).toLocaleDateString('pt-PT')}</td>
+                <td className="px-6 py-4"><StatusBadge status={invoice.status} /></td>
+                <td className="px-6 py-4 text-right text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceItemsTotal(invoice.invoice_items))}</td>
+                <td className="px-6 py-4 text-center">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title="Exportar PDF"
+                    onClick={() => {
+                      if (invoice.clients) generateInvoicePDF(invoice, invoice.clients);
+                    }}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
         {filtered.length === 0 && (
