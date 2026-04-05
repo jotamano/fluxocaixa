@@ -6,14 +6,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { sampleClients, serviceLabels, formatCurrency, type ServiceType, type InvoiceItem } from "@/lib/data";
+import { useClients, useAddInvoice } from "@/hooks/use-data";
+import { serviceLabels, formatCurrency, type ServiceType } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
+import type { Database } from "@/integrations/supabase/types";
+
+type ServiceTypeEnum = Database["public"]["Enums"]["service_type"];
+
+interface FormItem {
+  description: string;
+  serviceType: ServiceTypeEnum;
+  quantity: number;
+  unitPrice: number;
+}
 
 export default function NewInvoice() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { data: clients = [] } = useClients();
+  const addInvoice = useAddInvoice();
   const [clientId, setClientId] = useState("");
-  const [items, setItems] = useState<InvoiceItem[]>([
+  const [items, setItems] = useState<FormItem[]>([
     { description: "", serviceType: "social_media", quantity: 1, unitPrice: 0 },
   ]);
   const [notes, setNotes] = useState("");
@@ -26,7 +39,7 @@ export default function NewInvoice() {
     setItems(prev => prev.filter((_, i) => i !== index));
   };
 
-  const updateItem = (index: number, field: keyof InvoiceItem, value: string | number) => {
+  const updateItem = (index: number, field: keyof FormItem, value: string | number) => {
     setItems(prev => prev.map((item, i) => i === index ? { ...item, [field]: value } : item));
   };
 
@@ -41,8 +54,33 @@ export default function NewInvoice() {
       toast({ title: "Erro", description: "Preenche todos os campos dos itens", variant: "destructive" });
       return;
     }
-    toast({ title: "Fatura criada!", description: `Fatura no valor de ${formatCurrency(total)} criada com sucesso.` });
-    navigate("/faturas");
+
+    const invoiceNumber = `FT ${new Date().getFullYear()}/${String(Date.now()).slice(-3).padStart(3, '0')}`;
+    
+    addInvoice.mutate({
+      invoice: {
+        number: invoiceNumber,
+        client_id: clientId,
+        status: 'draft',
+        issue_date: new Date().toISOString().split('T')[0],
+        due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+        notes: notes || null,
+      },
+      items: items.map(i => ({
+        description: i.description,
+        service_type: i.serviceType,
+        quantity: i.quantity,
+        unit_price: i.unitPrice,
+      })),
+    }, {
+      onSuccess: () => {
+        toast({ title: "Fatura criada!", description: `Fatura no valor de ${formatCurrency(total)} criada com sucesso.` });
+        navigate("/faturas");
+      },
+      onError: (err) => {
+        toast({ title: "Erro", description: err.message, variant: "destructive" });
+      },
+    });
   };
 
   return (
@@ -63,7 +101,7 @@ export default function NewInvoice() {
           <Select value={clientId} onValueChange={setClientId}>
             <SelectTrigger><SelectValue placeholder="Selecionar cliente" /></SelectTrigger>
             <SelectContent>
-              {sampleClients.map(c => (
+              {clients.map(c => (
                 <SelectItem key={c.id} value={c.id}>{c.company} — {c.name}</SelectItem>
               ))}
             </SelectContent>
@@ -130,7 +168,9 @@ export default function NewInvoice() {
           </div>
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => navigate(-1)}>Cancelar</Button>
-            <Button onClick={handleSubmit}>Criar Fatura</Button>
+            <Button onClick={handleSubmit} disabled={addInvoice.isPending}>
+              {addInvoice.isPending ? "A criar..." : "Criar Fatura"}
+            </Button>
           </div>
         </div>
       </div>

@@ -2,15 +2,19 @@ import { useState } from "react";
 import { Users, Plus, Mail, Phone, Building, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { sampleClients, sampleInvoices, sampleSubscriptions, getInvoiceTotal, formatCurrency, type Client } from "@/lib/data";
+import { useClients, useAddClient, useInvoices, useSubscriptions } from "@/hooks/use-data";
+import { formatCurrency, getInvoiceItemsTotal } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
 export default function Clients() {
-  const [clients, setClients] = useState<Client[]>(sampleClients);
+  const { data: clients = [] } = useClients();
+  const { data: invoices = [] } = useInvoices();
+  const { data: subscriptions = [] } = useSubscriptions();
+  const addClient = useAddClient();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState<Omit<Client, 'id'>>({ name: '', email: '', company: '', phone: '', nif: '' });
+  const [form, setForm] = useState({ name: '', email: '', company: '', phone: '', nif: '' });
 
   const filtered = clients.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -18,9 +22,12 @@ export default function Clients() {
   );
 
   const handleAdd = () => {
-    setClients(prev => [...prev, { ...form, id: String(Date.now()) }]);
-    setForm({ name: '', email: '', company: '', phone: '', nif: '' });
-    setDialogOpen(false);
+    addClient.mutate(form, {
+      onSuccess: () => {
+        setForm({ name: '', email: '', company: '', phone: '', nif: '' });
+        setDialogOpen(false);
+      },
+    });
   };
 
   return (
@@ -55,7 +62,9 @@ export default function Clients() {
                   />
                 </div>
               ))}
-              <Button onClick={handleAdd} className="w-full">Adicionar</Button>
+              <Button onClick={handleAdd} className="w-full" disabled={addClient.isPending}>
+                {addClient.isPending ? "A adicionar..." : "Adicionar"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -63,19 +72,14 @@ export default function Clients() {
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Pesquisar clientes..."
-          className="pl-10"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+        <Input placeholder="Pesquisar clientes..." className="pl-10" value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map(client => {
-          const clientInvoices = sampleInvoices.filter(i => i.clientId === client.id);
-          const totalBilled = clientInvoices.reduce((sum, i) => sum + getInvoiceTotal(i), 0);
-          const activeSubs = sampleSubscriptions.filter(s => s.clientId === client.id && s.active).length;
+          const clientInvoices = invoices.filter(i => i.client_id === client.id);
+          const totalBilled = clientInvoices.reduce((sum, i) => sum + getInvoiceItemsTotal(i.invoice_items), 0);
+          const activeSubs = subscriptions.filter(s => s.client_id === client.id && s.active).length;
 
           return (
             <div key={client.id} className="rounded-xl border border-border bg-card p-6 shadow-card hover:shadow-elevated transition-shadow">

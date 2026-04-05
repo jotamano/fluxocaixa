@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Search, FileText, Users, RefreshCw, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { sampleClients, sampleInvoices, sampleSubscriptions, getInvoiceTotal, formatCurrency } from "@/lib/data";
+import { useClients, useInvoices, useSubscriptions } from "@/hooks/use-data";
+import { formatCurrency, getInvoiceItemsTotal } from "@/lib/data";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -20,37 +21,37 @@ export function GlobalSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
+  const { data: clients = [] } = useClients();
+  const { data: invoices = [] } = useInvoices();
+  const { data: subscriptions = [] } = useSubscriptions();
+
   const results = useMemo<SearchResult[]>(() => {
     if (query.length < 2) return [];
     const q = query.toLowerCase();
     const r: SearchResult[] = [];
 
-    sampleClients.forEach(c => {
+    clients.forEach(c => {
       if (c.name.toLowerCase().includes(q) || c.company.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)) {
         r.push({ type: "client", title: c.company, subtitle: c.name, link: "/clientes" });
       }
     });
 
-    sampleInvoices.forEach(inv => {
-      const client = sampleClients.find(c => c.id === inv.clientId);
-      if (inv.number.toLowerCase().includes(q) || client?.company.toLowerCase().includes(q)) {
-        r.push({ type: "invoice", title: inv.number, subtitle: `${client?.company} — ${formatCurrency(getInvoiceTotal(inv))}`, link: "/faturas" });
+    invoices.forEach(inv => {
+      if (inv.number.toLowerCase().includes(q) || inv.clients?.company?.toLowerCase().includes(q)) {
+        r.push({ type: "invoice", title: inv.number, subtitle: `${inv.clients?.company} — ${formatCurrency(getInvoiceItemsTotal(inv.invoice_items))}`, link: "/faturas" });
       }
     });
 
-    sampleSubscriptions.forEach(sub => {
-      const client = sampleClients.find(c => c.id === sub.clientId);
-      if (sub.name.toLowerCase().includes(q) || client?.company.toLowerCase().includes(q)) {
-        r.push({ type: "subscription", title: sub.name, subtitle: `${client?.company} — ${formatCurrency(sub.amount)}`, link: "/subscricoes" });
+    subscriptions.forEach(sub => {
+      if (sub.name.toLowerCase().includes(q) || (sub as any).clients?.company?.toLowerCase().includes(q)) {
+        r.push({ type: "subscription", title: sub.name, subtitle: `${(sub as any).clients?.company} — ${formatCurrency(Number(sub.amount))}`, link: "/subscricoes" });
       }
     });
 
     return r.slice(0, 8);
-  }, [query]);
+  }, [query, clients, invoices, subscriptions]);
 
-  useEffect(() => {
-    setSelectedIdx(0);
-  }, [results]);
+  useEffect(() => { setSelectedIdx(0); }, [results]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -60,18 +61,10 @@ export function GlobalSearch() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Keyboard shortcut: Ctrl+K / Cmd+K
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        inputRef.current?.focus();
-        setOpen(true);
-      }
-      if (e.key === "Escape") {
-        setOpen(false);
-        inputRef.current?.blur();
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); inputRef.current?.focus(); setOpen(true); }
+      if (e.key === "Escape") { setOpen(false); inputRef.current?.blur(); }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
@@ -87,17 +80,8 @@ export function GlobalSearch() {
     }
   };
 
-  const typeIcon = {
-    client: Users,
-    invoice: FileText,
-    subscription: RefreshCw,
-  };
-
-  const typeLabel = {
-    client: "Cliente",
-    invoice: "Fatura",
-    subscription: "Subscrição",
-  };
+  const typeIcon = { client: Users, invoice: FileText, subscription: RefreshCw };
+  const typeLabel = { client: "Cliente", invoice: "Fatura", subscription: "Subscrição" };
 
   return (
     <div ref={ref} className="relative w-full max-w-md">
@@ -126,15 +110,8 @@ export function GlobalSearch() {
             return (
               <button
                 key={idx}
-                className={cn(
-                  "flex items-center gap-3 w-full px-4 py-3 text-left transition-colors",
-                  idx === selectedIdx ? "bg-accent/10" : "hover:bg-muted/50"
-                )}
-                onClick={() => {
-                  navigate(r.link);
-                  setOpen(false);
-                  setQuery("");
-                }}
+                className={cn("flex items-center gap-3 w-full px-4 py-3 text-left transition-colors", idx === selectedIdx ? "bg-accent/10" : "hover:bg-muted/50")}
+                onClick={() => { navigate(r.link); setOpen(false); setQuery(""); }}
                 onMouseEnter={() => setSelectedIdx(idx)}
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted shrink-0">
@@ -144,9 +121,7 @@ export function GlobalSearch() {
                   <p className="text-sm font-medium text-card-foreground truncate">{r.title}</p>
                   <p className="text-xs text-muted-foreground truncate">{r.subtitle}</p>
                 </div>
-                <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
-                  {typeLabel[r.type]}
-                </span>
+                <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">{typeLabel[r.type]}</span>
               </button>
             );
           })}
