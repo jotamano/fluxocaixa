@@ -3,22 +3,21 @@ import { Plus, Search, AlertTriangle, CheckCircle, Clock, CreditCard } from "luc
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useClients, useInvoices, usePayments, useAddPayment } from "@/hooks/use-data";
+import { useClients, useInvoices, usePayments } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, methodLabels } from "@/lib/data";
 import { StatCard } from "@/components/StatCard";
+import { PaymentDialog } from "@/components/PaymentDialog";
+import { useNavigate } from "react-router-dom";
 
 export default function Payments() {
+  const navigate = useNavigate();
   const { data: clients = [] } = useClients();
   const { data: invoices = [] } = useInvoices();
   const { data: payments = [] } = usePayments();
-  const addPayment = useAddPayment();
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ invoiceId: '', amount: '', method: 'transfer' as 'transfer' | 'mbway' | 'cash' | 'card', notes: '', date: new Date().toISOString().split('T')[0] });
 
   const clientDebts = clients.map(client => {
     const clientInvoices = invoices.filter(i => i.client_id === client.id);
@@ -40,24 +39,6 @@ export default function Payments() {
     return matchesSearch && matchesFilter;
   });
 
-  const handleAddPayment = () => {
-    const invoice = invoices.find(i => i.id === form.invoiceId);
-    if (!invoice) return;
-    addPayment.mutate({
-      invoice_id: form.invoiceId,
-      client_id: invoice.client_id,
-      amount: parseFloat(form.amount),
-      date: form.date,
-      method: form.method,
-      notes: form.notes || null,
-    }, {
-      onSuccess: () => {
-        setForm({ invoiceId: '', amount: '', method: 'transfer', notes: '', date: new Date().toISOString().split('T')[0] });
-        setDialogOpen(false);
-      },
-    });
-  };
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -65,59 +46,10 @@ export default function Payments() {
           <h1 className="text-2xl md:text-3xl font-bold font-display text-foreground">Pagamentos & Dívidas</h1>
           <p className="mt-1 text-muted-foreground">Gestão de pagamentos e dívidas de clientes</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2"><Plus className="h-4 w-4" /> Registar Pagamento</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="font-display">Registar Pagamento</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <Label>Fatura</Label>
-                <Select value={form.invoiceId} onValueChange={v => setForm(prev => ({ ...prev, invoiceId: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar fatura" /></SelectTrigger>
-                  <SelectContent>
-                    {invoices.filter(i => i.status !== 'paid').map(inv => (
-                      <SelectItem key={inv.id} value={inv.id}>
-                        {inv.number} — {inv.clients?.company} ({formatCurrency(getInvoiceItemsTotal(inv.invoice_items))})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Valor (€)</Label>
-                <Input type="number" placeholder="0.00" value={form.amount} onChange={e => setForm(prev => ({ ...prev, amount: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Método</Label>
-                <Select value={form.method} onValueChange={v => setForm(prev => ({ ...prev, method: v as typeof form.method }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="transfer">Transferência</SelectItem>
-                    <SelectItem value="mbway">MB WAY</SelectItem>
-                    <SelectItem value="cash">Numerário</SelectItem>
-                    <SelectItem value="card">Cartão</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Data</Label>
-                <Input type="date" value={form.date} onChange={e => setForm(prev => ({ ...prev, date: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Notas (opcional)</Label>
-                <Input placeholder="Ex: Pagamento parcial" value={form.notes} onChange={e => setForm(prev => ({ ...prev, notes: e.target.value }))} />
-              </div>
-              <Button onClick={handleAddPayment} className="w-full" disabled={!form.invoiceId || !form.amount || addPayment.isPending}>
-                {addPayment.isPending ? "A registar..." : "Registar"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button className="gap-2" onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4" /> Registar Pagamento</Button>
       </div>
+
+      <PaymentDialog open={dialogOpen} onOpenChange={setDialogOpen} invoices={invoices} />
 
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <StatCard title="Dívida Total" value={formatCurrency(totalDebt)} icon={AlertTriangle} trend="down" subtitle={`${totalOverdue} cliente(s) em atraso`} />
@@ -155,7 +87,7 @@ export default function Payments() {
           </thead>
           <tbody className="divide-y divide-border">
             {filteredDebts.map(({ client, totalBilled, totalPaid, debt, status }) => (
-              <tr key={client.id} className="hover:bg-muted/20 transition-colors">
+              <tr key={client.id} className="cursor-pointer hover:bg-muted/20 transition-colors" onClick={() => navigate(`/clientes/${client.id}`)}>
                 <td className="px-4 md:px-6 py-4">
                   <p className="font-medium text-card-foreground">{client.name}</p>
                   <p className="text-xs text-muted-foreground">{client.company}</p>
@@ -184,7 +116,12 @@ export default function Payments() {
               const invoice = invoices.find(i => i.id === payment.invoice_id);
               const client = clients.find(c => c.id === payment.client_id);
               return (
-                <div key={payment.id} className="flex flex-col sm:flex-row sm:items-center justify-between px-4 md:px-6 py-4 gap-2">
+                <button
+                  key={payment.id}
+                  type="button"
+                  className="flex w-full flex-col gap-2 px-4 py-4 text-left transition-colors hover:bg-muted/40 md:px-6 sm:flex-row sm:items-center sm:justify-between"
+                  onClick={() => navigate(`/pagamentos/${payment.id}`)}
+                >
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-card-foreground">{client?.company} — {invoice?.number}</p>
                     <p className="text-xs text-muted-foreground">
@@ -193,7 +130,7 @@ export default function Payments() {
                     </p>
                   </div>
                   <span className="text-sm font-semibold text-accent">{formatCurrency(Number(payment.amount))}</span>
-                </div>
+                </button>
               );
             })
           )}

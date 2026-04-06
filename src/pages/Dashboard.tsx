@@ -134,10 +134,10 @@ export default function Dashboard() {
           <div className="divide-y divide-border">
             {invoices.slice(0, 4).map(invoice => (
               <div key={invoice.id} className="flex items-center justify-between px-6 py-4">
-                <div className="space-y-1">
+                <Link to={`/faturas/${invoice.id}`} className="space-y-1 transition-opacity hover:opacity-80">
                   <p className="text-sm font-medium text-card-foreground">{invoice.number}</p>
                   <p className="text-xs text-muted-foreground">{invoice.clients?.company}</p>
-                </div>
+                </Link>
                 <div className="flex items-center gap-4">
                   <StatusBadge status={invoice.status} />
                   <span className="text-sm font-semibold text-card-foreground min-w-[80px] text-right">

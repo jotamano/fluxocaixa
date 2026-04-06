@@ -24,7 +24,7 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
     <html>
     <head>
       <meta charset="utf-8">
-      <title>${invoice.number}</title>
+      <title>Orçamento ${invoice.number}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1a1a2e; background: #fff; }
@@ -39,7 +39,7 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
             <p style="font-size:12px;color:#6b7280;">Marketing Digital & Gestão de Redes Sociais</p>
           </div>
           <div style="text-align:right;">
-            <h2 style="font-size:22px;font-weight:700;color:#1a1a2e;">${invoice.number}</h2>
+            <h2 style="font-size:22px;font-weight:700;color:#1a1a2e;">Orçamento ${invoice.number}</h2>
             <p style="font-size:12px;color:#6b7280;margin-top:4px;">
               Emissão: ${new Date(invoice.issue_date).toLocaleDateString('pt-PT')}<br/>
               Vencimento: ${new Date(invoice.due_date).toLocaleDateString('pt-PT')}
@@ -48,7 +48,7 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
         </div>
 
         <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin-bottom:30px;">
-          <p style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:8px;">Faturado a</p>
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:8px;">Proposta para</p>
           <p style="font-size:16px;font-weight:700;">${client.company}</p>
           <p style="font-size:13px;color:#4b5563;margin-top:4px;">${client.name}</p>
           <p style="font-size:13px;color:#4b5563;">${client.email} · ${client.phone}</p>
@@ -93,7 +93,7 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
         ` : ""}
 
         <div style="margin-top:50px;padding-top:20px;border-top:1px solid #e5e7eb;text-align:center;">
-          <p style="font-size:11px;color:#9ca3af;">FacturaDigital · Documento gerado automaticamente</p>
+          <p style="font-size:11px;color:#9ca3af;">FacturaDigital · Orçamento gerado automaticamente</p>
         </div>
       </div>
     </body>

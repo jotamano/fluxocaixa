@@ -6,16 +6,18 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useInvoices } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, type InvoiceStatus } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 export default function Invoices() {
   const { data: invoices = [] } = useInvoices();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "all">("all");
 
   const filtered = invoices.filter(invoice => {
-    const matchesSearch = invoice.number.toLowerCase().includes(search.toLowerCase()) ||
-      invoice.clients?.company?.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch =
+      invoice.number.toLowerCase().includes(search.toLowerCase()) ||
+      (invoice.clients?.company?.toLowerCase().includes(search.toLowerCase()) ?? false);
     const matchesStatus = statusFilter === "all" || invoice.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -69,7 +71,11 @@ export default function Invoices() {
           </thead>
           <tbody className="divide-y divide-border">
             {filtered.map(invoice => (
-              <tr key={invoice.id} className="hover:bg-muted/30 transition-colors">
+              <tr
+                key={invoice.id}
+                className="cursor-pointer hover:bg-muted/30 transition-colors"
+                onClick={() => navigate(`/faturas/${invoice.id}`)}
+              >
                 <td className="px-6 py-4 text-sm font-medium text-card-foreground">{invoice.number}</td>
                 <td className="px-6 py-4">
                   <p className="text-sm font-medium text-card-foreground">{invoice.clients?.company}</p>
@@ -85,7 +91,8 @@ export default function Invoices() {
                     size="icon"
                     className="h-8 w-8"
                     title="Exportar PDF"
-                    onClick={() => {
+                    onClick={(event) => {
+                      event.stopPropagation();
                       if (invoice.clients) generateInvoicePDF(invoice, invoice.clients);
                     }}
                   >

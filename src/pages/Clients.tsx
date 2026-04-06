@@ -6,11 +6,13 @@ import { useClients, useAddClient, useInvoices, useSubscriptions } from "@/hooks
 import { formatCurrency, getInvoiceItemsTotal } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { useNavigate } from "react-router-dom";
 
 export default function Clients() {
   const { data: clients = [] } = useClients();
   const { data: invoices = [] } = useInvoices();
   const { data: subscriptions = [] } = useSubscriptions();
+  const navigate = useNavigate();
   const addClient = useAddClient();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -82,7 +84,12 @@ export default function Clients() {
           const activeSubs = subscriptions.filter(s => s.client_id === client.id && s.active).length;
 
           return (
-            <div key={client.id} className="rounded-xl border border-border bg-card p-6 shadow-card hover:shadow-elevated transition-shadow">
+            <button
+              key={client.id}
+              type="button"
+              onClick={() => navigate(`/clientes/${client.id}`)}
+              className="rounded-xl border border-border bg-card p-6 text-left shadow-card transition-shadow hover:shadow-elevated"
+            >
               <div className="flex items-start gap-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 font-display font-bold text-primary">
                   {client.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
@@ -114,7 +121,7 @@ export default function Clients() {
                   <p className="text-xs text-muted-foreground">Subscrições</p>
                 </div>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

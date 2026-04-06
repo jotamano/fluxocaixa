@@ -11,6 +11,9 @@ import NewInvoice from "@/pages/NewInvoice";
 import Subscriptions from "@/pages/Subscriptions";
 import Payments from "@/pages/Payments";
 import CalendarPage from "@/pages/Calendar";
+import ClientDetail from "@/pages/ClientDetail";
+import InvoiceDetail from "@/pages/InvoiceDetail";
+import PaymentDetail from "@/pages/PaymentDetail";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -25,9 +28,12 @@ const App = () => (
           <Route element={<AppLayout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/clientes" element={<Clients />} />
+            <Route path="/clientes/:id" element={<ClientDetail />} />
             <Route path="/faturas" element={<Invoices />} />
             <Route path="/faturas/nova" element={<NewInvoice />} />
+            <Route path="/faturas/:id" element={<InvoiceDetail />} />
             <Route path="/pagamentos" element={<Payments />} />
+            <Route path="/pagamentos/:id" element={<PaymentDetail />} />
             <Route path="/subscricoes" element={<Subscriptions />} />
             <Route path="/calendario" element={<CalendarPage />} />
           </Route>

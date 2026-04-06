@@ -32,19 +32,19 @@ export function GlobalSearch() {
 
     clients.forEach(c => {
       if (c.name.toLowerCase().includes(q) || c.company.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)) {
-        r.push({ type: "client", title: c.company, subtitle: c.name, link: "/clientes" });
+        r.push({ type: "client", title: c.company, subtitle: c.name, link: `/clientes/${c.id}` });
       }
     });
 
     invoices.forEach(inv => {
       if (inv.number.toLowerCase().includes(q) || inv.clients?.company?.toLowerCase().includes(q)) {
-        r.push({ type: "invoice", title: inv.number, subtitle: `${inv.clients?.company} — ${formatCurrency(getInvoiceItemsTotal(inv.invoice_items))}`, link: "/faturas" });
+        r.push({ type: "invoice", title: inv.number, subtitle: `${inv.clients?.company || "Sem cliente"} — ${formatCurrency(getInvoiceItemsTotal(inv.invoice_items))}`, link: `/faturas/${inv.id}` });
       }
     });
 
     subscriptions.forEach(sub => {
       if (sub.name.toLowerCase().includes(q) || (sub as any).clients?.company?.toLowerCase().includes(q)) {
-        r.push({ type: "subscription", title: sub.name, subtitle: `${(sub as any).clients?.company} — ${formatCurrency(Number(sub.amount))}`, link: "/subscricoes" });
+        r.push({ type: "subscription", title: sub.name, subtitle: `${(sub as any).clients?.company || "Sem cliente"} — ${formatCurrency(Number(sub.amount))}`, link: `/subscricoes?edit=${sub.id}` });
       }
     });
 
