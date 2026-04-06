@@ -91,8 +91,8 @@ export default function Invoices() {
                     size="icon"
                     className="h-8 w-8"
                     title="Exportar PDF"
-                    onClick={() => {
-                      event?.stopPropagation?.();
+                    onClick={(event) => {
+                      event.stopPropagation();
                       if (invoice.clients) generateInvoicePDF(invoice, invoice.clients);
                     }}
                   >
