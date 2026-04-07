@@ -93,7 +93,7 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
         ` : ""}
 
         <div style="margin-top:50px;padding-top:20px;border-top:1px solid #e5e7eb;text-align:center;">
-          <p style="font-size:11px;color:#9ca3af;">FacturaDigital · Orçamento gerado automaticamente</p>
+          <p style="font-size:11px;color:#9ca3af;">GhostInvoice · Orçamento gerado automaticamente</p>
         </div>
       </div>
     </body>
