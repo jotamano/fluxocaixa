@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState, createContext, useContext } from "react";
+import ghostLogo from "@/assets/ghostinvoice-logo.svg";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -99,10 +100,8 @@ export function AppSidebar() {
         <SheetContent side="left" className="w-64 bg-sidebar text-sidebar-foreground border-sidebar-border p-0">
           <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
           <div className="flex h-16 items-center gap-2 px-6 border-b border-sidebar-border">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary">
-              <FileText className="h-4 w-4 text-sidebar-primary-foreground" />
-            </div>
-            <span className="font-display text-lg font-bold text-sidebar-primary-foreground">FacturaDigital</span>
+            <img src={ghostLogo} alt="GhostInvoice" className="h-8 w-8" />
+            <span className="font-display text-lg font-bold text-sidebar-primary-foreground">GhostInvoice</span>
           </div>
           <SidebarNav onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
@@ -116,10 +115,8 @@ export function AppSidebar() {
       collapsed ? "w-16" : "w-64"
     )}>
       <div className="flex h-16 items-center gap-2 px-4 border-b border-sidebar-border">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary shrink-0">
-          <FileText className="h-4 w-4 text-sidebar-primary-foreground" />
-        </div>
-        {!collapsed && <span className="font-display text-lg font-bold text-sidebar-primary-foreground">FacturaDigital</span>}
+        <img src={ghostLogo} alt="GhostInvoice" className="h-8 w-8 shrink-0" />
+        {!collapsed && <span className="font-display text-lg font-bold text-sidebar-primary-foreground">GhostInvoice</span>}
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="ml-auto flex h-6 w-6 items-center justify-center rounded text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"

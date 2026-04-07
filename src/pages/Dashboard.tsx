@@ -60,7 +60,7 @@ export default function Dashboard() {
     <div className="space-y-8 animate-fade-in">
       <div>
         <h1 className="text-3xl font-bold font-display text-foreground">Dashboard</h1>
-        <p className="mt-1 text-muted-foreground">Visão geral do teu negócio de marketing digital</p>
+        <p className="mt-1 text-muted-foreground">Visão geral do teu negócio</p>
       </div>
 
       {(overdueInvoices.length > 0 || pendingInvoices.length > 0) && (

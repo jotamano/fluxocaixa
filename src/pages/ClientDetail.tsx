@@ -1,9 +1,10 @@
-import { ArrowLeft, Building2, Mail, Phone } from "lucide-react";
+import { ArrowLeft, Building2, Mail, Phone, FileDown } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useClients, useInvoices, usePayments, useSubscriptions } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, frequencyLabels, methodLabels } from "@/lib/data";
+import { generateClientStatement } from "@/lib/statement";
 
 export default function ClientDetail() {
   const navigate = useNavigate();
@@ -51,10 +52,15 @@ export default function ClientDetail() {
             <h1 className="font-display text-3xl font-bold text-foreground">{client.company}</h1>
             <p className="mt-1 text-muted-foreground">{client.name}</p>
           </div>
-          <div className="grid gap-2 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2"><Mail className="h-4 w-4" /> {client.email}</div>
-            <div className="flex items-center gap-2"><Phone className="h-4 w-4" /> {client.phone || "Sem telefone"}</div>
-            <div className="flex items-center gap-2"><Building2 className="h-4 w-4" /> NIF: {client.nif || "Sem NIF"}</div>
+          <div className="flex flex-col gap-3">
+            <Button variant="outline" className="gap-2" onClick={() => generateClientStatement(client, invoices, payments)}>
+              <FileDown className="h-4 w-4" /> Extrato de conta
+            </Button>
+            <div className="grid gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2"><Mail className="h-4 w-4" /> {client.email}</div>
+              <div className="flex items-center gap-2"><Phone className="h-4 w-4" /> {client.phone || "Sem telefone"}</div>
+              <div className="flex items-center gap-2"><Building2 className="h-4 w-4" /> NIF: {client.nif || "Sem NIF"}</div>
+            </div>
           </div>
         </div>
       </div>

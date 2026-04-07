@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Search, AlertTriangle, CheckCircle, Clock, CreditCard } from "lucide-react";
+import { Plus, Search, AlertTriangle, CheckCircle, Clock, CreditCard, Split } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -8,6 +8,7 @@ import { useClients, useInvoices, usePayments } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, methodLabels } from "@/lib/data";
 import { StatCard } from "@/components/StatCard";
 import { PaymentDialog } from "@/components/PaymentDialog";
+import { SplitPaymentDialog } from "@/components/SplitPaymentDialog";
 import { useNavigate } from "react-router-dom";
 
 export default function Payments() {
@@ -18,6 +19,7 @@ export default function Payments() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [splitDialogOpen, setSplitDialogOpen] = useState(false);
 
   const clientDebts = clients.map(client => {
     const clientInvoices = invoices.filter(i => i.client_id === client.id);
@@ -46,10 +48,14 @@ export default function Payments() {
           <h1 className="text-2xl md:text-3xl font-bold font-display text-foreground">Pagamentos & Dívidas</h1>
           <p className="mt-1 text-muted-foreground">Gestão de pagamentos e dívidas de clientes</p>
         </div>
-        <Button className="gap-2" onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4" /> Registar Pagamento</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => setSplitDialogOpen(true)}><Split className="h-4 w-4" /> Repartir</Button>
+          <Button className="gap-2" onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4" /> Registar Pagamento</Button>
+        </div>
       </div>
 
       <PaymentDialog open={dialogOpen} onOpenChange={setDialogOpen} invoices={invoices} />
+      <SplitPaymentDialog open={splitDialogOpen} onOpenChange={setSplitDialogOpen} invoices={invoices} />
 
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <StatCard title="Dívida Total" value={formatCurrency(totalDebt)} icon={AlertTriangle} trend="down" subtitle={`${totalOverdue} cliente(s) em atraso`} />
