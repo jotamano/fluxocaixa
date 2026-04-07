@@ -1,10 +1,12 @@
 import { useState, useMemo } from "react";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSubscriptions } from "@/hooks/use-data";
-import { serviceLabels, frequencyLabels, formatCurrency } from "@/lib/data";
+import { useSubscriptions, useInvoices } from "@/hooks/use-data";
+import { serviceLabels, frequencyLabels, formatCurrency, statusLabels } from "@/lib/data";
 import { cn } from "@/lib/utils";
+import { Link } from "react-router-dom";
 import type { Tables } from "@/integrations/supabase/types";
+import type { Invoice } from "@/hooks/use-data";
 
 type Subscription = Tables<"subscriptions">;
 
@@ -31,7 +33,6 @@ function getSubscriptionDatesForMonth(sub: Subscription, year: number, month: nu
   const effectiveDay = Math.min(billingDay, daysInMonth);
   const checkDate = new Date(year, month, effectiveDay);
   if (checkDate < startDate) return [];
-
   if (sub.frequency === 'monthly') return [effectiveDay];
   if (sub.frequency === 'quarterly') {
     const nextBilling = new Date(sub.next_billing_date);
@@ -61,8 +62,10 @@ export default function CalendarPage() {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
   const { data: allSubscriptions = [] } = useSubscriptions();
+  const { data: invoices = [] } = useInvoices();
   const activeSubscriptions = allSubscriptions.filter(s => s.active);
 
+  // Subscriptions by day
   const subscriptionsByDay = useMemo(() => {
     const map = new Map<number, { sub: Subscription; client: string }[]>();
     activeSubscriptions.forEach(sub => {
@@ -74,6 +77,21 @@ export default function CalendarPage() {
     });
     return map;
   }, [currentMonth, currentYear, activeSubscriptions]);
+
+  // Invoices due by day
+  const invoicesByDay = useMemo(() => {
+    const map = new Map<number, Invoice[]>();
+    invoices.forEach(inv => {
+      if (inv.status === 'paid') return;
+      const due = new Date(inv.due_date);
+      if (due.getMonth() === currentMonth && due.getFullYear() === currentYear) {
+        const day = due.getDate();
+        if (!map.has(day)) map.set(day, []);
+        map.get(day)!.push(inv);
+      }
+    });
+    return map;
+  }, [invoices, currentMonth, currentYear]);
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
@@ -97,6 +115,7 @@ export default function CalendarPage() {
   };
 
   const selectedSubs = selectedDay ? subscriptionsByDay.get(selectedDay) || [] : [];
+  const selectedInvoices = selectedDay ? invoicesByDay.get(selectedDay) || [] : [];
 
   const totalBillingThisMonth = useMemo(() => {
     let total = 0;
@@ -140,6 +159,8 @@ export default function CalendarPage() {
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const day = i + 1;
                 const daySubs = subscriptionsByDay.get(day) || [];
+                const dayInvoices = invoicesByDay.get(day) || [];
+                const hasEvents = daySubs.length > 0 || dayInvoices.length > 0;
                 const isToday = day === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear();
                 const isSelected = day === selectedDay;
                 return (
@@ -151,14 +172,17 @@ export default function CalendarPage() {
                       isToday && "ring-2 ring-primary",
                       isSelected && "bg-primary text-primary-foreground",
                       !isSelected && "hover:bg-accent",
-                      !isSelected && daySubs.length > 0 && "bg-accent/50"
+                      !isSelected && hasEvents && "bg-accent/50"
                     )}
                   >
                     <span className={cn("font-medium", isSelected ? "text-primary-foreground" : "text-card-foreground")}>{day}</span>
-                    {daySubs.length > 0 && (
+                    {hasEvents && (
                       <div className="flex gap-0.5">
-                        {daySubs.slice(0, 3).map(({ sub }, idx) => (
-                          <div key={idx} className={cn("h-1.5 w-1.5 rounded-full", isSelected ? "bg-primary-foreground/80" : serviceColors[sub.service_type])} />
+                        {daySubs.slice(0, 2).map(({ sub }, idx) => (
+                          <div key={`s-${idx}`} className={cn("h-1.5 w-1.5 rounded-full", isSelected ? "bg-primary-foreground/80" : serviceColors[sub.service_type])} />
+                        ))}
+                        {dayInvoices.slice(0, 2).map((inv, idx) => (
+                          <div key={`i-${idx}`} className={cn("h-1.5 w-1.5 rounded-full", isSelected ? "bg-primary-foreground/80" : inv.status === 'overdue' ? "bg-destructive" : "bg-warning")} />
                         ))}
                       </div>
                     )}
@@ -174,6 +198,14 @@ export default function CalendarPage() {
                 {serviceLabels[key as keyof typeof serviceLabels]}
               </div>
             ))}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="h-2 w-2 rounded-full bg-warning" />
+              Fatura pendente
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="h-2 w-2 rounded-full bg-destructive" />
+              Fatura vencida
+            </div>
           </div>
         </div>
 
@@ -182,11 +214,30 @@ export default function CalendarPage() {
             <h3 className="font-display font-semibold text-card-foreground mb-1">
               {selectedDay ? `${selectedDay} ${MONTHS_PT[currentMonth]}` : "Seleciona um dia"}
             </h3>
-            {selectedDay && selectedSubs.length === 0 && (
-              <p className="text-sm text-muted-foreground mt-3">Sem faturações neste dia.</p>
+
+            {selectedDay && selectedSubs.length === 0 && selectedInvoices.length === 0 && (
+              <p className="text-sm text-muted-foreground mt-3">Sem eventos neste dia.</p>
             )}
+
+            {selectedInvoices.length > 0 && (
+              <div className="mt-4 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Faturas a vencer</p>
+                {selectedInvoices.map(inv => (
+                  <Link key={inv.id} to={`/faturas/${inv.id}`} className="block rounded-lg border border-border p-4 space-y-1 hover:bg-muted/40 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-card-foreground">{inv.number}</p>
+                      <StatusBadge status={inv.status} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">{inv.clients?.company}</p>
+                    <p className="text-sm font-semibold text-card-foreground">{formatCurrency(inv.invoice_items.reduce((s, it) => s + it.quantity * Number(it.unit_price), 0))}</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+
             {selectedSubs.length > 0 && (
               <div className="mt-4 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Subscrições</p>
                 {selectedSubs.map(({ sub, client }, idx) => (
                   <div key={idx} className="rounded-lg border border-border p-4 space-y-2">
                     <div className="flex items-start justify-between">
@@ -218,8 +269,8 @@ export default function CalendarPage() {
                 <span className="font-semibold text-card-foreground">{activeSubscriptions.length}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Faturações este mês</span>
-                <span className="font-semibold text-card-foreground">{subscriptionsByDay.size}</span>
+                <span className="text-muted-foreground">Faturas a vencer</span>
+                <span className="font-semibold text-card-foreground">{invoicesByDay.size}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total previsto</span>

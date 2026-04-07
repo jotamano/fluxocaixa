@@ -1,9 +1,11 @@
+import { useMemo, useState } from "react";
 import { Euro, Users, FileText, RefreshCw, TrendingUp, AlertTriangle, Bell } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatCurrency, getInvoiceItemsTotal, serviceLabels } from "@/lib/data";
-import { useInvoices, useClients, useSubscriptions } from "@/hooks/use-data";
+import { useInvoices, useClients, useSubscriptions, usePayments } from "@/hooks/use-data";
 import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
 const CHART_COLORS = [
@@ -13,37 +15,96 @@ const CHART_COLORS = [
   "hsl(280, 60%, 50%)",
 ];
 
+const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+type DateRange = "month" | "quarter" | "year" | "all";
+
+function getDateRange(range: DateRange): { start: Date; end: Date } {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  switch (range) {
+    case "month":
+      return { start: new Date(now.getFullYear(), now.getMonth(), 1), end };
+    case "quarter": {
+      const qStart = now.getMonth() - (now.getMonth() % 3);
+      return { start: new Date(now.getFullYear(), qStart, 1), end };
+    }
+    case "year":
+      return { start: new Date(now.getFullYear(), 0, 1), end };
+    case "all":
+      return { start: new Date(2020, 0, 1), end };
+  }
+}
+
 export default function Dashboard() {
   const { data: invoices = [] } = useInvoices();
   const { data: clients = [] } = useClients();
   const { data: subscriptions = [] } = useSubscriptions();
+  const { data: payments = [] } = usePayments();
+  const [dateRange, setDateRange] = useState<DateRange>("year");
 
-  const totalRevenue = invoices
-    .filter(i => i.status === 'paid')
-    .reduce((sum, i) => sum + getInvoiceItemsTotal(i.invoice_items), 0);
+  const { start, end } = getDateRange(dateRange);
 
-  const pendingAmount = invoices
-    .filter(i => i.status === 'pending' || i.status === 'overdue')
-    .reduce((sum, i) => sum + getInvoiceItemsTotal(i.invoice_items), 0);
+  const filteredInvoices = useMemo(() =>
+    invoices.filter(i => {
+      const d = new Date(i.issue_date);
+      return d >= start && d <= end;
+    }),
+    [invoices, start, end]
+  );
+
+  const filteredPayments = useMemo(() =>
+    payments.filter(p => {
+      const d = new Date(p.date);
+      return d >= start && d <= end;
+    }),
+    [payments, start, end]
+  );
+
+  const totalRevenue = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+  const pendingInvoices = filteredInvoices.filter(i => i.status === 'pending' || i.status === 'overdue' || i.status === 'partially_paid');
+  const pendingAmount = pendingInvoices.reduce((sum, i) => {
+    const invoiceTotal = getInvoiceItemsTotal(i.invoice_items);
+    const paid = payments.filter(p => p.invoice_id === i.id).reduce((s, p) => s + Number(p.amount), 0);
+    return sum + Math.max(invoiceTotal - paid, 0);
+  }, 0);
 
   const activeSubscriptions = subscriptions.filter(s => s.active);
-  const monthlyRecurring = activeSubscriptions
-    .filter(s => s.frequency === 'monthly')
-    .reduce((sum, s) => sum + Number(s.amount), 0);
+  const monthlyRecurring = activeSubscriptions.reduce((sum, s) => {
+    const amt = Number(s.amount);
+    if (s.frequency === 'monthly') return sum + amt;
+    if (s.frequency === 'quarterly') return sum + amt / 3;
+    if (s.frequency === 'yearly') return sum + amt / 12;
+    return sum;
+  }, 0);
 
-  const overdueInvoices = invoices.filter(i => i.status === 'overdue');
-  const pendingInvoices = invoices.filter(i => i.status === 'pending');
+  const overdueInvoices = filteredInvoices.filter(i => i.status === 'overdue');
 
-  const monthlyData = [
-    { month: "Set", value: 1200 },
-    { month: "Out", value: 1800 },
-    { month: "Nov", value: 1450 },
-    { month: "Dez", value: 2100 },
-    { month: "Jan", value: 750 },
-    { month: "Fev", value: 1500 },
-  ];
+  // Real monthly revenue from payments
+  const monthlyData = useMemo(() => {
+    const monthMap = new Map<string, number>();
+    const monthsToShow = dateRange === 'month' ? 1 : dateRange === 'quarter' ? 3 : 12;
+    const now = new Date();
+    for (let i = monthsToShow - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      monthMap.set(key, 0);
+    }
+    filteredPayments.forEach(p => {
+      const d = new Date(p.date);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      if (monthMap.has(key)) {
+        monthMap.set(key, (monthMap.get(key) || 0) + Number(p.amount));
+      }
+    });
+    return Array.from(monthMap.entries()).map(([key, value]) => {
+      const [, monthIdx] = key.split('-').map(Number);
+      return { month: MONTHS_PT[monthIdx], value };
+    });
+  }, [filteredPayments, dateRange]);
 
-  const serviceRevenue = invoices.reduce((acc, inv) => {
+  const serviceRevenue = filteredInvoices.reduce((acc, inv) => {
     inv.invoice_items.forEach(item => {
       const key = item.service_type;
       acc[key] = (acc[key] || 0) + item.quantity * Number(item.unit_price);
@@ -56,11 +117,27 @@ export default function Dashboard() {
     value,
   }));
 
+  const dateFilters: { value: DateRange; label: string }[] = [
+    { value: "month", label: "Este mês" },
+    { value: "quarter", label: "Trimestre" },
+    { value: "year", label: "Este ano" },
+    { value: "all", label: "Tudo" },
+  ];
+
   return (
     <div className="space-y-8 animate-fade-in">
-      <div>
-        <h1 className="text-3xl font-bold font-display text-foreground">Dashboard</h1>
-        <p className="mt-1 text-muted-foreground">Visão geral do teu negócio</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold font-display text-foreground">Dashboard</h1>
+          <p className="mt-1 text-muted-foreground">Visão geral do teu negócio</p>
+        </div>
+        <div className="flex gap-1">
+          {dateFilters.map(f => (
+            <Button key={f.value} variant={dateRange === f.value ? "default" : "outline"} size="sm" onClick={() => setDateRange(f.value)}>
+              {f.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {(overdueInvoices.length > 0 || pendingInvoices.length > 0) && (
@@ -70,14 +147,12 @@ export default function Dashboard() {
             {overdueInvoices.length > 0 && (
               <p className="text-sm text-foreground">
                 <AlertTriangle className="h-3.5 w-3.5 inline text-destructive mr-1" />
-                <span className="font-semibold">{overdueInvoices.length} fatura(s) vencida(s)</span> — {overdueInvoices.map(i => {
-                  return `${i.number} (${i.clients?.company || '—'})`;
-                }).join(", ")}
+                <span className="font-semibold">{overdueInvoices.length} fatura(s) vencida(s)</span> — {overdueInvoices.map(i => `${i.number} (${i.clients?.company || '—'})`).join(", ")}
               </p>
             )}
             {pendingInvoices.length > 0 && (
               <p className="text-sm text-muted-foreground">
-                <span className="font-medium">{pendingInvoices.length} fatura(s) pendente(s)</span> no valor total de {formatCurrency(pendingInvoices.reduce((s, i) => s + getInvoiceItemsTotal(i.invoice_items), 0))}
+                <span className="font-medium">{pendingInvoices.length} fatura(s) pendente(s)</span> — em dívida: {formatCurrency(pendingAmount)}
               </p>
             )}
           </div>
@@ -85,9 +160,9 @@ export default function Dashboard() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Receita Total" value={formatCurrency(totalRevenue)} subtitle="+12% vs mês anterior" trend="up" icon={Euro} />
-        <StatCard title="Valores Pendentes" value={formatCurrency(pendingAmount)} subtitle={`${overdueInvoices.length} fatura(s) vencida(s)`} trend="down" icon={TrendingUp} />
-        <StatCard title="Clientes Ativos" value={String(clients.length)} subtitle="+2 este mês" trend="up" icon={Users} />
+        <StatCard title="Receita Total" value={formatCurrency(totalRevenue)} subtitle="Pagamentos recebidos" trend="up" icon={Euro} />
+        <StatCard title="Em Dívida" value={formatCurrency(pendingAmount)} subtitle={`${overdueInvoices.length} fatura(s) vencida(s)`} trend="down" icon={TrendingUp} />
+        <StatCard title="Clientes Ativos" value={String(clients.length)} trend="up" icon={Users} />
         <StatCard title="Receita Recorrente" value={formatCurrency(monthlyRecurring)} subtitle={`${activeSubscriptions.length} subscrições ativas`} trend="neutral" icon={RefreshCw} />
       </div>
 
@@ -132,19 +207,19 @@ export default function Dashboard() {
             <Link to="/faturas" className="text-sm font-medium text-primary hover:underline">Ver todas</Link>
           </div>
           <div className="divide-y divide-border">
-            {invoices.slice(0, 4).map(invoice => (
-              <div key={invoice.id} className="flex items-center justify-between px-6 py-4">
-                <Link to={`/faturas/${invoice.id}`} className="space-y-1 transition-opacity hover:opacity-80">
+            {filteredInvoices.slice(0, 5).map(invoice => (
+              <Link key={invoice.id} to={`/faturas/${invoice.id}`} className="flex items-center justify-between px-6 py-4 hover:bg-muted/30 transition-colors">
+                <div className="space-y-1">
                   <p className="text-sm font-medium text-card-foreground">{invoice.number}</p>
                   <p className="text-xs text-muted-foreground">{invoice.clients?.company}</p>
-                </Link>
+                </div>
                 <div className="flex items-center gap-4">
                   <StatusBadge status={invoice.status} />
                   <span className="text-sm font-semibold text-card-foreground min-w-[80px] text-right">
                     {formatCurrency(getInvoiceItemsTotal(invoice.invoice_items))}
                   </span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>

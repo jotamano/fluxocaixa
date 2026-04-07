@@ -33,6 +33,22 @@ export function useAddClient() {
   });
 }
 
+export function useDeleteClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("clients").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+    },
+  });
+}
+
 // Invoices with items
 export function useInvoices() {
   return useQuery({
@@ -63,6 +79,23 @@ export function useAddInvoice() {
   });
 }
 
+export function useDeleteInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      // Delete items first, then invoice
+      await supabase.from("invoice_items").delete().eq("invoice_id", id);
+      await supabase.from("payments").update({ invoice_id: null }).eq("invoice_id", id);
+      const { error } = await supabase.from("invoices").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+    },
+  });
+}
+
 // Subscriptions
 export function useSubscriptions() {
   return useQuery({
@@ -75,6 +108,18 @@ export function useSubscriptions() {
       if (error) throw error;
       return data as Subscription[];
     },
+  });
+}
+
+export function useAddSubscription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (sub: TablesInsert<"subscriptions">) => {
+      const { data, error } = await supabase.from("subscriptions").insert(sub).select("*, clients(*)").single();
+      if (error) throw error;
+      return data as Subscription;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["subscriptions"] }),
   });
 }
 
@@ -106,6 +151,17 @@ export function useUpdateSubscription() {
   });
 }
 
+export function useDeleteSubscription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("subscriptions").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["subscriptions"] }),
+  });
+}
+
 // Payments
 export function usePayments() {
   return useQuery({
@@ -126,37 +182,7 @@ export function useAddPayment() {
       if (error) throw error;
 
       if (payment.invoice_id) {
-        const [invoiceItemsResult, invoiceResult, invoicePaymentsResult] = await Promise.all([
-          supabase.from("invoice_items").select("quantity, unit_price").eq("invoice_id", payment.invoice_id),
-          supabase.from("invoices").select("due_date").eq("id", payment.invoice_id).single(),
-          supabase.from("payments").select("amount").eq("invoice_id", payment.invoice_id),
-        ]);
-
-        if (invoiceItemsResult.error) throw invoiceItemsResult.error;
-        if (invoiceResult.error) throw invoiceResult.error;
-        if (invoicePaymentsResult.error) throw invoicePaymentsResult.error;
-
-        const invoiceTotal = (invoiceItemsResult.data ?? []).reduce(
-          (sum, item) => sum + item.quantity * Number(item.unit_price),
-          0,
-        );
-        const paidTotal = (invoicePaymentsResult.data ?? []).reduce((sum, item) => sum + Number(item.amount), 0);
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const dueDate = new Date(invoiceResult.data.due_date);
-        dueDate.setHours(0, 0, 0, 0);
-
-        const nextStatus: TablesUpdate<"invoices">["status"] =
-          invoiceTotal > 0 && paidTotal >= invoiceTotal ? "paid" : dueDate < today ? "overdue" : "pending";
-
-        const { error: updateInvoiceError } = await supabase
-          .from("invoices")
-          .update({ status: nextStatus })
-          .eq("id", payment.invoice_id);
-
-        if (updateInvoiceError) throw updateInvoiceError;
+        await recalcInvoiceStatus(payment.invoice_id);
       }
 
       return data;
@@ -166,4 +192,86 @@ export function useAddPayment() {
       qc.invalidateQueries({ queryKey: ["invoices"] });
     },
   });
+}
+
+export function useDeletePayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payment: Payment) => {
+      const { error } = await supabase.from("payments").delete().eq("id", payment.id);
+      if (error) throw error;
+      if (payment.invoice_id) {
+        await recalcInvoiceStatus(payment.invoice_id);
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
+  });
+}
+
+// Next invoice number
+export function useNextInvoiceNumber() {
+  return useQuery({
+    queryKey: ["next-invoice-number"],
+    queryFn: async () => {
+      const year = new Date().getFullYear();
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("number")
+        .like("number", `FT ${year}/%`)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (error) throw error;
+
+      let nextNum = 1;
+      if (data && data.length > 0) {
+        const lastNumber = data[0].number;
+        const match = lastNumber.match(/\/(\d+)$/);
+        if (match) nextNum = parseInt(match[1], 10) + 1;
+      }
+      return `FT ${year}/${String(nextNum).padStart(3, '0')}`;
+    },
+  });
+}
+
+async function recalcInvoiceStatus(invoiceId: string) {
+  const [invoiceItemsResult, invoiceResult, invoicePaymentsResult] = await Promise.all([
+    supabase.from("invoice_items").select("quantity, unit_price").eq("invoice_id", invoiceId),
+    supabase.from("invoices").select("due_date, status").eq("id", invoiceId).single(),
+    supabase.from("payments").select("amount").eq("invoice_id", invoiceId),
+  ]);
+
+  if (invoiceItemsResult.error || invoiceResult.error || invoicePaymentsResult.error) return;
+
+  // Don't update draft invoices
+  if (invoiceResult.data.status === 'draft') return;
+
+  const invoiceTotal = (invoiceItemsResult.data ?? []).reduce(
+    (sum, item) => sum + item.quantity * Number(item.unit_price),
+    0,
+  );
+  const paidTotal = (invoicePaymentsResult.data ?? []).reduce((sum, item) => sum + Number(item.amount), 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dueDate = new Date(invoiceResult.data.due_date);
+  dueDate.setHours(0, 0, 0, 0);
+
+  let nextStatus: string;
+  if (invoiceTotal > 0 && paidTotal >= invoiceTotal) {
+    nextStatus = "paid";
+  } else if (paidTotal > 0 && paidTotal < invoiceTotal) {
+    nextStatus = "partially_paid";
+  } else if (dueDate < today) {
+    nextStatus = "overdue";
+  } else {
+    nextStatus = "pending";
+  }
+
+  await supabase
+    .from("invoices")
+    .update({ status: nextStatus as any })
+    .eq("id", invoiceId);
 }

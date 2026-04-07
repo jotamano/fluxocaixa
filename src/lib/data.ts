@@ -1,7 +1,7 @@
 // Labels and helpers only — data now comes from Supabase
 
 export type ServiceType = 'social_media' | 'website' | 'marketing' | 'subscription';
-export type InvoiceStatus = 'paid' | 'pending' | 'overdue' | 'draft';
+export type InvoiceStatus = 'paid' | 'pending' | 'overdue' | 'draft' | 'partially_paid';
 export type SubscriptionFrequency = 'monthly' | 'quarterly' | 'yearly';
 export type PaymentMethod = 'transfer' | 'mbway' | 'cash' | 'card';
 
@@ -12,11 +12,19 @@ export const serviceLabels: Record<ServiceType, string> = {
   subscription: 'Subscrição',
 };
 
+export const defaultServicePrices: Record<ServiceType, number> = {
+  social_media: 250,
+  website: 800,
+  marketing: 350,
+  subscription: 50,
+};
+
 export const statusLabels: Record<InvoiceStatus, string> = {
   paid: 'Paga',
   pending: 'Pendente',
   overdue: 'Vencida',
   draft: 'Rascunho',
+  partially_paid: 'Parcialmente Paga',
 };
 
 export const frequencyLabels: Record<SubscriptionFrequency, string> = {
