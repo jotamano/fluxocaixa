@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState, createContext, useContext } from "react";
+import ghostLogo from "@/assets/ghostinvoice-logo.svg";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
