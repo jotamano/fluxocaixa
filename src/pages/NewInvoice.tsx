@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useNavigate } from "react-router-dom";
 import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber } from "@/hooks/use-data";
 import { serviceLabels, defaultServicePrices, formatCurrency, type ServiceType } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";

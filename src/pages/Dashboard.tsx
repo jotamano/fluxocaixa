@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Euro, Users, FileText, RefreshCw, TrendingUp, AlertTriangle, Bell } from "lucide-react";
+import { Euro, Users, RefreshCw, TrendingUp, AlertTriangle, Bell } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatCurrency, getInvoiceItemsTotal, serviceLabels } from "@/lib/data";
