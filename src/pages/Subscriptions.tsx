@@ -1,29 +1,36 @@
 import { useEffect, useState } from "react";
-import { Pause, Play, Pencil } from "lucide-react";
+import { Pause, Play, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSubscriptions, useClients, useToggleSubscription, useUpdateSubscription } from "@/hooks/use-data";
+import { useSubscriptions, useClients, useToggleSubscription, useUpdateSubscription, useAddSubscription, useDeleteSubscription } from "@/hooks/use-data";
 import { serviceLabels, frequencyLabels, formatCurrency, type ServiceType, type SubscriptionFrequency } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useSearchParams } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Subscriptions() {
+  const { toast } = useToast();
   const { data: clients = [] } = useClients();
   const { data: subscriptions = [] } = useSubscriptions();
   const [searchParams, setSearchParams] = useSearchParams();
   const toggleSub = useToggleSubscription();
   const updateSub = useUpdateSubscription();
+  const addSub = useAddSubscription();
+  const deleteSub = useDeleteSubscription();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({
     clientId: "",
     name: "",
     serviceType: "social_media" as ServiceType,
     amount: "",
     frequency: "monthly" as SubscriptionFrequency,
-    nextBillingDate: "",
+    nextBillingDate: new Date().toISOString().split('T')[0],
   });
 
   const active = subscriptions.filter(s => s.active);
@@ -39,7 +46,6 @@ export default function Subscriptions() {
   const openEditor = (id: string) => {
     const subscription = subscriptions.find(item => item.id === id);
     if (!subscription) return;
-
     setEditingId(subscription.id);
     setForm({
       clientId: subscription.client_id,
@@ -48,6 +54,19 @@ export default function Subscriptions() {
       amount: String(Number(subscription.amount)),
       frequency: subscription.frequency,
       nextBillingDate: subscription.next_billing_date,
+    });
+    setDialogOpen(true);
+  };
+
+  const openCreate = () => {
+    setEditingId(null);
+    setForm({
+      clientId: "",
+      name: "",
+      serviceType: "social_media",
+      amount: "",
+      frequency: "monthly",
+      nextBillingDate: new Date().toISOString().split('T')[0],
     });
     setDialogOpen(true);
   };
@@ -69,25 +88,97 @@ export default function Subscriptions() {
   };
 
   const handleSave = () => {
-    if (!editingId) return;
-
-    updateSub.mutate(
-      {
-        id: editingId,
-        updates: {
+    if (editingId) {
+      updateSub.mutate(
+        {
+          id: editingId,
+          updates: {
+            client_id: form.clientId,
+            name: form.name,
+            service_type: form.serviceType,
+            amount: Number(form.amount),
+            frequency: form.frequency,
+            next_billing_date: form.nextBillingDate,
+          },
+        },
+        { onSuccess: () => handleDialogChange(false) },
+      );
+    } else {
+      addSub.mutate(
+        {
           client_id: form.clientId,
           name: form.name,
           service_type: form.serviceType,
           amount: Number(form.amount),
           frequency: form.frequency,
           next_billing_date: form.nextBillingDate,
+          start_date: new Date().toISOString().split('T')[0],
         },
-      },
-      {
-        onSuccess: () => handleDialogChange(false),
-      },
-    );
+        {
+          onSuccess: () => {
+            handleDialogChange(false);
+            toast({ title: "Subscrição criada!" });
+          },
+          onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+        },
+      );
+    }
   };
+
+  const handleDelete = () => {
+    if (!deleteId) return;
+    deleteSub.mutate(deleteId, {
+      onSuccess: () => {
+        setConfirmOpen(false);
+        setDeleteId(null);
+        toast({ title: "Subscrição eliminada" });
+      },
+      onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+    });
+  };
+
+  const renderCard = (sub: typeof subscriptions[0], isActive: boolean) => (
+    <div key={sub.id} className={`rounded-xl border border-border bg-card p-6 shadow-card ${!isActive ? 'opacity-70' : ''}`}>
+      <div className="flex items-start justify-between">
+        <div className="space-y-1">
+          <h3 className="font-display font-semibold text-card-foreground">{sub.name}</h3>
+          <p className="text-xs text-muted-foreground">{sub.clients?.company}</p>
+        </div>
+        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold border ${isActive ? 'bg-success/10 text-success border-success/20' : 'bg-muted text-muted-foreground border-border'}`}>
+          {isActive ? 'Ativa' : 'Inativa'}
+        </span>
+      </div>
+      <div className="mt-4 space-y-2">
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Serviço</span>
+          <span className="text-card-foreground">{serviceLabels[sub.service_type]}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Valor</span>
+          <span className="font-semibold text-card-foreground">{formatCurrency(Number(sub.amount))}/{frequencyLabels[sub.frequency].toLowerCase()}</span>
+        </div>
+        {isActive && (
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Próx. faturação</span>
+            <span className="text-card-foreground">{new Date(sub.next_billing_date).toLocaleDateString('pt-PT')}</span>
+          </div>
+        )}
+      </div>
+      <div className="mt-4 pt-4 border-t border-border">
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="flex-1 gap-2" onClick={() => openEditor(sub.id)}>
+            <Pencil className="h-3 w-3" /> Editar
+          </Button>
+          <Button variant="outline" size="sm" className="flex-1 gap-2" onClick={() => toggleSub.mutate({ id: sub.id, active: !isActive })}>
+            {isActive ? <><Pause className="h-3 w-3" /> Suspender</> : <><Play className="h-3 w-3" /> Reativar</>}
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2 text-destructive hover:text-destructive" onClick={() => { setDeleteId(sub.id); setConfirmOpen(true); }}>
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -96,46 +187,14 @@ export default function Subscriptions() {
           <h1 className="text-3xl font-bold font-display text-foreground">Subscrições</h1>
           <p className="mt-1 text-muted-foreground">Receita recorrente mensal: <span className="font-semibold text-foreground">{formatCurrency(totalMRR)}</span></p>
         </div>
+        <Button className="gap-2" onClick={openCreate}><Plus className="h-4 w-4" /> Nova Subscrição</Button>
       </div>
 
       <div className="space-y-4">
         <h2 className="font-display font-semibold text-foreground">Ativas ({active.length})</h2>
+        {active.length === 0 && <p className="text-sm text-muted-foreground">Sem subscrições ativas.</p>}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {active.map(sub => (
-            <div key={sub.id} className="rounded-xl border border-border bg-card p-6 shadow-card">
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <h3 className="font-display font-semibold text-card-foreground">{sub.name}</h3>
-                  <p className="text-xs text-muted-foreground">{sub.clients?.company}</p>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-success/10 border border-success/20 px-2 py-0.5 text-xs font-semibold text-success">Ativa</span>
-              </div>
-              <div className="mt-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Serviço</span>
-                  <span className="text-card-foreground">{serviceLabels[sub.service_type]}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Valor</span>
-                  <span className="font-semibold text-card-foreground">{formatCurrency(Number(sub.amount))}/{frequencyLabels[sub.frequency].toLowerCase()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Próx. faturação</span>
-                  <span className="text-card-foreground">{new Date(sub.next_billing_date).toLocaleDateString('pt-PT')}</span>
-                </div>
-              </div>
-              <div className="mt-4 pt-4 border-t border-border">
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1 gap-2" onClick={() => openEditor(sub.id)}>
-                    <Pencil className="h-3 w-3" /> Editar
-                  </Button>
-                  <Button variant="outline" size="sm" className="flex-1 gap-2" onClick={() => toggleSub.mutate({ id: sub.id, active: false })}>
-                    <Pause className="h-3 w-3" /> Suspender
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
+          {active.map(sub => renderCard(sub, true))}
         </div>
       </div>
 
@@ -143,33 +202,7 @@ export default function Subscriptions() {
         <div className="space-y-4">
           <h2 className="font-display font-semibold text-foreground">Inativas ({inactive.length})</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {inactive.map(sub => (
-              <div key={sub.id} className="rounded-xl border border-border bg-card p-6 shadow-card opacity-70">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <h3 className="font-display font-semibold text-card-foreground">{sub.name}</h3>
-                    <p className="text-xs text-muted-foreground">{sub.clients?.company}</p>
-                  </div>
-                  <span className="inline-flex items-center rounded-full bg-muted border border-border px-2 py-0.5 text-xs font-semibold text-muted-foreground">Inativa</span>
-                </div>
-                <div className="mt-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Valor</span>
-                    <span className="text-card-foreground">{formatCurrency(Number(sub.amount))}/{frequencyLabels[sub.frequency].toLowerCase()}</span>
-                  </div>
-                </div>
-                <div className="mt-4 pt-4 border-t border-border">
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1 gap-2" onClick={() => openEditor(sub.id)}>
-                      <Pencil className="h-3 w-3" /> Editar
-                    </Button>
-                    <Button variant="outline" size="sm" className="flex-1 gap-2" onClick={() => toggleSub.mutate({ id: sub.id, active: true })}>
-                      <Play className="h-3 w-3" /> Reativar
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
+            {inactive.map(sub => renderCard(sub, false))}
           </div>
         </div>
       )}
@@ -177,9 +210,8 @@ export default function Subscriptions() {
       <Dialog open={dialogOpen} onOpenChange={handleDialogChange}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="font-display">Editar subscrição</DialogTitle>
+            <DialogTitle className="font-display">{editingId ? 'Editar subscrição' : 'Nova subscrição'}</DialogTitle>
           </DialogHeader>
-
           <div className="space-y-4 pt-4">
             <div className="space-y-2">
               <Label>Cliente</Label>
@@ -192,12 +224,10 @@ export default function Subscriptions() {
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-2">
               <Label>Nome</Label>
-              <Input value={form.name} onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))} />
+              <Input value={form.name} onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))} placeholder="Ex: Gestão Redes Sociais" />
             </div>
-
             <div className="space-y-2">
               <Label>Serviço</Label>
               <Select value={form.serviceType} onValueChange={value => setForm(prev => ({ ...prev, serviceType: value as ServiceType }))}>
@@ -209,7 +239,6 @@ export default function Subscriptions() {
                 </SelectContent>
               </Select>
             </div>
-
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Valor (€)</Label>
@@ -227,18 +256,25 @@ export default function Subscriptions() {
                 </Select>
               </div>
             </div>
-
             <div className="space-y-2">
               <Label>Próxima faturação</Label>
               <Input type="date" value={form.nextBillingDate} onChange={e => setForm(prev => ({ ...prev, nextBillingDate: e.target.value }))} />
             </div>
-
-            <Button className="w-full" onClick={handleSave} disabled={updateSub.isPending || !form.clientId || !form.name || !form.amount}>
-              {updateSub.isPending ? "A guardar..." : "Guardar alterações"}
+            <Button className="w-full" onClick={handleSave} disabled={(updateSub.isPending || addSub.isPending) || !form.clientId || !form.name || !form.amount}>
+              {(updateSub.isPending || addSub.isPending) ? "A guardar..." : editingId ? "Guardar alterações" : "Criar subscrição"}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Eliminar subscrição"
+        description="Tens a certeza que queres eliminar esta subscrição? Esta ação é irreversível."
+        onConfirm={handleDelete}
+        isPending={deleteSub.isPending}
+      />
     </div>
   );
 }

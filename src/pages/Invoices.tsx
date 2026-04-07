@@ -27,6 +27,7 @@ export default function Invoices() {
     { value: "paid", label: "Pagas" },
     { value: "pending", label: "Pendentes" },
     { value: "overdue", label: "Vencidas" },
+    { value: "partially_paid", label: "Parciais" },
     { value: "draft", label: "Rascunhos" },
   ];
 
@@ -47,7 +48,7 @@ export default function Invoices() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Pesquisar faturas..." className="pl-10" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 flex-wrap">
           {statuses.map(s => (
             <Button key={s.value} variant={statusFilter === s.value ? "default" : "outline"} size="sm" onClick={() => setStatusFilter(s.value)}>
               {s.label}

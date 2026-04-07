@@ -6,15 +6,17 @@ const statusStyles: Record<InvoiceStatus, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
   overdue: "bg-destructive/10 text-destructive border-destructive/20",
   draft: "bg-muted text-muted-foreground border-border",
+  partially_paid: "bg-blue-500/10 text-blue-600 border-blue-500/20",
 };
 
-export function StatusBadge({ status }: { status: InvoiceStatus }) {
+export function StatusBadge({ status }: { status: string }) {
+  const safeStatus = (status in statusStyles ? status : 'draft') as InvoiceStatus;
   return (
     <span className={cn(
       "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
-      statusStyles[status]
+      statusStyles[safeStatus]
     )}>
-      {statusLabels[status]}
+      {statusLabels[safeStatus] || status}
     </span>
   );
 }

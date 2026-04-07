@@ -1,19 +1,24 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, Download, Wallet } from "lucide-react";
+import { ArrowLeft, Download, Wallet, Trash2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
-import { useInvoices, usePayments } from "@/hooks/use-data";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useInvoices, usePayments, useDeleteInvoice } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, serviceLabels, methodLabels } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
+import { useToast } from "@/hooks/use-toast";
 
 export default function InvoiceDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { toast } = useToast();
   const { data: invoices = [], isLoading: invoicesLoading } = useInvoices();
   const { data: payments = [], isLoading: paymentsLoading } = usePayments();
+  const deleteInvoice = useDeleteInvoice();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const invoice = useMemo(() => invoices.find(item => item.id === id), [invoices, id]);
   const invoicePayments = useMemo(() => payments.filter(payment => payment.invoice_id === id), [payments, id]);
@@ -39,7 +44,17 @@ export default function InvoiceDetail() {
   const total = getInvoiceItemsTotal(invoice.invoice_items);
   const paidTotal = invoicePayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
   const outstanding = Math.max(total - paidTotal, 0);
-  const effectiveStatus = outstanding <= 0 ? "paid" : invoice.status;
+  const effectiveStatus = outstanding <= 0 && total > 0 ? "paid" : paidTotal > 0 && paidTotal < total ? "partially_paid" : invoice.status;
+
+  const handleDelete = () => {
+    deleteInvoice.mutate(invoice.id, {
+      onSuccess: () => {
+        toast({ title: "Fatura eliminada", description: `A fatura ${invoice.number} foi eliminada com sucesso.` });
+        navigate("/faturas");
+      },
+      onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+    });
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -73,6 +88,9 @@ export default function InvoiceDetail() {
               <Wallet className="h-4 w-4" /> Pagar nesta fatura
             </Button>
           )}
+          <Button variant="outline" className="gap-2 text-destructive hover:text-destructive" onClick={() => setConfirmOpen(true)}>
+            <Trash2 className="h-4 w-4" /> Anular
+          </Button>
         </div>
       </div>
 
@@ -94,14 +112,14 @@ export default function InvoiceDetail() {
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
           <div className="border-b border-border px-6 py-4">
-            <h2 className="font-display text-lg font-semibold text-card-foreground">Itens da fatura</h2>
+            <h2 className="font-display text-lg font-semibold text-card-foreground">Serviços da fatura</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  <th className="px-6 py-3 text-left font-semibold text-muted-foreground">Descrição</th>
                   <th className="px-6 py-3 text-left font-semibold text-muted-foreground">Serviço</th>
+                  <th className="px-6 py-3 text-left font-semibold text-muted-foreground">Descrição</th>
                   <th className="px-6 py-3 text-right font-semibold text-muted-foreground">Qtd</th>
                   <th className="px-6 py-3 text-right font-semibold text-muted-foreground">Preço</th>
                   <th className="px-6 py-3 text-right font-semibold text-muted-foreground">Total</th>
@@ -110,8 +128,8 @@ export default function InvoiceDetail() {
               <tbody className="divide-y divide-border">
                 {invoice.invoice_items.map(item => (
                   <tr key={item.id}>
-                    <td className="px-6 py-4 text-card-foreground">{item.description}</td>
                     <td className="px-6 py-4 text-muted-foreground">{serviceLabels[item.service_type]}</td>
+                    <td className="px-6 py-4 text-card-foreground">{item.description}</td>
                     <td className="px-6 py-4 text-right text-card-foreground">{item.quantity}</td>
                     <td className="px-6 py-4 text-right text-card-foreground">{formatCurrency(Number(item.unit_price))}</td>
                     <td className="px-6 py-4 text-right font-semibold text-card-foreground">{formatCurrency(item.quantity * Number(item.unit_price))}</td>
@@ -180,6 +198,15 @@ export default function InvoiceDetail() {
         initialInvoiceId={invoice.id}
         initialAmount={outstanding > 0 ? String(outstanding) : ""}
         title="Registar pagamento nesta fatura"
+      />
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Anular fatura"
+        description={`Tens a certeza que queres anular a fatura ${invoice.number}? Esta ação é irreversível e irá eliminar todos os dados associados.`}
+        onConfirm={handleDelete}
+        isPending={deleteInvoice.isPending}
       />
     </div>
   );

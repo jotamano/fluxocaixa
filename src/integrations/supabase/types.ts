@@ -223,7 +223,12 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      invoice_status: "paid" | "pending" | "overdue" | "draft"
+      invoice_status:
+        | "paid"
+        | "pending"
+        | "overdue"
+        | "draft"
+        | "partially_paid"
       payment_method: "transfer" | "mbway" | "cash" | "card"
       service_type: "social_media" | "website" | "marketing" | "subscription"
       subscription_frequency: "monthly" | "quarterly" | "yearly"
@@ -354,7 +359,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      invoice_status: ["paid", "pending", "overdue", "draft"],
+      invoice_status: ["paid", "pending", "overdue", "draft", "partially_paid"],
       payment_method: ["transfer", "mbway", "cash", "card"],
       service_type: ["social_media", "website", "marketing", "subscription"],
       subscription_frequency: ["monthly", "quarterly", "yearly"],

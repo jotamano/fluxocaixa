@@ -1,18 +1,33 @@
-import { ArrowLeft, Building2, Mail, Phone, FileDown } from "lucide-react";
+import { useState, useMemo } from "react";
+import { ArrowLeft, Building2, Mail, Phone, FileDown, Trash2, FileText, CreditCard, UserPlus, Clock } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
-import { useClients, useInvoices, usePayments, useSubscriptions } from "@/hooks/use-data";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useClients, useInvoices, usePayments, useSubscriptions, useDeleteClient } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, frequencyLabels, methodLabels } from "@/lib/data";
 import { generateClientStatement } from "@/lib/statement";
+import { useToast } from "@/hooks/use-toast";
+
+interface TimelineEvent {
+  date: Date;
+  type: 'client_created' | 'invoice_created' | 'payment_received';
+  title: string;
+  subtitle?: string;
+  icon: typeof FileText;
+  color: string;
+}
 
 export default function ClientDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { toast } = useToast();
   const { data: clients = [], isLoading: clientsLoading } = useClients();
   const { data: invoices = [], isLoading: invoicesLoading } = useInvoices();
   const { data: payments = [], isLoading: paymentsLoading } = usePayments();
   const { data: subscriptions = [], isLoading: subscriptionsLoading } = useSubscriptions();
+  const deleteClient = useDeleteClient();
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   if (clientsLoading || invoicesLoading || paymentsLoading || subscriptionsLoading) {
     return <div className="py-10 text-sm text-muted-foreground">A carregar cliente...</div>;
@@ -41,6 +56,50 @@ export default function ClientDetail() {
   const totalPaid = clientPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
   const outstanding = Math.max(totalBilled - totalPaid, 0);
 
+  // Build timeline
+  const timeline: TimelineEvent[] = useMemo(() => {
+    const events: TimelineEvent[] = [];
+    events.push({
+      date: new Date(client.created_at),
+      type: 'client_created',
+      title: 'Cliente registado',
+      subtitle: client.company,
+      icon: UserPlus,
+      color: 'text-primary',
+    });
+    clientInvoices.forEach(inv => {
+      events.push({
+        date: new Date(inv.created_at),
+        type: 'invoice_created',
+        title: `Fatura ${inv.number} criada`,
+        subtitle: formatCurrency(getInvoiceItemsTotal(inv.invoice_items)),
+        icon: FileText,
+        color: 'text-warning',
+      });
+    });
+    clientPayments.forEach(pay => {
+      events.push({
+        date: new Date(pay.created_at),
+        type: 'payment_received',
+        title: `Pagamento recebido`,
+        subtitle: `${formatCurrency(Number(pay.amount))} — ${methodLabels[pay.method]}`,
+        icon: CreditCard,
+        color: 'text-success',
+      });
+    });
+    return events.sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [client, clientInvoices, clientPayments]);
+
+  const handleDelete = () => {
+    deleteClient.mutate(client.id, {
+      onSuccess: () => {
+        toast({ title: "Cliente eliminado", description: `${client.company} foi eliminado.` });
+        navigate("/clientes");
+      },
+      onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+    });
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="space-y-3">
@@ -53,9 +112,14 @@ export default function ClientDetail() {
             <p className="mt-1 text-muted-foreground">{client.name}</p>
           </div>
           <div className="flex flex-col gap-3">
-            <Button variant="outline" className="gap-2" onClick={() => generateClientStatement(client, invoices, payments)}>
-              <FileDown className="h-4 w-4" /> Extrato de conta
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" className="gap-2" onClick={() => generateClientStatement(client, invoices, payments)}>
+                <FileDown className="h-4 w-4" /> Extrato de conta
+              </Button>
+              <Button variant="outline" className="gap-2 text-destructive hover:text-destructive" onClick={() => setConfirmOpen(true)}>
+                <Trash2 className="h-4 w-4" /> Eliminar
+              </Button>
+            </div>
             <div className="grid gap-2 text-sm text-muted-foreground">
               <div className="flex items-center gap-2"><Mail className="h-4 w-4" /> {client.email}</div>
               <div className="flex items-center gap-2"><Phone className="h-4 w-4" /> {client.phone || "Sem telefone"}</div>
@@ -85,31 +149,58 @@ export default function ClientDetail() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
-          <div className="border-b border-border px-6 py-4">
-            <h2 className="font-display text-lg font-semibold text-card-foreground">Faturas do cliente</h2>
+        <div className="space-y-6">
+          <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
+            <div className="border-b border-border px-6 py-4">
+              <h2 className="font-display text-lg font-semibold text-card-foreground">Faturas do cliente</h2>
+            </div>
+            <div className="divide-y divide-border">
+              {clientInvoices.length === 0 ? (
+                <p className="px-6 py-8 text-sm text-muted-foreground">Ainda não existem faturas para este cliente.</p>
+              ) : (
+                clientInvoices.map(invoice => (
+                  <Link
+                    key={invoice.id}
+                    to={`/faturas/${invoice.id}`}
+                    className="flex items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-muted/40"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-card-foreground">{invoice.number}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(invoice.issue_date).toLocaleDateString("pt-PT")}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <StatusBadge status={invoice.status} />
+                      <span className="text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceItemsTotal(invoice.invoice_items))}</span>
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
           </div>
-          <div className="divide-y divide-border">
-            {clientInvoices.length === 0 ? (
-              <p className="px-6 py-8 text-sm text-muted-foreground">Ainda não existem faturas para este cliente.</p>
-            ) : (
-              clientInvoices.map(invoice => (
-                <Link
-                  key={invoice.id}
-                  to={`/faturas/${invoice.id}`}
-                  className="flex items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-muted/40"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-card-foreground">{invoice.number}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(invoice.issue_date).toLocaleDateString("pt-PT")}</p>
+
+          {/* Activity Timeline */}
+          <div className="rounded-xl border border-border bg-card shadow-card p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Clock className="h-5 w-5 text-muted-foreground" />
+              <h2 className="font-display text-lg font-semibold text-card-foreground">Histórico de Atividades</h2>
+            </div>
+            <div className="relative space-y-0">
+              {timeline.slice(0, 15).map((event, idx) => (
+                <div key={idx} className="flex gap-4 pb-4">
+                  <div className="flex flex-col items-center">
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full bg-muted ${event.color}`}>
+                      <event.icon className="h-4 w-4" />
+                    </div>
+                    {idx < timeline.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
                   </div>
-                  <div className="flex items-center gap-4">
-                    <StatusBadge status={invoice.status} />
-                    <span className="text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceItemsTotal(invoice.invoice_items))}</span>
+                  <div className="pt-1 pb-2">
+                    <p className="text-sm font-medium text-card-foreground">{event.title}</p>
+                    {event.subtitle && <p className="text-xs text-muted-foreground">{event.subtitle}</p>}
+                    <p className="text-xs text-muted-foreground mt-0.5">{event.date.toLocaleDateString("pt-PT")} · {event.date.toLocaleTimeString("pt-PT", { hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
-                </Link>
-              ))
-            )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -159,6 +250,15 @@ export default function ClientDetail() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Eliminar cliente"
+        description={`Tens a certeza que queres eliminar ${client.company}? Todas as faturas, pagamentos e subscrições associadas serão desvinculadas.`}
+        onConfirm={handleDelete}
+        isPending={deleteClient.isPending}
+      />
     </div>
   );
 }
