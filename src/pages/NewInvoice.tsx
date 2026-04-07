@@ -45,7 +45,7 @@ function getDefaultItem(): FormItem {
 }
 
 export default function NewInvoice() {
-  const navigate = (await import("react-router-dom")).useNavigate();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const { data: clients = [] } = useClients();
   const addInvoice = useAddInvoice();
