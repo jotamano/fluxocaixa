@@ -17,8 +17,8 @@ export default function Payments() {
   const { data: invoices = [] } = useInvoices();
   const { data: payments = [] } = usePayments();
   const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [splitDialogOpen, setSplitDialogOpen] = useState(false);
 
   const clientDebts = clients.map(client => {
     const clientInvoices = invoices.filter(i => i.client_id === client.id);
