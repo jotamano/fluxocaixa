@@ -47,10 +47,14 @@ export default function Payments() {
           <h1 className="text-2xl md:text-3xl font-bold font-display text-foreground">Pagamentos & Dívidas</h1>
           <p className="mt-1 text-muted-foreground">Gestão de pagamentos e dívidas de clientes</p>
         </div>
-        <Button className="gap-2" onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4" /> Registar Pagamento</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => setSplitDialogOpen(true)}><Split className="h-4 w-4" /> Repartir</Button>
+          <Button className="gap-2" onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4" /> Registar Pagamento</Button>
+        </div>
       </div>
 
       <PaymentDialog open={dialogOpen} onOpenChange={setDialogOpen} invoices={invoices} />
+      <SplitPaymentDialog open={splitDialogOpen} onOpenChange={setSplitDialogOpen} invoices={invoices} />
 
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <StatCard title="Dívida Total" value={formatCurrency(totalDebt)} icon={AlertTriangle} trend="down" subtitle={`${totalOverdue} cliente(s) em atraso`} />
