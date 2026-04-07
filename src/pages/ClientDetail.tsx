@@ -1,9 +1,10 @@
-import { ArrowLeft, Building2, Mail, Phone } from "lucide-react";
+import { ArrowLeft, Building2, Mail, Phone, FileDown } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useClients, useInvoices, usePayments, useSubscriptions } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, frequencyLabels, methodLabels } from "@/lib/data";
+import { generateClientStatement } from "@/lib/statement";
 
 export default function ClientDetail() {
   const navigate = useNavigate();
