@@ -126,7 +126,7 @@ export default function NewInvoice() {
     }, {
       onSuccess: () => {
         toast({ title: "Fatura criada!", description: `Fatura no valor de ${formatCurrency(total)} criada com sucesso.` });
-        (window as any).__navigate?.("/faturas") || window.history.back();
+        navigate("/faturas");
       },
       onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
     });
