@@ -17,6 +17,7 @@ export default function Payments() {
   const { data: invoices = [] } = useInvoices();
   const { data: payments = [] } = usePayments();
   const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [splitDialogOpen, setSplitDialogOpen] = useState(false);
 
