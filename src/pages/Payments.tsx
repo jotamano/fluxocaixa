@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Search, AlertTriangle, CheckCircle, Clock, CreditCard } from "lucide-react";
+import { Plus, Search, AlertTriangle, CheckCircle, Clock, CreditCard, Split } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -8,6 +8,7 @@ import { useClients, useInvoices, usePayments } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, methodLabels } from "@/lib/data";
 import { StatCard } from "@/components/StatCard";
 import { PaymentDialog } from "@/components/PaymentDialog";
+import { SplitPaymentDialog } from "@/components/SplitPaymentDialog";
 import { useNavigate } from "react-router-dom";
 
 export default function Payments() {
