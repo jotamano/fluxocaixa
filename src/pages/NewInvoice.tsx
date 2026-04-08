@@ -60,11 +60,14 @@ export default function NewInvoice() {
     setItems(prev => prev.map((item, i) => {
       if (i !== index) return item;
       const updated = { ...item, [field]: value };
-      // Auto-fill when service type changes
-      if (field === 'serviceType') {
-        const st = value as ServiceTypeEnum;
-        updated.unitPrice = defaultServicePrices[st];
-        updated.description = getDefaultDescription(st);
+      if (field === 'serviceId') {
+        const svc = services.find(s => s.id === value);
+        if (svc) {
+          const now = new Date();
+          updated.serviceType = svc.service_type;
+          updated.unitPrice = Number(svc.default_price);
+          updated.description = `${svc.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`;
+        }
       }
       return updated;
     }));
