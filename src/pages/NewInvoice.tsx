@@ -7,12 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
-import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber } from "@/hooks/use-data";
-import { serviceLabels, defaultServicePrices, formatCurrency, type ServiceType } from "@/lib/data";
+import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber, useActiveServices } from "@/hooks/use-data";
+import { formatCurrency } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
-import type { Database } from "@/integrations/supabase/types";
-
-type ServiceTypeEnum = Database["public"]["Enums"]["service_type"];
 
 const MONTHS_PT = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -20,7 +17,8 @@ const MONTHS_PT = [
 ];
 
 interface FormItem {
-  serviceType: ServiceTypeEnum;
+  serviceId: string;
+  serviceType: string;
   description: string;
   quantity: number;
   unitPrice: number;
@@ -28,18 +26,13 @@ interface FormItem {
   endDate: string;
 }
 
-function getDefaultDescription(serviceType: ServiceTypeEnum): string {
-  const now = new Date();
-  return `${serviceLabels[serviceType]} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`;
-}
-
 function getDefaultItem(): FormItem {
-  const st: ServiceTypeEnum = "social_media";
   return {
-    serviceType: st,
-    description: getDefaultDescription(st),
+    serviceId: "",
+    serviceType: "social_media",
+    description: "",
     quantity: 1,
-    unitPrice: defaultServicePrices[st],
+    unitPrice: 0,
     startDate: "",
     endDate: "",
   };
