@@ -42,6 +42,7 @@ export default function NewInvoice() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { data: clients = [] } = useClients();
+  const { data: services = [] } = useActiveServices();
   const addInvoice = useAddInvoice();
   const addClient = useAddClient();
   const { data: nextNumber = "" } = useNextInvoiceNumber();
