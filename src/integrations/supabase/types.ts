@@ -168,6 +168,33 @@ export type Database = {
           },
         ]
       }
+      services: {
+        Row: {
+          active: boolean
+          created_at: string
+          default_price: number
+          id: string
+          name: string
+          service_type: Database["public"]["Enums"]["service_type"]
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          default_price?: number
+          id?: string
+          name: string
+          service_type: Database["public"]["Enums"]["service_type"]
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          default_price?: number
+          id?: string
+          name?: string
+          service_type?: Database["public"]["Enums"]["service_type"]
+        }
+        Relationships: []
+      }
       subscriptions: {
         Row: {
           active: boolean
