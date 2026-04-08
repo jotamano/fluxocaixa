@@ -49,9 +49,11 @@ export default function Subscriptions() {
     const subscription = subscriptions.find(item => item.id === id);
     if (!subscription) return;
     setEditingId(subscription.id);
+    const matchedService = services.find(s => s.service_type === subscription.service_type && s.name === subscription.name);
     setForm({
       clientId: subscription.client_id,
       name: subscription.name,
+      serviceId: matchedService?.id || "",
       serviceType: subscription.service_type,
       amount: String(Number(subscription.amount)),
       frequency: subscription.frequency,
