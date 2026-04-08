@@ -9,6 +9,7 @@ import Clients from "@/pages/Clients";
 import Invoices from "@/pages/Invoices";
 import NewInvoice from "@/pages/NewInvoice";
 import Subscriptions from "@/pages/Subscriptions";
+import Services from "@/pages/Services";
 import Payments from "@/pages/Payments";
 import CalendarPage from "@/pages/Calendar";
 import ClientDetail from "@/pages/ClientDetail";
