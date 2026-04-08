@@ -113,9 +113,10 @@ export default function NewInvoice() {
         if (i.startDate && i.endDate) {
           desc += ` (${new Date(i.startDate).toLocaleDateString('pt-PT')} - ${new Date(i.endDate).toLocaleDateString('pt-PT')})`;
         }
+        const svc = services.find(s => s.id === i.serviceId);
         return {
           description: desc,
-          service_type: i.serviceType,
+          service_type: (svc?.service_type || 'social_media') as any,
           quantity: i.quantity,
           unit_price: i.unitPrice,
         };
