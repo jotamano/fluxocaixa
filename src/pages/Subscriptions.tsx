@@ -113,7 +113,7 @@ export default function Subscriptions() {
         {
           client_id: form.clientId,
           name: form.name,
-          service_type: form.serviceType,
+          service_type: form.serviceType as any,
           amount: Number(form.amount),
           frequency: form.frequency,
           next_billing_date: form.nextBillingDate,
