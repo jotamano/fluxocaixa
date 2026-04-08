@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function Subscriptions() {
   const { toast } = useToast();
   const { data: clients = [] } = useClients();
+  const { data: services = [] } = useActiveServices();
   const { data: subscriptions = [] } = useSubscriptions();
   const [searchParams, setSearchParams] = useSearchParams();
   const toggleSub = useToggleSubscription();
