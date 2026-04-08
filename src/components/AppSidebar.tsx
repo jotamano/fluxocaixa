@@ -12,6 +12,7 @@ const navItems = [
   { to: "/clientes", icon: Users, label: "Clientes" },
   { to: "/faturas", icon: FileText, label: "Faturas" },
   { to: "/pagamentos", icon: CreditCard, label: "Pagamentos" },
+  { to: "/servicos", icon: Package, label: "Serviços" },
   { to: "/subscricoes", icon: RefreshCw, label: "Subscrições" },
   { to: "/calendario", icon: CalendarDays, label: "Calendário" },
 ];

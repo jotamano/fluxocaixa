@@ -8,6 +8,65 @@ export type InvoiceRow = Tables<"invoices">;
 export type InvoiceItem = Tables<"invoice_items">;
 export type Subscription = Tables<"subscriptions"> & { clients?: Client };
 export type Payment = Tables<"payments">;
+export type Service = Tables<"services">;
+
+// Services
+export function useServices() {
+  return useQuery({
+    queryKey: ["services"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("services").select("*").order("name");
+      if (error) throw error;
+      return data as Service[];
+    },
+  });
+}
+
+export function useActiveServices() {
+  return useQuery({
+    queryKey: ["services", "active"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("services").select("*").eq("active", true).order("name");
+      if (error) throw error;
+      return data as Service[];
+    },
+  });
+}
+
+export function useAddService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (service: TablesInsert<"services">) => {
+      const { data, error } = await supabase.from("services").insert(service).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["services"] }),
+  });
+}
+
+export function useUpdateService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: TablesUpdate<"services"> }) => {
+      const { data, error } = await supabase.from("services").update(updates).eq("id", id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["services"] }),
+  });
+}
+
+export function useDeleteService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("services").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["services"] }),
+  });
+}
 
 // Clients
 export function useClients() {

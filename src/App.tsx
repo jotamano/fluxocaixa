@@ -35,6 +35,7 @@ const App = () => (
             <Route path="/faturas/:id" element={<InvoiceDetail />} />
             <Route path="/pagamentos" element={<Payments />} />
             <Route path="/pagamentos/:id" element={<PaymentDetail />} />
+            <Route path="/servicos" element={<Services />} />
             <Route path="/subscricoes" element={<Subscriptions />} />
             <Route path="/calendario" element={<CalendarPage />} />
           </Route>
