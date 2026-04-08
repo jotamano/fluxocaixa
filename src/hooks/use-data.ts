@@ -8,14 +8,75 @@ export type InvoiceRow = Tables<"invoices">;
 export type InvoiceItem = Tables<"invoice_items">;
 export type Subscription = Tables<"subscriptions"> & { clients?: Client };
 export type Payment = Tables<"payments">;
-export type Service = Tables<"services">;
+export type Service = Tables<"services"> & { service_categories?: { id: string; name: string } | null };
 
-// Services
+export interface ServiceCategory {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+// ─── Service Categories ───
+
+export function useCategories() {
+  return useQuery({
+    queryKey: ["service_categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("service_categories").select("*").order("name");
+      if (error) throw error;
+      return data as ServiceCategory[];
+    },
+  });
+}
+
+export function useAddCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (cat: { name: string }) => {
+      const { data, error } = await supabase.from("service_categories").insert(cat).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["service_categories"] }),
+  });
+}
+
+export function useUpdateCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { data, error } = await supabase.from("service_categories").update({ name }).eq("id", id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["service_categories"] });
+      qc.invalidateQueries({ queryKey: ["services"] });
+    },
+  });
+}
+
+export function useDeleteCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("service_categories").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["service_categories"] });
+      qc.invalidateQueries({ queryKey: ["services"] });
+    },
+  });
+}
+
+// ─── Services ───
+
 export function useServices() {
   return useQuery({
     queryKey: ["services"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("services").select("*").order("name");
+      const { data, error } = await supabase.from("services").select("*, service_categories(id, name)").order("name");
       if (error) throw error;
       return data as Service[];
     },
@@ -26,7 +87,7 @@ export function useActiveServices() {
   return useQuery({
     queryKey: ["services", "active"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("services").select("*").eq("active", true).order("name");
+      const { data, error } = await supabase.from("services").select("*, service_categories(id, name)").eq("active", true).order("name");
       if (error) throw error;
       return data as Service[];
     },
@@ -68,7 +129,8 @@ export function useDeleteService() {
   });
 }
 
-// Clients
+// ─── Clients ───
+
 export function useClients() {
   return useQuery({
     queryKey: ["clients"],
@@ -92,6 +154,22 @@ export function useAddClient() {
   });
 }
 
+export function useUpdateClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: TablesUpdate<"clients"> }) => {
+      const { data, error } = await supabase.from("clients").update(updates).eq("id", id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+    },
+  });
+}
+
 export function useDeleteClient() {
   const qc = useQueryClient();
   return useMutation({
@@ -108,7 +186,8 @@ export function useDeleteClient() {
   });
 }
 
-// Invoices with items
+// ─── Invoices ───
+
 export function useInvoices() {
   return useQuery({
     queryKey: ["invoices"],
@@ -138,11 +217,22 @@ export function useAddInvoice() {
   });
 }
 
+export function useUpdateInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: TablesUpdate<"invoices"> }) => {
+      const { data, error } = await supabase.from("invoices").update(updates).eq("id", id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+  });
+}
+
 export function useDeleteInvoice() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      // Delete items first, then invoice
       await supabase.from("invoice_items").delete().eq("invoice_id", id);
       await supabase.from("payments").update({ invoice_id: null }).eq("invoice_id", id);
       const { error } = await supabase.from("invoices").delete().eq("id", id);
@@ -155,7 +245,8 @@ export function useDeleteInvoice() {
   });
 }
 
-// Subscriptions
+// ─── Subscriptions ───
+
 export function useSubscriptions() {
   return useQuery({
     queryKey: ["subscriptions"],
@@ -221,7 +312,8 @@ export function useDeleteSubscription() {
   });
 }
 
-// Payments
+// ─── Payments ───
+
 export function usePayments() {
   return useQuery({
     queryKey: ["payments"],
@@ -239,11 +331,27 @@ export function useAddPayment() {
     mutationFn: async (payment: TablesInsert<"payments">) => {
       const { data, error } = await supabase.from("payments").insert(payment).select().single();
       if (error) throw error;
-
       if (payment.invoice_id) {
         await recalcInvoiceStatus(payment.invoice_id);
       }
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
+  });
+}
 
+export function useUpdatePayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, updates, oldInvoiceId }: { id: string; updates: TablesUpdate<"payments">; oldInvoiceId?: string | null }) => {
+      const { data, error } = await supabase.from("payments").update(updates).eq("id", id).select().single();
+      if (error) throw error;
+      // Recalc both old and new invoice statuses
+      if (oldInvoiceId) await recalcInvoiceStatus(oldInvoiceId);
+      if (updates.invoice_id) await recalcInvoiceStatus(updates.invoice_id);
       return data;
     },
     onSuccess: () => {
@@ -270,7 +378,8 @@ export function useDeletePayment() {
   });
 }
 
-// Next invoice number
+// ─── Next invoice number ───
+
 export function useNextInvoiceNumber() {
   return useQuery({
     queryKey: ["next-invoice-number"],
@@ -295,6 +404,8 @@ export function useNextInvoiceNumber() {
   });
 }
 
+// ─── Helpers ───
+
 async function recalcInvoiceStatus(invoiceId: string) {
   const [invoiceItemsResult, invoiceResult, invoicePaymentsResult] = await Promise.all([
     supabase.from("invoice_items").select("quantity, unit_price").eq("invoice_id", invoiceId),
@@ -303,13 +414,10 @@ async function recalcInvoiceStatus(invoiceId: string) {
   ]);
 
   if (invoiceItemsResult.error || invoiceResult.error || invoicePaymentsResult.error) return;
-
-  // Don't update draft invoices
   if (invoiceResult.data.status === 'draft') return;
 
   const invoiceTotal = (invoiceItemsResult.data ?? []).reduce(
-    (sum, item) => sum + item.quantity * Number(item.unit_price),
-    0,
+    (sum, item) => sum + item.quantity * Number(item.unit_price), 0,
   );
   const paidTotal = (invoicePaymentsResult.data ?? []).reduce((sum, item) => sum + Number(item.amount), 0);
 

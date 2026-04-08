@@ -1,22 +1,26 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Package } from "lucide-react";
+import { Plus, Pencil, Trash2, Package, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useServices, useAddService, useUpdateService, useDeleteService } from "@/hooks/use-data";
-import { serviceLabels, formatCurrency, type ServiceType } from "@/lib/data";
+import { useServices, useAddService, useUpdateService, useDeleteService, useCategories, useAddCategory, useUpdateCategory, useDeleteCategory } from "@/hooks/use-data";
+import { formatCurrency, type ServiceType } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 
 export default function Services() {
   const { toast } = useToast();
   const { data: services = [] } = useServices();
+  const { data: categories = [] } = useCategories();
   const addService = useAddService();
   const updateService = useUpdateService();
   const deleteService = useDeleteService();
+  const addCategory = useAddCategory();
+  const updateCategory = useUpdateCategory();
+  const deleteCategory = useDeleteCategory();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -26,12 +30,20 @@ export default function Services() {
     name: "",
     defaultPrice: "",
     serviceType: "social_media" as ServiceType,
+    categoryId: "",
     active: true,
   });
 
+  // Category management
+  const [catDialogOpen, setCatDialogOpen] = useState(false);
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [catName, setCatName] = useState("");
+  const [catConfirmOpen, setCatConfirmOpen] = useState(false);
+  const [deleteCatId, setDeleteCatId] = useState<string | null>(null);
+
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: "", defaultPrice: "", serviceType: "social_media", active: true });
+    setForm({ name: "", defaultPrice: "", serviceType: "social_media", categoryId: categories[0]?.id || "", active: true });
     setDialogOpen(true);
   };
 
@@ -43,6 +55,7 @@ export default function Services() {
       name: s.name,
       defaultPrice: String(Number(s.default_price)),
       serviceType: s.service_type,
+      categoryId: (s as any).category_id || "",
       active: s.active,
     });
     setDialogOpen(true);
@@ -51,7 +64,7 @@ export default function Services() {
   const handleSave = () => {
     if (editingId) {
       updateService.mutate(
-        { id: editingId, updates: { name: form.name, default_price: Number(form.defaultPrice), service_type: form.serviceType, active: form.active } },
+        { id: editingId, updates: { name: form.name, default_price: Number(form.defaultPrice), service_type: form.serviceType, category_id: form.categoryId || null, active: form.active } as any },
         {
           onSuccess: () => { setDialogOpen(false); toast({ title: "Serviço atualizado!" }); },
           onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
@@ -59,7 +72,7 @@ export default function Services() {
       );
     } else {
       addService.mutate(
-        { name: form.name, default_price: Number(form.defaultPrice), service_type: form.serviceType },
+        { name: form.name, default_price: Number(form.defaultPrice), service_type: form.serviceType, category_id: form.categoryId || null } as any,
         {
           onSuccess: () => { setDialogOpen(false); toast({ title: "Serviço criado!" }); },
           onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
@@ -76,8 +89,38 @@ export default function Services() {
     });
   };
 
+  // Category handlers
+  const openCreateCat = () => { setEditingCatId(null); setCatName(""); setCatDialogOpen(true); };
+  const openEditCat = (cat: { id: string; name: string }) => { setEditingCatId(cat.id); setCatName(cat.name); setCatDialogOpen(true); };
+
+  const handleSaveCat = () => {
+    if (editingCatId) {
+      updateCategory.mutate({ id: editingCatId, name: catName }, {
+        onSuccess: () => { setCatDialogOpen(false); toast({ title: "Categoria atualizada!" }); },
+        onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+      });
+    } else {
+      addCategory.mutate({ name: catName }, {
+        onSuccess: () => { setCatDialogOpen(false); toast({ title: "Categoria criada!" }); },
+        onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+      });
+    }
+  };
+
+  const handleDeleteCat = () => {
+    if (!deleteCatId) return;
+    deleteCategory.mutate(deleteCatId, {
+      onSuccess: () => { setCatConfirmOpen(false); setDeleteCatId(null); toast({ title: "Categoria eliminada" }); },
+      onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+    });
+  };
+
   const activeServices = services.filter(s => s.active);
   const inactiveServices = services.filter(s => !s.active);
+
+  const getCategoryName = (s: typeof services[0]) => {
+    return s.service_categories?.name || "Sem categoria";
+  };
 
   const renderService = (s: typeof services[0]) => (
     <div key={s.id} className={`rounded-xl border border-border bg-card p-5 shadow-card ${!s.active ? 'opacity-60' : ''}`}>
@@ -88,7 +131,7 @@ export default function Services() {
           </div>
           <div>
             <h3 className="font-display font-semibold text-card-foreground">{s.name}</h3>
-            <p className="text-xs text-muted-foreground">{serviceLabels[s.service_type]}</p>
+            <p className="text-xs text-muted-foreground">{getCategoryName(s)}</p>
           </div>
         </div>
         <span className="text-lg font-bold font-display text-card-foreground">{formatCurrency(Number(s.default_price))}</span>
@@ -114,6 +157,36 @@ export default function Services() {
         <Button className="gap-2" onClick={openCreate}><Plus className="h-4 w-4" /> Novo Serviço</Button>
       </div>
 
+      {/* Category management section */}
+      <div className="rounded-xl border border-border bg-card p-5 shadow-card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Tag className="h-5 w-5 text-primary" />
+            <h2 className="font-display font-semibold text-card-foreground">Categorias</h2>
+          </div>
+          <Button variant="outline" size="sm" className="gap-1" onClick={openCreateCat}>
+            <Plus className="h-3 w-3" /> Nova Categoria
+          </Button>
+        </div>
+        {categories.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Sem categorias criadas.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {categories.map(cat => (
+              <div key={cat.id} className="flex items-center gap-1 rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-sm">
+                <span className="text-card-foreground">{cat.name}</span>
+                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => openEditCat(cat)}>
+                  <Pencil className="h-3 w-3" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive hover:text-destructive" onClick={() => { setDeleteCatId(cat.id); setCatConfirmOpen(true); }}>
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="space-y-4">
         <h2 className="font-display font-semibold text-foreground">Ativos ({activeServices.length})</h2>
         {activeServices.length === 0 && <p className="text-sm text-muted-foreground">Sem serviços ativos.</p>}
@@ -131,6 +204,7 @@ export default function Services() {
         </div>
       )}
 
+      {/* Service dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -143,11 +217,11 @@ export default function Services() {
             </div>
             <div className="space-y-2">
               <Label>Categoria</Label>
-              <Select value={form.serviceType} onValueChange={v => setForm(p => ({ ...p, serviceType: v as ServiceType }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={form.categoryId} onValueChange={v => setForm(p => ({ ...p, categoryId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Selecionar categoria" /></SelectTrigger>
                 <SelectContent>
-                  {(Object.entries(serviceLabels) as [ServiceType, string][]).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  {categories.map(cat => (
+                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -169,14 +243,26 @@ export default function Services() {
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title="Eliminar serviço"
-        description="Tens a certeza que queres eliminar este serviço? Esta ação é irreversível."
-        onConfirm={handleDelete}
-        isPending={deleteService.isPending}
-      />
+      {/* Category dialog */}
+      <Dialog open={catDialogOpen} onOpenChange={setCatDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display">{editingCatId ? "Editar Categoria" : "Nova Categoria"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label>Nome da Categoria</Label>
+              <Input placeholder="Ex: SEO, Branding, Consultoria..." value={catName} onChange={e => setCatName(e.target.value)} />
+            </div>
+            <Button className="w-full" onClick={handleSaveCat} disabled={!catName || addCategory.isPending || updateCategory.isPending}>
+              {(addCategory.isPending || updateCategory.isPending) ? "A guardar..." : editingCatId ? "Guardar" : "Criar Categoria"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog open={confirmOpen} onOpenChange={setConfirmOpen} title="Eliminar serviço" description="Tens a certeza que queres eliminar este serviço? Esta ação é irreversível." onConfirm={handleDelete} isPending={deleteService.isPending} />
+      <ConfirmDialog open={catConfirmOpen} onOpenChange={setCatConfirmOpen} title="Eliminar categoria" description="Tens a certeza que queres eliminar esta categoria? Os serviços associados ficarão sem categoria." onConfirm={handleDeleteCat} isPending={deleteCategory.isPending} />
     </div>
   );
 }
