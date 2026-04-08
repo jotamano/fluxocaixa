@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Pause, Play, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSubscriptions, useClients, useToggleSubscription, useUpdateSubscription, useAddSubscription, useDeleteSubscription } from "@/hooks/use-data";
-import { serviceLabels, frequencyLabels, formatCurrency, type ServiceType, type SubscriptionFrequency } from "@/lib/data";
+import { useSubscriptions, useClients, useToggleSubscription, useUpdateSubscription, useAddSubscription, useDeleteSubscription, useActiveServices } from "@/hooks/use-data";
+import { frequencyLabels, formatCurrency, type SubscriptionFrequency } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function Subscriptions() {
   const { toast } = useToast();
   const { data: clients = [] } = useClients();
+  const { data: services = [] } = useActiveServices();
   const { data: subscriptions = [] } = useSubscriptions();
   const [searchParams, setSearchParams] = useSearchParams();
   const toggleSub = useToggleSubscription();
@@ -27,7 +28,8 @@ export default function Subscriptions() {
   const [form, setForm] = useState({
     clientId: "",
     name: "",
-    serviceType: "social_media" as ServiceType,
+    serviceId: "",
+    serviceType: "social_media" as string,
     amount: "",
     frequency: "monthly" as SubscriptionFrequency,
     nextBillingDate: new Date().toISOString().split('T')[0],
@@ -47,9 +49,11 @@ export default function Subscriptions() {
     const subscription = subscriptions.find(item => item.id === id);
     if (!subscription) return;
     setEditingId(subscription.id);
+    const matchedService = services.find(s => s.service_type === subscription.service_type && s.name === subscription.name);
     setForm({
       clientId: subscription.client_id,
       name: subscription.name,
+      serviceId: matchedService?.id || "",
       serviceType: subscription.service_type,
       amount: String(Number(subscription.amount)),
       frequency: subscription.frequency,
@@ -63,6 +67,7 @@ export default function Subscriptions() {
     setForm({
       clientId: "",
       name: "",
+      serviceId: "",
       serviceType: "social_media",
       amount: "",
       frequency: "monthly",
@@ -95,7 +100,7 @@ export default function Subscriptions() {
           updates: {
             client_id: form.clientId,
             name: form.name,
-            service_type: form.serviceType,
+            service_type: form.serviceType as any,
             amount: Number(form.amount),
             frequency: form.frequency,
             next_billing_date: form.nextBillingDate,
@@ -108,7 +113,7 @@ export default function Subscriptions() {
         {
           client_id: form.clientId,
           name: form.name,
-          service_type: form.serviceType,
+          service_type: form.serviceType as any,
           amount: Number(form.amount),
           frequency: form.frequency,
           next_billing_date: form.nextBillingDate,
@@ -151,7 +156,7 @@ export default function Subscriptions() {
       <div className="mt-4 space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Serviço</span>
-          <span className="text-card-foreground">{serviceLabels[sub.service_type]}</span>
+          <span className="text-card-foreground">{services.find(s => s.service_type === sub.service_type)?.name || sub.service_type}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Valor</span>
@@ -230,11 +235,16 @@ export default function Subscriptions() {
             </div>
             <div className="space-y-2">
               <Label>Serviço</Label>
-              <Select value={form.serviceType} onValueChange={value => setForm(prev => ({ ...prev, serviceType: value as ServiceType }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={form.serviceId} onValueChange={value => {
+                const svc = services.find(s => s.id === value);
+                if (svc) {
+                  setForm(prev => ({ ...prev, serviceId: value, serviceType: svc.service_type, name: prev.name || svc.name, amount: prev.amount || String(Number(svc.default_price)) }));
+                }
+              }}>
+                <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
                 <SelectContent>
-                  {(Object.entries(serviceLabels) as [ServiceType, string][]).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  {services.map(svc => (
+                    <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

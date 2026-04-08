@@ -9,6 +9,7 @@ import Clients from "@/pages/Clients";
 import Invoices from "@/pages/Invoices";
 import NewInvoice from "@/pages/NewInvoice";
 import Subscriptions from "@/pages/Subscriptions";
+import Services from "@/pages/Services";
 import Payments from "@/pages/Payments";
 import CalendarPage from "@/pages/Calendar";
 import ClientDetail from "@/pages/ClientDetail";
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/faturas/:id" element={<InvoiceDetail />} />
             <Route path="/pagamentos" element={<Payments />} />
             <Route path="/pagamentos/:id" element={<PaymentDetail />} />
+            <Route path="/servicos" element={<Services />} />
             <Route path="/subscricoes" element={<Subscriptions />} />
             <Route path="/calendario" element={<CalendarPage />} />
           </Route>

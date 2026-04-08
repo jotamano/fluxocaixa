@@ -7,12 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
-import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber } from "@/hooks/use-data";
-import { serviceLabels, defaultServicePrices, formatCurrency, type ServiceType } from "@/lib/data";
+import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber, useActiveServices } from "@/hooks/use-data";
+import { formatCurrency } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
-import type { Database } from "@/integrations/supabase/types";
-
-type ServiceTypeEnum = Database["public"]["Enums"]["service_type"];
 
 const MONTHS_PT = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -20,7 +17,8 @@ const MONTHS_PT = [
 ];
 
 interface FormItem {
-  serviceType: ServiceTypeEnum;
+  serviceId: string;
+  serviceType: string;
   description: string;
   quantity: number;
   unitPrice: number;
@@ -28,18 +26,13 @@ interface FormItem {
   endDate: string;
 }
 
-function getDefaultDescription(serviceType: ServiceTypeEnum): string {
-  const now = new Date();
-  return `${serviceLabels[serviceType]} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`;
-}
-
 function getDefaultItem(): FormItem {
-  const st: ServiceTypeEnum = "social_media";
   return {
-    serviceType: st,
-    description: getDefaultDescription(st),
+    serviceId: "",
+    serviceType: "social_media",
+    description: "",
     quantity: 1,
-    unitPrice: defaultServicePrices[st],
+    unitPrice: 0,
     startDate: "",
     endDate: "",
   };
@@ -49,6 +42,7 @@ export default function NewInvoice() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { data: clients = [] } = useClients();
+  const { data: services = [] } = useActiveServices();
   const addInvoice = useAddInvoice();
   const addClient = useAddClient();
   const { data: nextNumber = "" } = useNextInvoiceNumber();
@@ -66,11 +60,14 @@ export default function NewInvoice() {
     setItems(prev => prev.map((item, i) => {
       if (i !== index) return item;
       const updated = { ...item, [field]: value };
-      // Auto-fill when service type changes
-      if (field === 'serviceType') {
-        const st = value as ServiceTypeEnum;
-        updated.unitPrice = defaultServicePrices[st];
-        updated.description = getDefaultDescription(st);
+      if (field === 'serviceId') {
+        const svc = services.find(s => s.id === value);
+        if (svc) {
+          const now = new Date();
+          updated.serviceType = svc.service_type;
+          updated.unitPrice = Number(svc.default_price);
+          updated.description = `${svc.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`;
+        }
       }
       return updated;
     }));
@@ -116,9 +113,10 @@ export default function NewInvoice() {
         if (i.startDate && i.endDate) {
           desc += ` (${new Date(i.startDate).toLocaleDateString('pt-PT')} - ${new Date(i.endDate).toLocaleDateString('pt-PT')})`;
         }
+        const svc = services.find(s => s.id === i.serviceId);
         return {
           description: desc,
-          service_type: i.serviceType,
+          service_type: (svc?.service_type || 'social_media') as any,
           quantity: i.quantity,
           unit_price: i.unitPrice,
         };
@@ -183,11 +181,11 @@ export default function NewInvoice() {
               <div className="grid gap-3 sm:grid-cols-12">
                 <div className="sm:col-span-4 space-y-1">
                   <Label className="text-xs">Serviço</Label>
-                  <Select value={item.serviceType} onValueChange={v => updateItem(index, 'serviceType', v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Select value={item.serviceId} onValueChange={v => updateItem(index, 'serviceId', v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
                     <SelectContent>
-                      {(Object.entries(serviceLabels) as [ServiceType, string][]).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                      {services.map(svc => (
+                        <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
