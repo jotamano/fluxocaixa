@@ -1,30 +1,39 @@
 import { useEffect, useState } from "react";
-import { Pause, Play, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pause, Play, Pencil, Plus, Trash2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSubscriptions, useClients, useToggleSubscription, useUpdateSubscription, useAddSubscription, useDeleteSubscription, useActiveServices } from "@/hooks/use-data";
+import { useSubscriptions, useClients, useToggleSubscription, useUpdateSubscription, useAddSubscription, useDeleteSubscription, useActiveServices, useAddInvoice, useNextInvoiceNumber } from "@/hooks/use-data";
 import { frequencyLabels, formatCurrency, type SubscriptionFrequency } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+
+const MONTHS_PT = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
 
 export default function Subscriptions() {
   const { toast } = useToast();
   const { data: clients = [] } = useClients();
   const { data: services = [] } = useActiveServices();
   const { data: subscriptions = [] } = useSubscriptions();
+  const { data: nextNumber = "" } = useNextInvoiceNumber();
   const [searchParams, setSearchParams] = useSearchParams();
   const toggleSub = useToggleSubscription();
   const updateSub = useUpdateSubscription();
   const addSub = useAddSubscription();
   const deleteSub = useDeleteSubscription();
+  const addInvoice = useAddInvoice();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [generateInvoice, setGenerateInvoice] = useState(true);
   const [form, setForm] = useState({
     clientId: "",
     name: "",
@@ -59,6 +68,7 @@ export default function Subscriptions() {
       frequency: subscription.frequency,
       nextBillingDate: subscription.next_billing_date,
     });
+    setGenerateInvoice(false);
     setDialogOpen(true);
   };
 
@@ -73,6 +83,7 @@ export default function Subscriptions() {
       frequency: "monthly",
       nextBillingDate: new Date().toISOString().split('T')[0],
     });
+    setGenerateInvoice(true);
     setDialogOpen(true);
   };
 
@@ -123,6 +134,33 @@ export default function Subscriptions() {
           onSuccess: () => {
             handleDialogChange(false);
             toast({ title: "Subscrição criada!" });
+
+            // Auto-generate first invoice if toggled
+            if (generateInvoice && form.clientId && form.amount) {
+              const now = new Date();
+              const invoiceNumber = nextNumber || `FT ${now.getFullYear()}/${String(Date.now()).slice(-3).padStart(3, '0')}`;
+              const dueDate = new Date(now);
+              dueDate.setDate(dueDate.getDate() + 30);
+
+              addInvoice.mutate({
+                invoice: {
+                  number: invoiceNumber,
+                  client_id: form.clientId,
+                  status: 'pending',
+                  issue_date: now.toISOString().split('T')[0],
+                  due_date: dueDate.toISOString().split('T')[0],
+                  notes: `Fatura gerada automaticamente da subscrição: ${form.name}`,
+                },
+                items: [{
+                  description: `${form.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`,
+                  service_type: form.serviceType as any,
+                  quantity: 1,
+                  unit_price: Number(form.amount),
+                }],
+              }, {
+                onSuccess: () => toast({ title: "Fatura gerada!", description: `Fatura ${invoiceNumber} criada automaticamente.` }),
+              });
+            }
           },
           onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
         },
@@ -133,11 +171,7 @@ export default function Subscriptions() {
   const handleDelete = () => {
     if (!deleteId) return;
     deleteSub.mutate(deleteId, {
-      onSuccess: () => {
-        setConfirmOpen(false);
-        setDeleteId(null);
-        toast({ title: "Subscrição eliminada" });
-      },
+      onSuccess: () => { setConfirmOpen(false); setDeleteId(null); toast({ title: "Subscrição eliminada" }); },
       onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
     });
   };
@@ -154,10 +188,6 @@ export default function Subscriptions() {
         </span>
       </div>
       <div className="mt-4 space-y-2">
-        <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Serviço</span>
-          <span className="text-card-foreground">{services.find(s => s.service_type === sub.service_type)?.name || sub.service_type}</span>
-        </div>
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Valor</span>
           <span className="font-semibold text-card-foreground">{formatCurrency(Number(sub.amount))}/{frequencyLabels[sub.frequency].toLowerCase()}</span>
@@ -195,6 +225,13 @@ export default function Subscriptions() {
         <Button className="gap-2" onClick={openCreate}><Plus className="h-4 w-4" /> Nova Subscrição</Button>
       </div>
 
+      <div className="rounded-xl border border-border bg-card p-4 shadow-card">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Zap className="h-4 w-4 text-primary" />
+          <span>Faturação automática ativa — faturas são geradas diariamente às 6h para subscrições na data de billing.</span>
+        </div>
+      </div>
+
       <div className="space-y-4">
         <h2 className="font-display font-semibold text-foreground">Ativas ({active.length})</h2>
         {active.length === 0 && <p className="text-sm text-muted-foreground">Sem subscrições ativas.</p>}
@@ -230,10 +267,6 @@ export default function Subscriptions() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input value={form.name} onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))} placeholder="Ex: Gestão Redes Sociais" />
-            </div>
-            <div className="space-y-2">
               <Label>Serviço</Label>
               <Select value={form.serviceId} onValueChange={value => {
                 const svc = services.find(s => s.id === value);
@@ -248,6 +281,10 @@ export default function Subscriptions() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input value={form.name} onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))} placeholder="Ex: Gestão Redes Sociais" />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -270,6 +307,15 @@ export default function Subscriptions() {
               <Label>Próxima faturação</Label>
               <Input type="date" value={form.nextBillingDate} onChange={e => setForm(prev => ({ ...prev, nextBillingDate: e.target.value }))} />
             </div>
+            {!editingId && (
+              <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3 bg-muted/40">
+                <div>
+                  <p className="text-sm font-medium text-card-foreground">Gerar fatura agora</p>
+                  <p className="text-xs text-muted-foreground">Cria a primeira fatura automaticamente</p>
+                </div>
+                <Switch checked={generateInvoice} onCheckedChange={setGenerateInvoice} />
+              </div>
+            )}
             <Button className="w-full" onClick={handleSave} disabled={(updateSub.isPending || addSub.isPending) || !form.clientId || !form.name || !form.amount}>
               {(updateSub.isPending || addSub.isPending) ? "A guardar..." : editingId ? "Guardar alterações" : "Criar subscrição"}
             </Button>
@@ -277,14 +323,7 @@ export default function Subscriptions() {
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title="Eliminar subscrição"
-        description="Tens a certeza que queres eliminar esta subscrição? Esta ação é irreversível."
-        onConfirm={handleDelete}
-        isPending={deleteSub.isPending}
-      />
+      <ConfirmDialog open={confirmOpen} onOpenChange={setConfirmOpen} title="Eliminar subscrição" description="Tens a certeza que queres eliminar esta subscrição? Esta ação é irreversível." onConfirm={handleDelete} isPending={deleteSub.isPending} />
     </div>
   );
 }
