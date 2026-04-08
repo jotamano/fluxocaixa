@@ -235,11 +235,16 @@ export default function Subscriptions() {
             </div>
             <div className="space-y-2">
               <Label>Serviço</Label>
-              <Select value={form.serviceType} onValueChange={value => setForm(prev => ({ ...prev, serviceType: value as ServiceType }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={form.serviceId} onValueChange={value => {
+                const svc = services.find(s => s.id === value);
+                if (svc) {
+                  setForm(prev => ({ ...prev, serviceId: value, serviceType: svc.service_type, name: prev.name || svc.name, amount: prev.amount || String(Number(svc.default_price)) }));
+                }
+              }}>
+                <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
                 <SelectContent>
-                  {(Object.entries(serviceLabels) as [ServiceType, string][]).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  {services.map(svc => (
+                    <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
