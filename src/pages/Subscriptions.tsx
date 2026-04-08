@@ -67,6 +67,7 @@ export default function Subscriptions() {
     setForm({
       clientId: "",
       name: "",
+      serviceId: "",
       serviceType: "social_media",
       amount: "",
       frequency: "monthly",
