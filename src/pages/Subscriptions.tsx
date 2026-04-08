@@ -156,7 +156,7 @@ export default function Subscriptions() {
       <div className="mt-4 space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Serviço</span>
-          <span className="text-card-foreground">{serviceLabels[sub.service_type]}</span>
+          <span className="text-card-foreground">{services.find(s => s.service_type === sub.service_type)?.name || sub.service_type}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Valor</span>
