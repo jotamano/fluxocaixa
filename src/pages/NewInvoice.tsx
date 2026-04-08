@@ -181,11 +181,11 @@ export default function NewInvoice() {
               <div className="grid gap-3 sm:grid-cols-12">
                 <div className="sm:col-span-4 space-y-1">
                   <Label className="text-xs">Serviço</Label>
-                  <Select value={item.serviceType} onValueChange={v => updateItem(index, 'serviceType', v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Select value={item.serviceId} onValueChange={v => updateItem(index, 'serviceId', v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
                     <SelectContent>
-                      {(Object.entries(serviceLabels) as [ServiceType, string][]).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                      {services.map(svc => (
+                        <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
