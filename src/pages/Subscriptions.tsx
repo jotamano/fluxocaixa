@@ -28,7 +28,8 @@ export default function Subscriptions() {
   const [form, setForm] = useState({
     clientId: "",
     name: "",
-    serviceType: "social_media" as ServiceType,
+    serviceId: "",
+    serviceType: "social_media" as string,
     amount: "",
     frequency: "monthly" as SubscriptionFrequency,
     nextBillingDate: new Date().toISOString().split('T')[0],
