@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, FileText, RefreshCw, Plus, Menu, CreditCard, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Users, FileText, RefreshCw, Plus, Menu, CreditCard, CalendarDays, ChevronLeft, ChevronRight, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
