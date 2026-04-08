@@ -1,11 +1,15 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, Download, Wallet, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Wallet, Trash2, Pencil } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useInvoices, usePayments, useDeleteInvoice } from "@/hooks/use-data";
+import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, serviceLabels, methodLabels } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
@@ -17,8 +21,11 @@ export default function InvoiceDetail() {
   const { data: invoices = [], isLoading: invoicesLoading } = useInvoices();
   const { data: payments = [], isLoading: paymentsLoading } = usePayments();
   const deleteInvoice = useDeleteInvoice();
+  const updateInvoice = useUpdateInvoice();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ issue_date: '', due_date: '', notes: '', status: '' });
 
   const invoice = useMemo(() => invoices.find(item => item.id === id), [invoices, id]);
   const invoicePayments = useMemo(() => payments.filter(payment => payment.invoice_id === id), [payments, id]);
@@ -48,10 +55,32 @@ export default function InvoiceDetail() {
 
   const handleDelete = () => {
     deleteInvoice.mutate(invoice.id, {
-      onSuccess: () => {
-        toast({ title: "Fatura eliminada", description: `A fatura ${invoice.number} foi eliminada com sucesso.` });
-        navigate("/faturas");
+      onSuccess: () => { toast({ title: "Fatura eliminada" }); navigate("/faturas"); },
+      onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+    });
+  };
+
+  const openEdit = () => {
+    setEditForm({
+      issue_date: invoice.issue_date,
+      due_date: invoice.due_date,
+      notes: invoice.notes || '',
+      status: invoice.status,
+    });
+    setEditOpen(true);
+  };
+
+  const handleEditSave = () => {
+    updateInvoice.mutate({
+      id: invoice.id,
+      updates: {
+        issue_date: editForm.issue_date,
+        due_date: editForm.due_date,
+        notes: editForm.notes || null,
+        status: editForm.status as any,
       },
+    }, {
+      onSuccess: () => { setEditOpen(false); toast({ title: "Fatura atualizada!" }); },
       onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
     });
   };
@@ -75,17 +104,15 @@ export default function InvoiceDetail() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => invoice.clients && generateInvoicePDF(invoice, invoice.clients)}
-            disabled={!invoice.clients}
-          >
+          <Button variant="outline" className="gap-2" onClick={openEdit}>
+            <Pencil className="h-4 w-4" /> Editar
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => invoice.clients && generateInvoicePDF(invoice, invoice.clients)} disabled={!invoice.clients}>
             <Download className="h-4 w-4" /> PDF
           </Button>
           {outstanding > 0 && (
             <Button className="gap-2" onClick={() => setPaymentDialogOpen(true)}>
-              <Wallet className="h-4 w-4" /> Pagar nesta fatura
+              <Wallet className="h-4 w-4" /> Pagar
             </Button>
           )}
           <Button variant="outline" className="gap-2 text-destructive hover:text-destructive" onClick={() => setConfirmOpen(true)}>
@@ -166,11 +193,7 @@ export default function InvoiceDetail() {
             ) : (
               <div className="mt-4 space-y-3">
                 {invoicePayments.map(payment => (
-                  <Link
-                    key={payment.id}
-                    to={`/pagamentos/${payment.id}`}
-                    className="flex items-center justify-between rounded-lg border border-border px-4 py-3 transition-colors hover:bg-muted/40"
-                  >
+                  <Link key={payment.id} to={`/pagamentos/${payment.id}`} className="flex items-center justify-between rounded-lg border border-border px-4 py-3 transition-colors hover:bg-muted/40">
                     <div>
                       <p className="text-sm font-medium text-card-foreground">{methodLabels[payment.method]}</p>
                       <p className="text-xs text-muted-foreground">{new Date(payment.date).toLocaleDateString("pt-PT")}</p>
@@ -191,23 +214,46 @@ export default function InvoiceDetail() {
         </div>
       </div>
 
-      <PaymentDialog
-        open={paymentDialogOpen}
-        onOpenChange={setPaymentDialogOpen}
-        invoices={[invoice]}
-        initialInvoiceId={invoice.id}
-        initialAmount={outstanding > 0 ? String(outstanding) : ""}
-        title="Registar pagamento nesta fatura"
-      />
+      {/* Edit invoice dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display">Editar Fatura</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Data de emissão</Label>
+                <Input type="date" value={editForm.issue_date} onChange={e => setEditForm(p => ({ ...p, issue_date: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Data de vencimento</Label>
+                <Input type="date" value={editForm.due_date} onChange={e => setEditForm(p => ({ ...p, due_date: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Estado</Label>
+              <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={editForm.status} onChange={e => setEditForm(p => ({ ...p, status: e.target.value }))}>
+                <option value="draft">Rascunho</option>
+                <option value="pending">Pendente</option>
+                <option value="paid">Paga</option>
+                <option value="overdue">Vencida</option>
+                <option value="partially_paid">Parcialmente Paga</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label>Notas</Label>
+              <Textarea value={editForm.notes} onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} placeholder="Observações..." />
+            </div>
+            <Button className="w-full" onClick={handleEditSave} disabled={updateInvoice.isPending}>
+              {updateInvoice.isPending ? "A guardar..." : "Guardar alterações"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-      <ConfirmDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title="Anular fatura"
-        description={`Tens a certeza que queres anular a fatura ${invoice.number}? Esta ação é irreversível e irá eliminar todos os dados associados.`}
-        onConfirm={handleDelete}
-        isPending={deleteInvoice.isPending}
-      />
+      <PaymentDialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen} invoices={[invoice]} initialInvoiceId={invoice.id} initialAmount={outstanding > 0 ? String(outstanding) : ""} title="Registar pagamento nesta fatura" />
+      <ConfirmDialog open={confirmOpen} onOpenChange={setConfirmOpen} title="Anular fatura" description={`Tens a certeza que queres anular a fatura ${invoice.number}? Esta ação é irreversível.`} onConfirm={handleDelete} isPending={deleteInvoice.isPending} />
     </div>
   );
 }
