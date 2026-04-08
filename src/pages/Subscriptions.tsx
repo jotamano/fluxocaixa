@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Pause, Play, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSubscriptions, useClients, useToggleSubscription, useUpdateSubscription, useAddSubscription, useDeleteSubscription } from "@/hooks/use-data";
-import { serviceLabels, frequencyLabels, formatCurrency, type ServiceType, type SubscriptionFrequency } from "@/lib/data";
+import { useSubscriptions, useClients, useToggleSubscription, useUpdateSubscription, useAddSubscription, useDeleteSubscription, useActiveServices } from "@/hooks/use-data";
+import { frequencyLabels, formatCurrency, type SubscriptionFrequency } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
