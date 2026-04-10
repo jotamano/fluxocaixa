@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSubscriptions, useInvoices } from "@/hooks/use-data";
-import { serviceLabels, frequencyLabels, formatCurrency } from "@/lib/data";
+import { useSubscriptions, useInvoices, useCategories } from "@/hooks/use-data";
+import { frequencyLabels, formatCurrency } from "@/lib/data";
 import { StatusBadge } from "@/components/StatusBadge";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
@@ -15,6 +15,11 @@ const DAYS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS_PT = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
+
+const CATEGORY_COLORS = [
+  "bg-blue-500", "bg-emerald-500", "bg-amber-500", "bg-purple-500",
+  "bg-pink-500", "bg-cyan-500", "bg-orange-500", "bg-teal-500",
 ];
 
 function getDaysInMonth(year: number, month: number) {
@@ -49,13 +54,6 @@ function getSubscriptionDatesForMonth(sub: Subscription, year: number, month: nu
   return [];
 }
 
-const serviceColors: Record<string, string> = {
-  social_media: "bg-blue-500",
-  website: "bg-emerald-500",
-  marketing: "bg-amber-500",
-  subscription: "bg-purple-500",
-};
-
 export default function CalendarPage() {
   const today = new Date();
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
@@ -64,9 +62,24 @@ export default function CalendarPage() {
 
   const { data: allSubscriptions = [] } = useSubscriptions();
   const { data: invoices = [] } = useInvoices();
+  const { data: categories = [] } = useCategories();
   const activeSubscriptions = allSubscriptions.filter(s => s.active);
 
-  // Subscriptions by day
+  // Build color map for categories
+  const categoryColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    categories.forEach((cat, idx) => {
+      map.set(cat.id, CATEGORY_COLORS[idx % CATEGORY_COLORS.length]);
+    });
+    return map;
+  }, [categories]);
+
+  const getSubColor = (sub: Subscription) => {
+    const catId = (sub as any).category_id;
+    if (catId && categoryColorMap.has(catId)) return categoryColorMap.get(catId)!;
+    return "bg-muted-foreground";
+  };
+
   const subscriptionsByDay = useMemo(() => {
     const map = new Map<number, { sub: Subscription; client: string }[]>();
     activeSubscriptions.forEach(sub => {
@@ -79,7 +92,6 @@ export default function CalendarPage() {
     return map;
   }, [currentMonth, currentYear, activeSubscriptions]);
 
-  // Invoices due by day
   const invoicesByDay = useMemo(() => {
     const map = new Map<number, Invoice[]>();
     invoices.forEach(inv => {
@@ -180,7 +192,7 @@ export default function CalendarPage() {
                     {hasEvents && (
                       <div className="flex gap-0.5">
                         {daySubs.slice(0, 2).map(({ sub }, idx) => (
-                          <div key={`s-${idx}`} className={cn("h-1.5 w-1.5 rounded-full", isSelected ? "bg-primary-foreground/80" : serviceColors[sub.service_type])} />
+                          <div key={`s-${idx}`} className={cn("h-1.5 w-1.5 rounded-full", isSelected ? "bg-primary-foreground/80" : getSubColor(sub))} />
                         ))}
                         {dayInvoices.slice(0, 2).map((inv, idx) => (
                           <div key={`i-${idx}`} className={cn("h-1.5 w-1.5 rounded-full", isSelected ? "bg-primary-foreground/80" : inv.status === 'overdue' ? "bg-destructive" : "bg-warning")} />
@@ -193,10 +205,10 @@ export default function CalendarPage() {
             </div>
           </div>
           <div className="border-t border-border px-6 py-3 flex flex-wrap gap-4">
-            {Object.entries(serviceColors).map(([key, color]) => (
-              <div key={key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <div className={cn("h-2 w-2 rounded-full", color)} />
-                {serviceLabels[key as keyof typeof serviceLabels]}
+            {categories.map((cat, idx) => (
+              <div key={cat.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className={cn("h-2 w-2 rounded-full", CATEGORY_COLORS[idx % CATEGORY_COLORS.length])} />
+                {cat.name}
               </div>
             ))}
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -246,7 +258,7 @@ export default function CalendarPage() {
                         <p className="text-sm font-semibold text-card-foreground">{sub.name}</p>
                         <p className="text-xs text-muted-foreground">{client}</p>
                       </div>
-                      <div className={cn("h-2 w-2 rounded-full mt-1.5", serviceColors[sub.service_type])} />
+                      <div className={cn("h-2 w-2 rounded-full mt-1.5", getSubColor(sub))} />
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Valor</span>

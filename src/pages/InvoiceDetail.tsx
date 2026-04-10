@@ -1,18 +1,32 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, Download, Wallet, Trash2, Pencil } from "lucide-react";
+import { ArrowLeft, Download, Wallet, Trash2, Pencil, Plus, X } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, serviceLabels, methodLabels } from "@/lib/data";
+import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useCategories } from "@/hooks/use-data";
+import { formatCurrency, getInvoiceItemsTotal, methodLabels } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
+
+const MONTHS_PT = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
+
+interface EditItem {
+  serviceId: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  categoryId: string;
+}
 
 export default function InvoiceDetail() {
   const navigate = useNavigate();
@@ -20,12 +34,17 @@ export default function InvoiceDetail() {
   const { toast } = useToast();
   const { data: invoices = [], isLoading: invoicesLoading } = useInvoices();
   const { data: payments = [], isLoading: paymentsLoading } = usePayments();
+  const { data: services = [] } = useActiveServices();
+  const { data: categories = [] } = useCategories();
   const deleteInvoice = useDeleteInvoice();
   const updateInvoice = useUpdateInvoice();
+  const updateItems = useUpdateInvoiceItems();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({ issue_date: '', due_date: '', notes: '', status: '' });
+  const [editItemsOpen, setEditItemsOpen] = useState(false);
+  const [editItems, setEditItems] = useState<EditItem[]>([]);
 
   const invoice = useMemo(() => invoices.find(item => item.id === id), [invoices, id]);
   const invoicePayments = useMemo(() => payments.filter(payment => payment.invoice_id === id), [payments, id]);
@@ -52,6 +71,11 @@ export default function InvoiceDetail() {
   const paidTotal = invoicePayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
   const outstanding = Math.max(total - paidTotal, 0);
   const effectiveStatus = outstanding <= 0 && total > 0 ? "paid" : paidTotal > 0 && paidTotal < total ? "partially_paid" : invoice.status;
+
+  const getCategoryName = (categoryId: string | null) => {
+    if (!categoryId) return "—";
+    return categories.find(c => c.id === categoryId)?.name || "—";
+  };
 
   const handleDelete = () => {
     deleteInvoice.mutate(invoice.id, {
@@ -81,6 +105,61 @@ export default function InvoiceDetail() {
       },
     }, {
       onSuccess: () => { setEditOpen(false); toast({ title: "Fatura atualizada!" }); },
+      onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+    });
+  };
+
+  const openEditItems = () => {
+    setEditItems(invoice.invoice_items.map(item => ({
+      serviceId: "",
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: Number(item.unit_price),
+      categoryId: (item as any).category_id || "",
+    })));
+    setEditItemsOpen(true);
+  };
+
+  const updateEditItem = (index: number, field: keyof EditItem, value: string | number) => {
+    setEditItems(prev => prev.map((item, i) => {
+      if (i !== index) return item;
+      const updated = { ...item, [field]: value };
+      if (field === 'serviceId') {
+        const svc = services.find(s => s.id === value);
+        if (svc) {
+          const now = new Date();
+          updated.unitPrice = Number(svc.default_price);
+          updated.description = `${svc.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`;
+          updated.categoryId = svc.category_id || "";
+        }
+      }
+      return updated;
+    }));
+  };
+
+  const addEditItem = () => {
+    setEditItems(prev => [...prev, { serviceId: "", description: "", quantity: 1, unitPrice: 0, categoryId: "" }]);
+  };
+
+  const removeEditItem = (index: number) => {
+    setEditItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSaveItems = () => {
+    if (editItems.some(i => !i.description || i.unitPrice <= 0)) {
+      toast({ title: "Erro", description: "Preenche todos os campos dos serviços", variant: "destructive" });
+      return;
+    }
+    updateItems.mutate({
+      invoiceId: invoice.id,
+      items: editItems.map(i => ({
+        description: i.description,
+        quantity: i.quantity,
+        unit_price: i.unitPrice,
+        category_id: i.categoryId || null,
+      })),
+    }, {
+      onSuccess: () => { setEditItemsOpen(false); toast({ title: "Itens atualizados!" }); },
       onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
     });
   };
@@ -138,14 +217,17 @@ export default function InvoiceDetail() {
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
-          <div className="border-b border-border px-6 py-4">
+          <div className="border-b border-border px-6 py-4 flex items-center justify-between">
             <h2 className="font-display text-lg font-semibold text-card-foreground">Serviços da fatura</h2>
+            <Button variant="outline" size="sm" className="gap-1" onClick={openEditItems}>
+              <Pencil className="h-3 w-3" /> Editar itens
+            </Button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  <th className="px-6 py-3 text-left font-semibold text-muted-foreground">Serviço</th>
+                  <th className="px-6 py-3 text-left font-semibold text-muted-foreground">Categoria</th>
                   <th className="px-6 py-3 text-left font-semibold text-muted-foreground">Descrição</th>
                   <th className="px-6 py-3 text-right font-semibold text-muted-foreground">Qtd</th>
                   <th className="px-6 py-3 text-right font-semibold text-muted-foreground">Preço</th>
@@ -155,7 +237,7 @@ export default function InvoiceDetail() {
               <tbody className="divide-y divide-border">
                 {invoice.invoice_items.map(item => (
                   <tr key={item.id}>
-                    <td className="px-6 py-4 text-muted-foreground">{serviceLabels[item.service_type]}</td>
+                    <td className="px-6 py-4 text-muted-foreground">{getCategoryName((item as any).category_id)}</td>
                     <td className="px-6 py-4 text-card-foreground">{item.description}</td>
                     <td className="px-6 py-4 text-right text-card-foreground">{item.quantity}</td>
                     <td className="px-6 py-4 text-right text-card-foreground">{formatCurrency(Number(item.unit_price))}</td>
@@ -233,13 +315,16 @@ export default function InvoiceDetail() {
             </div>
             <div className="space-y-2">
               <Label>Estado</Label>
-              <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={editForm.status} onChange={e => setEditForm(p => ({ ...p, status: e.target.value }))}>
-                <option value="draft">Rascunho</option>
-                <option value="pending">Pendente</option>
-                <option value="paid">Paga</option>
-                <option value="overdue">Vencida</option>
-                <option value="partially_paid">Parcialmente Paga</option>
-              </select>
+              <Select value={editForm.status} onValueChange={v => setEditForm(p => ({ ...p, status: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Rascunho</SelectItem>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                  <SelectItem value="paid">Paga</SelectItem>
+                  <SelectItem value="overdue">Vencida</SelectItem>
+                  <SelectItem value="partially_paid">Parcialmente Paga</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Notas</Label>
@@ -248,6 +333,78 @@ export default function InvoiceDetail() {
             <Button className="w-full" onClick={handleEditSave} disabled={updateInvoice.isPending}>
               {updateInvoice.isPending ? "A guardar..." : "Guardar alterações"}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit invoice items dialog */}
+      <Dialog open={editItemsOpen} onOpenChange={setEditItemsOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display">Editar Serviços da Fatura</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            {editItems.map((item, index) => (
+              <div key={index} className="rounded-lg border border-border p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-muted-foreground">Item {index + 1}</Label>
+                  {editItems.length > 1 && (
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeEditItem(index)}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Serviço (opcional)</Label>
+                    <Select value={item.serviceId} onValueChange={v => updateEditItem(index, 'serviceId', v)}>
+                      <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
+                      <SelectContent>
+                        {services.map(svc => (
+                          <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Categoria</Label>
+                    <Select value={item.categoryId} onValueChange={v => updateEditItem(index, 'categoryId', v)}>
+                      <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                      <SelectContent>
+                        {categories.map(cat => (
+                          <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Descrição</Label>
+                  <Input value={item.description} onChange={e => updateEditItem(index, 'description', e.target.value)} />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Quantidade</Label>
+                    <Input type="number" min={1} value={item.quantity} onChange={e => updateEditItem(index, 'quantity', Number(e.target.value))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Preço (€)</Label>
+                    <Input type="number" min={0} step="0.01" value={item.unitPrice} onChange={e => updateEditItem(index, 'unitPrice', Number(e.target.value))} />
+                  </div>
+                </div>
+              </div>
+            ))}
+            <Button variant="outline" className="w-full gap-2" onClick={addEditItem}>
+              <Plus className="h-4 w-4" /> Adicionar Serviço
+            </Button>
+            <div className="flex items-center justify-between border-t border-border pt-4">
+              <p className="text-lg font-bold font-display text-card-foreground">
+                Total: {formatCurrency(editItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0))}
+              </p>
+              <Button onClick={handleSaveItems} disabled={updateItems.isPending}>
+                {updateItems.isPending ? "A guardar..." : "Guardar itens"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

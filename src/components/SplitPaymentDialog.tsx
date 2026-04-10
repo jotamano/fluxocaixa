@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useAddPayment, type Invoice } from "@/hooks/use-data";
+import { useAddPayment, usePayments, type Invoice } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal } from "@/lib/data";
 import { toast } from "sonner";
 
@@ -22,6 +22,7 @@ const getToday = () => new Date().toISOString().split("T")[0];
 
 export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: SplitPaymentDialogProps) {
   const addPayment = useAddPayment();
+  const { data: allPayments = [] } = usePayments();
   const [totalAmount, setTotalAmount] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("transfer");
   const [date, setDate] = useState(getToday());
@@ -36,6 +37,19 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
       return true;
     });
   }, [invoices, clientId]);
+
+  // Calculate remaining balance per invoice
+  const invoiceRemaining = useMemo(() => {
+    const map = new Map<string, number>();
+    unpaidInvoices.forEach(inv => {
+      const total = getInvoiceItemsTotal(inv.invoice_items);
+      const paid = allPayments
+        .filter(p => p.invoice_id === inv.id)
+        .reduce((s, p) => s + Number(p.amount), 0);
+      map.set(inv.id, Math.max(total - paid, 0));
+    });
+    return map;
+  }, [unpaidInvoices, allPayments]);
 
   useEffect(() => {
     if (!open) return;
@@ -52,7 +66,7 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
   );
 
   const totalSelectedDebt = selectedInvoices.reduce(
-    (sum, inv) => sum + getInvoiceItemsTotal(inv.invoice_items),
+    (sum, inv) => sum + (invoiceRemaining.get(inv.id) || 0),
     0,
   );
 
@@ -65,7 +79,7 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
     });
   };
 
-  // Distribute the total amount across selected invoices (oldest first by due_date)
+  // Distribute the total amount across selected invoices (oldest first by due_date), using REMAINING balance
   const distribution = useMemo(() => {
     const amount = parseFloat(totalAmount) || 0;
     if (amount <= 0 || selectedInvoices.length === 0) return [];
@@ -76,12 +90,12 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
 
     let remaining = amount;
     return sorted.map(inv => {
-      const invTotal = getInvoiceItemsTotal(inv.invoice_items);
-      const allocated = Math.min(remaining, invTotal);
+      const invRemaining = invoiceRemaining.get(inv.id) || 0;
+      const allocated = Math.min(remaining, invRemaining);
       remaining = Math.max(0, remaining - allocated);
       return { invoice: inv, amount: allocated };
     }).filter(d => d.amount > 0);
-  }, [totalAmount, selectedInvoices]);
+  }, [totalAmount, selectedInvoices, invoiceRemaining]);
 
   const handleSubmit = async () => {
     if (distribution.length === 0) return;
@@ -134,7 +148,7 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
                 <p className="px-4 py-3 text-sm text-muted-foreground">Sem faturas pendentes</p>
               ) : (
                 unpaidInvoices.map(inv => {
-                  const invTotal = getInvoiceItemsTotal(inv.invoice_items);
+                  const remaining = invoiceRemaining.get(inv.id) || 0;
                   const dist = distribution.find(d => d.invoice.id === inv.id);
                   return (
                     <label
@@ -154,7 +168,7 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
                         </p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-sm font-semibold text-card-foreground">{formatCurrency(invTotal)}</p>
+                        <p className="text-sm font-semibold text-card-foreground">{formatCurrency(remaining)}</p>
                         {dist && dist.amount > 0 && (
                           <p className="text-xs text-primary font-medium">
                             −{formatCurrency(dist.amount)}

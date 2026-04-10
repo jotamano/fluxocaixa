@@ -1,5 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -13,7 +17,6 @@ Deno.serve(async (req) => {
 
     const today = new Date().toISOString().split("T")[0];
 
-    // Find active subscriptions where next_billing_date <= today
     const { data: subs, error: subsError } = await supabase
       .from("subscriptions")
       .select("*")
@@ -30,7 +33,6 @@ Deno.serve(async (req) => {
     let generated = 0;
 
     for (const sub of subs) {
-      // Get next invoice number
       const year = new Date().getFullYear();
       const { data: lastInvoices } = await supabase
         .from("invoices")
@@ -46,16 +48,13 @@ Deno.serve(async (req) => {
       }
       const invoiceNumber = `FT ${year}/${String(nextNum).padStart(3, "0")}`;
 
-      // Determine due date (30 days from billing date)
       const billingDate = new Date(sub.next_billing_date);
       const dueDate = new Date(billingDate);
       dueDate.setDate(dueDate.getDate() + 30);
 
-      // Get month name in Portuguese
       const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
       const monthName = monthNames[billingDate.getMonth()];
 
-      // Create invoice
       const { data: invoice, error: invError } = await supabase
         .from("invoices")
         .insert({
@@ -74,16 +73,14 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Create invoice item
       await supabase.from("invoice_items").insert({
         invoice_id: invoice.id,
         description: `${sub.name} — ${monthName} ${billingDate.getFullYear()}`,
-        service_type: sub.service_type,
         quantity: 1,
         unit_price: sub.amount,
+        category_id: sub.category_id || null,
       });
 
-      // Calculate next billing date based on frequency
       const nextDate = new Date(sub.next_billing_date);
       if (sub.frequency === "monthly") {
         nextDate.setMonth(nextDate.getMonth() + 1);

@@ -1,6 +1,6 @@
 import type { Tables } from "@/integrations/supabase/types";
 import type { Invoice } from "@/hooks/use-data";
-import { getInvoiceItemsTotal, formatCurrency, serviceLabels } from "./data";
+import { getInvoiceItemsTotal, formatCurrency } from "./data";
 
 type Client = Tables<"clients">;
 
@@ -12,7 +12,6 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
   const itemsRows = invoice.invoice_items.map(item => `
     <tr>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;">${item.description}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:center;">${serviceLabels[item.service_type]}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:center;">${item.quantity}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;">${formatCurrency(Number(item.unit_price))}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;font-weight:600;">${formatCurrency(item.quantity * Number(item.unit_price))}</td>
@@ -51,15 +50,14 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
           <p style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:8px;">Proposta para</p>
           <p style="font-size:16px;font-weight:700;">${client.company}</p>
           <p style="font-size:13px;color:#4b5563;margin-top:4px;">${client.name}</p>
-          <p style="font-size:13px;color:#4b5563;">${client.email} · ${client.phone}</p>
-          <p style="font-size:13px;color:#4b5563;">NIF: ${client.nif}</p>
+          <p style="font-size:13px;color:#4b5563;">${client.email}${client.phone ? ` · ${client.phone}` : ""}</p>
+          ${client.nif ? `<p style="font-size:13px;color:#4b5563;">NIF: ${client.nif}</p>` : ""}
         </div>
 
         <table style="width:100%;border-collapse:collapse;margin-bottom:30px;">
           <thead>
             <tr style="background:#1e40af;color:#fff;">
               <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;">Descrição</th>
-              <th style="padding:10px 12px;text-align:center;font-size:12px;font-weight:600;">Serviço</th>
               <th style="padding:10px 12px;text-align:center;font-size:12px;font-weight:600;">Qtd</th>
               <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:600;">Preço Unit.</th>
               <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:600;">Total</th>
