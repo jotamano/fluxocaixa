@@ -1,5 +1,5 @@
 import type { Client, Invoice, Payment } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, methodLabels, statusLabels } from "./data";
+import { formatCurrency, getInvoiceItemsTotal, methodLabels } from "./data";
 
 export function generateClientStatement(
   client: Client,
