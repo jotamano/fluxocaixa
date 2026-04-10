@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useServices, useAddService, useUpdateService, useDeleteService, useCategories, useAddCategory, useUpdateCategory, useDeleteCategory } from "@/hooks/use-data";
-import { formatCurrency, type ServiceType } from "@/lib/data";
+import { formatCurrency } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 
@@ -29,7 +29,6 @@ export default function Services() {
   const [form, setForm] = useState({
     name: "",
     defaultPrice: "",
-    serviceType: "social_media" as ServiceType,
     categoryId: "",
     active: true,
   });
@@ -43,7 +42,7 @@ export default function Services() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: "", defaultPrice: "", serviceType: "social_media", categoryId: categories[0]?.id || "", active: true });
+    setForm({ name: "", defaultPrice: "", categoryId: categories[0]?.id || "", active: true });
     setDialogOpen(true);
   };
 
@@ -54,8 +53,7 @@ export default function Services() {
     setForm({
       name: s.name,
       defaultPrice: String(Number(s.default_price)),
-      serviceType: s.service_type,
-      categoryId: (s as any).category_id || "",
+      categoryId: s.category_id || "",
       active: s.active,
     });
     setDialogOpen(true);
@@ -64,7 +62,7 @@ export default function Services() {
   const handleSave = () => {
     if (editingId) {
       updateService.mutate(
-        { id: editingId, updates: { name: form.name, default_price: Number(form.defaultPrice), service_type: form.serviceType, category_id: form.categoryId || null, active: form.active } as any },
+        { id: editingId, updates: { name: form.name, default_price: Number(form.defaultPrice), category_id: form.categoryId || null, active: form.active } },
         {
           onSuccess: () => { setDialogOpen(false); toast({ title: "Serviço atualizado!" }); },
           onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
@@ -72,7 +70,7 @@ export default function Services() {
       );
     } else {
       addService.mutate(
-        { name: form.name, default_price: Number(form.defaultPrice), service_type: form.serviceType, category_id: form.categoryId || null } as any,
+        { name: form.name, default_price: Number(form.defaultPrice), category_id: form.categoryId || null },
         {
           onSuccess: () => { setDialogOpen(false); toast({ title: "Serviço criado!" }); },
           onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),

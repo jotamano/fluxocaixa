@@ -229,6 +229,22 @@ export function useUpdateInvoice() {
   });
 }
 
+export function useUpdateInvoiceItems() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ invoiceId, items }: { invoiceId: string; items: Omit<TablesInsert<"invoice_items">, "invoice_id">[] }) => {
+      // Delete existing items
+      const { error: delError } = await supabase.from("invoice_items").delete().eq("invoice_id", invoiceId);
+      if (delError) throw delError;
+      // Insert new items
+      const itemsWithId = items.map(item => ({ ...item, invoice_id: invoiceId }));
+      const { error: insError } = await supabase.from("invoice_items").insert(itemsWithId);
+      if (insError) throw insError;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+  });
+}
+
 export function useDeleteInvoice() {
   const qc = useQueryClient();
   return useMutation({
@@ -349,7 +365,6 @@ export function useUpdatePayment() {
     mutationFn: async ({ id, updates, oldInvoiceId }: { id: string; updates: TablesUpdate<"payments">; oldInvoiceId?: string | null }) => {
       const { data, error } = await supabase.from("payments").update(updates).eq("id", id).select().single();
       if (error) throw error;
-      // Recalc both old and new invoice statuses
       if (oldInvoiceId) await recalcInvoiceStatus(oldInvoiceId);
       if (updates.invoice_id) await recalcInvoiceStatus(updates.invoice_id);
       return data;

@@ -5,20 +5,6 @@ export type InvoiceStatus = 'paid' | 'pending' | 'overdue' | 'draft' | 'partiall
 export type SubscriptionFrequency = 'monthly' | 'quarterly' | 'yearly';
 export type PaymentMethod = 'transfer' | 'mbway' | 'cash' | 'card';
 
-export const serviceLabels: Record<ServiceType, string> = {
-  social_media: 'Gestão de Redes Sociais',
-  website: 'Criação de Sites',
-  marketing: 'Marketing Digital',
-  subscription: 'Subscrição',
-};
-
-export const defaultServicePrices: Record<ServiceType, number> = {
-  social_media: 250,
-  website: 800,
-  marketing: 350,
-  subscription: 50,
-};
-
 export const statusLabels: Record<InvoiceStatus, string> = {
   paid: 'Paga',
   pending: 'Pendente',

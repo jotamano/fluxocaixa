@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { Plus, Trash2, ArrowLeft, UserPlus } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, UserPlus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
-import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber, useActiveServices } from "@/hooks/use-data";
-import { formatCurrency } from "@/lib/data";
+import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber, useActiveServices, useCategories, useAddSubscription } from "@/hooks/use-data";
+import { formatCurrency, type SubscriptionFrequency, frequencyLabels } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 
 const MONTHS_PT = [
@@ -18,23 +19,23 @@ const MONTHS_PT = [
 
 interface FormItem {
   serviceId: string;
-  serviceType: string;
   description: string;
   quantity: number;
   unitPrice: number;
   startDate: string;
   endDate: string;
+  categoryId: string;
 }
 
 function getDefaultItem(): FormItem {
   return {
     serviceId: "",
-    serviceType: "social_media",
     description: "",
     quantity: 1,
     unitPrice: 0,
     startDate: "",
     endDate: "",
+    categoryId: "",
   };
 }
 
@@ -43,14 +44,18 @@ export default function NewInvoice() {
   const { toast } = useToast();
   const { data: clients = [] } = useClients();
   const { data: services = [] } = useActiveServices();
+  const { data: categories = [] } = useCategories();
   const addInvoice = useAddInvoice();
   const addClient = useAddClient();
+  const addSubscription = useAddSubscription();
   const { data: nextNumber = "" } = useNextInvoiceNumber();
   const [clientId, setClientId] = useState("");
   const [items, setItems] = useState<FormItem[]>([getDefaultItem()]);
   const [notes, setNotes] = useState("");
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const [newClient, setNewClient] = useState({ name: '', email: '', company: '', phone: '', nif: '' });
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringFrequency, setRecurringFrequency] = useState<SubscriptionFrequency>("monthly");
 
   const addItem = () => setItems(prev => [...prev, getDefaultItem()]);
 
@@ -64,9 +69,9 @@ export default function NewInvoice() {
         const svc = services.find(s => s.id === value);
         if (svc) {
           const now = new Date();
-          updated.serviceType = svc.service_type;
           updated.unitPrice = Number(svc.default_price);
           updated.description = `${svc.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`;
+          updated.categoryId = svc.category_id || "";
         }
       }
       return updated;
@@ -113,17 +118,39 @@ export default function NewInvoice() {
         if (i.startDate && i.endDate) {
           desc += ` (${new Date(i.startDate).toLocaleDateString('pt-PT')} - ${new Date(i.endDate).toLocaleDateString('pt-PT')})`;
         }
-        const svc = services.find(s => s.id === i.serviceId);
         return {
           description: desc,
-          service_type: (svc?.service_type || 'social_media') as any,
           quantity: i.quantity,
           unit_price: i.unitPrice,
+          category_id: i.categoryId || null,
         };
       }),
     }, {
       onSuccess: () => {
         toast({ title: "Fatura criada!", description: `Fatura no valor de ${formatCurrency(total)} criada com sucesso.` });
+
+        // Create subscription if recurring
+        if (isRecurring && clientId) {
+          const mainItem = items[0];
+          const svc = services.find(s => s.id === mainItem.serviceId);
+          const nextBilling = new Date();
+          if (recurringFrequency === 'monthly') nextBilling.setMonth(nextBilling.getMonth() + 1);
+          else if (recurringFrequency === 'quarterly') nextBilling.setMonth(nextBilling.getMonth() + 3);
+          else if (recurringFrequency === 'yearly') nextBilling.setFullYear(nextBilling.getFullYear() + 1);
+
+          addSubscription.mutate({
+            client_id: clientId,
+            name: svc?.name || mainItem.description,
+            amount: total,
+            frequency: recurringFrequency,
+            next_billing_date: nextBilling.toISOString().split('T')[0],
+            start_date: new Date().toISOString().split('T')[0],
+            category_id: mainItem.categoryId || null,
+          }, {
+            onSuccess: () => toast({ title: "Subscrição criada!", description: "Fatura recorrente configurada." }),
+          });
+        }
+
         navigate("/faturas");
       },
       onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
@@ -185,7 +212,9 @@ export default function NewInvoice() {
                     <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
                     <SelectContent>
                       {services.map(svc => (
-                        <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
+                        <SelectItem key={svc.id} value={svc.id}>
+                          {svc.name} {svc.service_categories ? `(${svc.service_categories.name})` : ""}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -233,6 +262,32 @@ export default function NewInvoice() {
           <Label>Notas (opcional)</Label>
           <Textarea placeholder="Observações ou condições de pagamento..." value={notes} onChange={e => setNotes(e.target.value)} />
         </div>
+
+        {/* Recurring toggle */}
+        <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3 bg-muted/40">
+          <div className="flex items-center gap-3">
+            <RefreshCw className="h-4 w-4 text-primary" />
+            <div>
+              <p className="text-sm font-medium text-card-foreground">Fatura recorrente</p>
+              <p className="text-xs text-muted-foreground">Cria automaticamente uma subscrição</p>
+            </div>
+          </div>
+          <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
+        </div>
+
+        {isRecurring && (
+          <div className="space-y-2">
+            <Label>Frequência da recorrência</Label>
+            <Select value={recurringFrequency} onValueChange={v => setRecurringFrequency(v as SubscriptionFrequency)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {(Object.entries(frequencyLabels) as [SubscriptionFrequency, string][]).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="flex items-center justify-between border-t border-border pt-6">
           <div>

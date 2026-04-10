@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import { Euro, Users, RefreshCw, TrendingUp, AlertTriangle, Bell } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
-import { formatCurrency, getInvoiceItemsTotal, serviceLabels } from "@/lib/data";
-import { useInvoices, useClients, useSubscriptions, usePayments } from "@/hooks/use-data";
+import { formatCurrency, getInvoiceItemsTotal } from "@/lib/data";
+import { useInvoices, useClients, useSubscriptions, usePayments, useCategories } from "@/hooks/use-data";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
@@ -13,6 +13,8 @@ const CHART_COLORS = [
   "hsl(160, 60%, 40%)",
   "hsl(38, 92%, 50%)",
   "hsl(280, 60%, 50%)",
+  "hsl(340, 65%, 47%)",
+  "hsl(190, 70%, 42%)",
 ];
 
 const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -41,6 +43,7 @@ export default function Dashboard() {
   const { data: clients = [] } = useClients();
   const { data: subscriptions = [] } = useSubscriptions();
   const { data: payments = [] } = usePayments();
+  const { data: categories = [] } = useCategories();
   const [dateRange, setDateRange] = useState<DateRange>("year");
 
   const { start, end } = getDateRange(dateRange);
@@ -81,7 +84,6 @@ export default function Dashboard() {
 
   const overdueInvoices = filteredInvoices.filter(i => i.status === 'overdue');
 
-  // Real monthly revenue from payments
   const monthlyData = useMemo(() => {
     const monthMap = new Map<string, number>();
     const monthsToShow = dateRange === 'month' ? 1 : dateRange === 'quarter' ? 3 : 12;
@@ -104,18 +106,20 @@ export default function Dashboard() {
     });
   }, [filteredPayments, dateRange]);
 
-  const serviceRevenue = filteredInvoices.reduce((acc, inv) => {
-    inv.invoice_items.forEach(item => {
-      const key = item.service_type;
-      acc[key] = (acc[key] || 0) + item.quantity * Number(item.unit_price);
+  // Revenue by category (using invoice_items.category_id)
+  const categoryRevenue = useMemo(() => {
+    const catMap = new Map<string, number>();
+    filteredInvoices.forEach(inv => {
+      inv.invoice_items.forEach(item => {
+        const catId = (item as any).category_id;
+        const catName = catId
+          ? categories.find(c => c.id === catId)?.name || "Sem categoria"
+          : "Sem categoria";
+        catMap.set(catName, (catMap.get(catName) || 0) + item.quantity * Number(item.unit_price));
+      });
     });
-    return acc;
-  }, {} as Record<string, number>);
-
-  const pieData = Object.entries(serviceRevenue).map(([key, value]) => ({
-    name: serviceLabels[key as keyof typeof serviceLabels],
-    value,
-  }));
+    return Array.from(catMap.entries()).map(([name, value]) => ({ name, value }));
+  }, [filteredInvoices, categories]);
 
   const dateFilters: { value: DateRange; label: string }[] = [
     { value: "month", label: "Este mês" },
@@ -183,19 +187,23 @@ export default function Dashboard() {
         </div>
 
         <div className="rounded-xl border border-border bg-card shadow-card p-6">
-          <h2 className="font-display font-semibold text-card-foreground mb-4">Receita por Serviço</h2>
+          <h2 className="font-display font-semibold text-card-foreground mb-4">Receita por Categoria</h2>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={3}>
-                  {pieData.map((_, idx) => (
-                    <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={{ borderRadius: 8, border: "1px solid hsl(220, 15%, 90%)", fontSize: 13 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
+            {categoryRevenue.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-sm text-muted-foreground">Sem dados para o período selecionado</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={categoryRevenue} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={3}>
+                    {categoryRevenue.map((_, idx) => (
+                      <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={{ borderRadius: 8, border: "1px solid hsl(220, 15%, 90%)", fontSize: 13 }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       </div>

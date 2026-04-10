@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pause, Play, Pencil, Plus, Trash2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSubscriptions, useClients, useToggleSubscription, useUpdateSubscription, useAddSubscription, useDeleteSubscription, useActiveServices, useAddInvoice, useNextInvoiceNumber } from "@/hooks/use-data";
+import { useSubscriptions, useClients, useToggleSubscription, useUpdateSubscription, useAddSubscription, useDeleteSubscription, useActiveServices, useAddInvoice, useNextInvoiceNumber, useCategories } from "@/hooks/use-data";
 import { frequencyLabels, formatCurrency, type SubscriptionFrequency } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ export default function Subscriptions() {
   const { toast } = useToast();
   const { data: clients = [] } = useClients();
   const { data: services = [] } = useActiveServices();
+  const { data: categories = [] } = useCategories();
   const { data: subscriptions = [] } = useSubscriptions();
   const { data: nextNumber = "" } = useNextInvoiceNumber();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -38,7 +39,7 @@ export default function Subscriptions() {
     clientId: "",
     name: "",
     serviceId: "",
-    serviceType: "social_media" as string,
+    categoryId: "",
     amount: "",
     frequency: "monthly" as SubscriptionFrequency,
     nextBillingDate: new Date().toISOString().split('T')[0],
@@ -54,16 +55,23 @@ export default function Subscriptions() {
     return sum;
   }, 0);
 
+  const getCategoryName = (sub: typeof subscriptions[0]) => {
+    if ((sub as any).category_id) {
+      return categories.find(c => c.id === (sub as any).category_id)?.name || "";
+    }
+    return "";
+  };
+
   const openEditor = (id: string) => {
     const subscription = subscriptions.find(item => item.id === id);
     if (!subscription) return;
     setEditingId(subscription.id);
-    const matchedService = services.find(s => s.service_type === subscription.service_type && s.name === subscription.name);
+    const matchedService = services.find(s => s.name === subscription.name);
     setForm({
       clientId: subscription.client_id,
       name: subscription.name,
       serviceId: matchedService?.id || "",
-      serviceType: subscription.service_type,
+      categoryId: (subscription as any).category_id || "",
       amount: String(Number(subscription.amount)),
       frequency: subscription.frequency,
       nextBillingDate: subscription.next_billing_date,
@@ -78,7 +86,7 @@ export default function Subscriptions() {
       clientId: "",
       name: "",
       serviceId: "",
-      serviceType: "social_media",
+      categoryId: "",
       amount: "",
       frequency: "monthly",
       nextBillingDate: new Date().toISOString().split('T')[0],
@@ -111,10 +119,10 @@ export default function Subscriptions() {
           updates: {
             client_id: form.clientId,
             name: form.name,
-            service_type: form.serviceType as any,
             amount: Number(form.amount),
             frequency: form.frequency,
             next_billing_date: form.nextBillingDate,
+            category_id: form.categoryId || null,
           },
         },
         { onSuccess: () => handleDialogChange(false) },
@@ -124,18 +132,17 @@ export default function Subscriptions() {
         {
           client_id: form.clientId,
           name: form.name,
-          service_type: form.serviceType as any,
           amount: Number(form.amount),
           frequency: form.frequency,
           next_billing_date: form.nextBillingDate,
           start_date: new Date().toISOString().split('T')[0],
+          category_id: form.categoryId || null,
         },
         {
           onSuccess: () => {
             handleDialogChange(false);
             toast({ title: "Subscrição criada!" });
 
-            // Auto-generate first invoice if toggled
             if (generateInvoice && form.clientId && form.amount) {
               const now = new Date();
               const invoiceNumber = nextNumber || `FT ${now.getFullYear()}/${String(Date.now()).slice(-3).padStart(3, '0')}`;
@@ -153,9 +160,9 @@ export default function Subscriptions() {
                 },
                 items: [{
                   description: `${form.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`,
-                  service_type: form.serviceType as any,
                   quantity: 1,
                   unit_price: Number(form.amount),
+                  category_id: form.categoryId || null,
                 }],
               }, {
                 onSuccess: () => toast({ title: "Fatura gerada!", description: `Fatura ${invoiceNumber} criada automaticamente.` }),
@@ -176,44 +183,48 @@ export default function Subscriptions() {
     });
   };
 
-  const renderCard = (sub: typeof subscriptions[0], isActive: boolean) => (
-    <div key={sub.id} className={`rounded-xl border border-border bg-card p-6 shadow-card ${!isActive ? 'opacity-70' : ''}`}>
-      <div className="flex items-start justify-between">
-        <div className="space-y-1">
-          <h3 className="font-display font-semibold text-card-foreground">{sub.name}</h3>
-          <p className="text-xs text-muted-foreground">{sub.clients?.company}</p>
-        </div>
-        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold border ${isActive ? 'bg-success/10 text-success border-success/20' : 'bg-muted text-muted-foreground border-border'}`}>
-          {isActive ? 'Ativa' : 'Inativa'}
-        </span>
-      </div>
-      <div className="mt-4 space-y-2">
-        <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Valor</span>
-          <span className="font-semibold text-card-foreground">{formatCurrency(Number(sub.amount))}/{frequencyLabels[sub.frequency].toLowerCase()}</span>
-        </div>
-        {isActive && (
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Próx. faturação</span>
-            <span className="text-card-foreground">{new Date(sub.next_billing_date).toLocaleDateString('pt-PT')}</span>
+  const renderCard = (sub: typeof subscriptions[0], isActive: boolean) => {
+    const catName = getCategoryName(sub);
+    return (
+      <div key={sub.id} className={`rounded-xl border border-border bg-card p-6 shadow-card ${!isActive ? 'opacity-70' : ''}`}>
+        <div className="flex items-start justify-between">
+          <div className="space-y-1">
+            <h3 className="font-display font-semibold text-card-foreground">{sub.name}</h3>
+            <p className="text-xs text-muted-foreground">{sub.clients?.company}</p>
+            {catName && <p className="text-xs text-primary">{catName}</p>}
           </div>
-        )}
-      </div>
-      <div className="mt-4 pt-4 border-t border-border">
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="flex-1 gap-2" onClick={() => openEditor(sub.id)}>
-            <Pencil className="h-3 w-3" /> Editar
-          </Button>
-          <Button variant="outline" size="sm" className="flex-1 gap-2" onClick={() => toggleSub.mutate({ id: sub.id, active: !isActive })}>
-            {isActive ? <><Pause className="h-3 w-3" /> Suspender</> : <><Play className="h-3 w-3" /> Reativar</>}
-          </Button>
-          <Button variant="outline" size="sm" className="gap-2 text-destructive hover:text-destructive" onClick={() => { setDeleteId(sub.id); setConfirmOpen(true); }}>
-            <Trash2 className="h-3 w-3" />
-          </Button>
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold border ${isActive ? 'bg-success/10 text-success border-success/20' : 'bg-muted text-muted-foreground border-border'}`}>
+            {isActive ? 'Ativa' : 'Inativa'}
+          </span>
+        </div>
+        <div className="mt-4 space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Valor</span>
+            <span className="font-semibold text-card-foreground">{formatCurrency(Number(sub.amount))}/{frequencyLabels[sub.frequency].toLowerCase()}</span>
+          </div>
+          {isActive && (
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Próx. faturação</span>
+              <span className="text-card-foreground">{new Date(sub.next_billing_date).toLocaleDateString('pt-PT')}</span>
+            </div>
+          )}
+        </div>
+        <div className="mt-4 pt-4 border-t border-border">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1 gap-2" onClick={() => openEditor(sub.id)}>
+              <Pencil className="h-3 w-3" /> Editar
+            </Button>
+            <Button variant="outline" size="sm" className="flex-1 gap-2" onClick={() => toggleSub.mutate({ id: sub.id, active: !isActive })}>
+              {isActive ? <><Pause className="h-3 w-3" /> Suspender</> : <><Play className="h-3 w-3" /> Reativar</>}
+            </Button>
+            <Button variant="outline" size="sm" className="gap-2 text-destructive hover:text-destructive" onClick={() => { setDeleteId(sub.id); setConfirmOpen(true); }}>
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -271,13 +282,21 @@ export default function Subscriptions() {
               <Select value={form.serviceId} onValueChange={value => {
                 const svc = services.find(s => s.id === value);
                 if (svc) {
-                  setForm(prev => ({ ...prev, serviceId: value, serviceType: svc.service_type, name: prev.name || svc.name, amount: prev.amount || String(Number(svc.default_price)) }));
+                  setForm(prev => ({
+                    ...prev,
+                    serviceId: value,
+                    name: prev.name || svc.name,
+                    amount: prev.amount || String(Number(svc.default_price)),
+                    categoryId: svc.category_id || "",
+                  }));
                 }
               }}>
                 <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
                 <SelectContent>
                   {services.map(svc => (
-                    <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
+                    <SelectItem key={svc.id} value={svc.id}>
+                      {svc.name} {svc.service_categories ? `(${svc.service_categories.name})` : ""}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
