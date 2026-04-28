@@ -13,7 +13,11 @@ name: marketing-billing-buddy
 
 services:
   db:
-    image: supabase/postgres:15.6.1.139
+    # Custom image: supabase/postgres + role-bootstrap script + our migrations
+    # baked in (see Dockerfile.db). Avoids fragile bind-mounts on Coolify.
+    build:
+      context: .
+      dockerfile: Dockerfile.db
     restart: unless-stopped
     ports:
       - "${POSTGRES_PORT:-54322}:5432"
@@ -24,10 +28,11 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXP: ${JWT_EXPIRY:-3600}
     volumes:
-      - db-data:/var/lib/postgresql/data
-      # Migrations applied on first boot (in lexical order).
-      - ./supabase/migrations:/docker-entrypoint-initdb.d/migrations:ro
-      - ./supabase/selfhost/init:/docker-entrypoint-initdb.d/init:ro
+      # Renamed from db-data -> db-data-v2 to force Postgres to init from
+      # scratch (so the role-bootstrap script + migrations actually run).
+      # The old db-data volume can be removed manually after the new
+      # deployment comes up cleanly.
+      - db-data-v2:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
       interval: 5s
@@ -57,11 +62,10 @@ services:
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
       GOTRUE_MAILER_AUTOCONFIRM: ${MAILER_AUTOCONFIRM:-true}
       GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-admin@example.com}
-      GOTRUE_SMTP_HOST: ${SMTP_HOST:-}
-      GOTRUE_SMTP_PORT: ${SMTP_PORT:-}
-      GOTRUE_SMTP_USER: ${SMTP_USER:-}
-      GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
       GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-Marketing Billing Buddy}
+      # SMTP_HOST/PORT/USER/PASS intentionally not passed when empty —
+      # GoTrue refuses to start if SMTP_PORT="" (cannot parse as int).
+      # With MAILER_AUTOCONFIRM=true the mailer is not used anyway.
       GOTRUE_LOG_LEVEL: info
 
   rest:
@@ -115,7 +119,12 @@ services:
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
 
   kong:
-    image: kong:2.8.1
+    # Custom image: kong + kong.yml baked in (see Dockerfile.kong).
+    # Avoids the "kong.yml: Is a directory" error on Coolify when the bind
+    # source path doesn't exist yet at container creation time.
+    build:
+      context: .
+      dockerfile: Dockerfile.kong
     restart: unless-stopped
     depends_on:
       auth:
@@ -135,8 +144,6 @@ services:
       SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-supabase}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
-    volumes:
-      - ./supabase/selfhost/kong.yml:/var/lib/kong/kong.yml:ro
 
   app:
     build:
@@ -153,4 +160,4 @@ services:
       - "${APP_PORT:-8080}:80"
 
 volumes:
-  db-data:
+  db-data-v2:

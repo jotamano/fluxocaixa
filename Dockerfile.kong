@@ -1,0 +1,7 @@
+# Custom Kong image with the declarative config baked in.
+# Avoids bind-mounting kong.yml from the host, which is fragile on Coolify
+# (Docker creates the source path as a directory if it doesn't exist yet,
+# and Kong then errors with "kong.yml: Is a directory").
+FROM kong:2.8.1
+
+COPY supabase/selfhost/kong.yml /var/lib/kong/kong.yml
