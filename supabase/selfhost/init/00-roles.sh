@@ -89,7 +89,12 @@ psql -v ON_ERROR_STOP=1 \
 
   -- ─── auth schema (for GoTrue) ────────────────────────────────────────
   CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_auth_admin;
+  GRANT ALL ON SCHEMA auth TO supabase_auth_admin;
   GRANT USAGE ON SCHEMA auth TO postgres, anon, authenticated, service_role;
+  -- Make GoTrue create its tables in `auth`, not `public` (which is locked
+  -- down in Postgres 15). Without this the GoTrue migrator fails with
+  -- "permission denied for schema public" trying to create schema_migrations.
+  ALTER ROLE supabase_auth_admin SET search_path TO auth, public;
 
   -- ─── public schema permissions ───────────────────────────────────────
   GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
