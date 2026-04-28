@@ -1,0 +1,30 @@
+# Custom Postgres image for the marketing-billing-buddy self-hosted stack.
+#
+# Built on top of supabase/postgres so it ships with pg_cron, pgaudit, etc.
+# We bake the role-bootstrap script and our SQL migrations directly into the
+# image — this avoids fragile bind-mounts on hosts like Coolify where the
+# source path may not exist yet at container creation time.
+#
+# Init scripts in /docker-entrypoint-initdb.d/ run in lexical order on the
+# very first boot of an EMPTY data volume. Our files are prefixed `99-mb-`
+# so they run AFTER supabase/postgres' own role-creation scripts.
+# If you change them and need them to re-run, you must wipe the db volume:
+#   docker compose down -v   (or delete it via Coolify's storage tab)
+FROM supabase/postgres:15.6.1.139
+
+# 99-mb-roles.sh assigns the same POSTGRES_PASSWORD to authenticator,
+# supabase_auth_admin, supabase_admin and friends so PostgREST/GoTrue can
+# actually connect.
+COPY supabase/selfhost/init/00-roles.sh /docker-entrypoint-initdb.d/99-mb-00-roles.sh
+RUN chmod +x /docker-entrypoint-initdb.d/99-mb-00-roles.sh
+
+# Application SQL migrations. Copied in a temporary directory and then
+# moved with a `99-mb-` prefix so they apply after the supabase image's
+# own initialisation scripts but in lexical order amongst themselves.
+COPY supabase/migrations/ /tmp/mb-migrations/
+RUN set -eu; \
+    for f in /tmp/mb-migrations/*.sql; do \
+      base=$(basename "$f"); \
+      cp "$f" "/docker-entrypoint-initdb.d/99-mb-${base}"; \
+    done; \
+    rm -rf /tmp/mb-migrations
