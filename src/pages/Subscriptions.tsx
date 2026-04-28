@@ -12,7 +12,6 @@ import {
   useActiveServices,
   useAddInvoice,
   useNextInvoiceNumber,
-  useCategories,
   useSubscriptionStats,
   useGenerateSubscriptionInvoices,
 } from "@/hooks/use-data";
@@ -38,7 +37,6 @@ export default function Subscriptions() {
   const { toast } = useToast();
   const { data: clients = [] } = useClients();
   const { data: services = [] } = useActiveServices();
-  const { data: categories = [] } = useCategories();
   const { data: subscriptions = [] } = useSubscriptions();
   const { data: stats = {} } = useSubscriptionStats();
   const { data: nextNumber = "" } = useNextInvoiceNumber();
@@ -62,7 +60,6 @@ export default function Subscriptions() {
     clientId: "",
     name: "",
     serviceId: "",
-    categoryId: "",
     amount: "",
     setupFee: "",
     frequency: "monthly" as SubscriptionFrequency,
@@ -97,13 +94,6 @@ export default function Subscriptions() {
       return sum;
     }, 0);
 
-  const getCategoryName = (sub: typeof subscriptions[0]) => {
-    if (sub.category_id) {
-      return categories.find(c => c.id === sub.category_id)?.name || "";
-    }
-    return "";
-  };
-
   const openEditor = (id: string) => {
     const subscription = subscriptions.find(item => item.id === id);
     if (!subscription) return;
@@ -113,7 +103,6 @@ export default function Subscriptions() {
       clientId: subscription.client_id,
       name: subscription.name,
       serviceId: matchedService?.id || "",
-      categoryId: subscription.category_id || "",
       amount: String(Number(subscription.amount)),
       setupFee: "",
       frequency: subscription.frequency,
@@ -130,7 +119,6 @@ export default function Subscriptions() {
       clientId: "",
       name: "",
       serviceId: "",
-      categoryId: "",
       amount: "",
       setupFee: "",
       frequency: "monthly",
@@ -168,7 +156,6 @@ export default function Subscriptions() {
             amount: Number(form.amount),
             frequency: form.frequency,
             next_billing_date: form.nextBillingDate,
-            category_id: form.categoryId || null,
             prorate_first_invoice: form.prorate,
           },
         },
@@ -183,7 +170,6 @@ export default function Subscriptions() {
           frequency: form.frequency,
           next_billing_date: form.nextBillingDate,
           start_date: new Date().toISOString().split('T')[0],
-          category_id: form.categoryId || null,
           prorate_first_invoice: form.prorate,
           setup_fee: form.setupFee ? Number(form.setupFee) : null,
         },
@@ -203,7 +189,6 @@ export default function Subscriptions() {
                   description: `${form.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`,
                   quantity: 1,
                   unit_price: Number(form.amount),
-                  category_id: form.categoryId || null,
                 },
               ];
               if (form.setupFee && Number(form.setupFee) > 0) {
@@ -211,7 +196,6 @@ export default function Subscriptions() {
                   description: `Setup ${form.name}`,
                   quantity: 1,
                   unit_price: Number(form.setupFee),
-                  category_id: form.categoryId || null,
                 });
               }
 
@@ -265,7 +249,6 @@ export default function Subscriptions() {
   };
 
   const renderCard = (sub: typeof subscriptions[0]) => {
-    const catName = getCategoryName(sub);
     const isActive = sub.status === "active";
     const isPaused = sub.status === "paused";
     const stat = stats[sub.id];
@@ -277,7 +260,6 @@ export default function Subscriptions() {
               {sub.name} <ExternalLink className="h-3 w-3 opacity-50" />
             </Link>
             <p className="text-xs text-muted-foreground truncate">{sub.clients?.company}</p>
-            {catName && <p className="text-xs text-primary">{catName}</p>}
           </div>
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold border whitespace-nowrap ${
             isActive ? 'bg-success/10 text-success border-success/20'
@@ -421,7 +403,6 @@ export default function Subscriptions() {
                     serviceId: value,
                     name: svc.name,
                     amount: String(Number(svc.default_price)),
-                    categoryId: svc.category_id || "",
                   }));
                 }
               }}>
@@ -429,7 +410,7 @@ export default function Subscriptions() {
                 <SelectContent>
                   {services.map(svc => (
                     <SelectItem key={svc.id} value={svc.id}>
-                      {svc.name} {svc.service_categories ? `(${svc.service_categories.name})` : ""}
+                      {svc.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

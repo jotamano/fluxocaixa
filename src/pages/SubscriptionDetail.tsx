@@ -14,7 +14,6 @@ import {
   useAddSubscriptionItem,
   useUpdateSubscriptionItem,
   useDeleteSubscriptionItem,
-  useCategories,
 } from "@/hooks/use-data";
 import type { SubscriptionItem } from "@/hooks/use-data";
 import { formatCurrency, frequencyLabels } from "@/lib/data";
@@ -36,7 +35,6 @@ export default function SubscriptionDetail() {
   const { data: items = [] } = useSubscriptionItems(id);
   const { data: invoices = [] } = useSubscriptionInvoices(id);
   const { data: priceHistory = [] } = useSubscriptionPriceHistory(id);
-  const { data: categories = [] } = useCategories();
 
   const addItem = useAddSubscriptionItem();
   const updateItem = useUpdateSubscriptionItem();
@@ -48,7 +46,6 @@ export default function SubscriptionDetail() {
     description: "",
     kind: "recurring" as SubscriptionItem["kind"],
     amount: "",
-    categoryId: "",
   });
 
   if (!sub) {
@@ -64,7 +61,6 @@ export default function SubscriptionDetail() {
       description: item?.description ?? "",
       kind: item?.kind ?? "recurring",
       amount: item ? String(Number(item.amount)) : "",
-      categoryId: item?.category_id ?? "",
     });
     setItemDialogOpen(true);
   };
@@ -76,7 +72,6 @@ export default function SubscriptionDetail() {
       description: itemForm.description,
       kind: itemForm.kind,
       amount: Number(itemForm.amount),
-      category_id: itemForm.categoryId || null,
       position: editingItem?.position ?? items.length,
     };
     if (editingItem) {
@@ -238,16 +233,6 @@ export default function SubscriptionDetail() {
                 <Label>Valor (€)</Label>
                 <Input type="number" min="0" step="0.01" value={itemForm.amount} onChange={(e) => setItemForm(f => ({ ...f, amount: e.target.value }))} />
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Categoria</Label>
-              <Select value={itemForm.categoryId || "_none"} onValueChange={(v) => setItemForm(f => ({ ...f, categoryId: v === "_none" ? "" : v }))}>
-                <SelectTrigger><SelectValue placeholder="Sem categoria" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">Sem categoria</SelectItem>
-                  {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
             </div>
             <Button className="w-full" onClick={handleSaveItem} disabled={addItem.isPending || updateItem.isPending}>
               {editingItem ? "Guardar alterações" : "Adicionar item"}

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useCategories, useDuplicateInvoice } from "@/hooks/use-data";
+import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, methodLabels } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
@@ -25,7 +25,6 @@ interface EditItem {
   description: string;
   quantity: number;
   unitPrice: number;
-  categoryId: string;
 }
 
 export default function InvoiceDetail() {
@@ -35,7 +34,6 @@ export default function InvoiceDetail() {
   const { data: invoices = [], isLoading: invoicesLoading } = useInvoices();
   const { data: payments = [], isLoading: paymentsLoading } = usePayments();
   const { data: services = [] } = useActiveServices();
-  const { data: categories = [] } = useCategories();
   const deleteInvoice = useDeleteInvoice();
   const updateInvoice = useUpdateInvoice();
   const updateItems = useUpdateInvoiceItems();
@@ -73,10 +71,6 @@ export default function InvoiceDetail() {
   const outstanding = Math.max(total - paidTotal, 0);
   const effectiveStatus = outstanding <= 0 && total > 0 ? "paid" : paidTotal > 0 && paidTotal < total ? "partially_paid" : invoice.status;
 
-  const getCategoryName = (categoryId: string | null) => {
-    if (!categoryId) return "—";
-    return categories.find(c => c.id === categoryId)?.name || "—";
-  };
 
   const handleDelete = () => {
     deleteInvoice.mutate(invoice.id, {
@@ -116,7 +110,6 @@ export default function InvoiceDetail() {
       description: item.description,
       quantity: item.quantity,
       unitPrice: Number(item.unit_price),
-      categoryId: (item as any).category_id || "",
     })));
     setEditItemsOpen(true);
   };
@@ -131,7 +124,6 @@ export default function InvoiceDetail() {
           const now = new Date();
           updated.unitPrice = Number(svc.default_price);
           updated.description = `${svc.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`;
-          updated.categoryId = svc.category_id || "";
         }
       }
       return updated;
@@ -139,7 +131,7 @@ export default function InvoiceDetail() {
   };
 
   const addEditItem = () => {
-    setEditItems(prev => [...prev, { serviceId: "", description: "", quantity: 1, unitPrice: 0, categoryId: "" }]);
+    setEditItems(prev => [...prev, { serviceId: "", description: "", quantity: 1, unitPrice: 0 }]);
   };
 
   const removeEditItem = (index: number) => {
@@ -157,7 +149,6 @@ export default function InvoiceDetail() {
         description: i.description,
         quantity: i.quantity,
         unit_price: i.unitPrice,
-        category_id: i.categoryId || null,
       })),
     }, {
       onSuccess: () => { setEditItemsOpen(false); toast({ title: "Itens atualizados!" }); },
@@ -244,7 +235,6 @@ export default function InvoiceDetail() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  <th className="px-6 py-3 text-left font-semibold text-muted-foreground">Categoria</th>
                   <th className="px-6 py-3 text-left font-semibold text-muted-foreground">Descrição</th>
                   <th className="px-6 py-3 text-right font-semibold text-muted-foreground">Qtd</th>
                   <th className="px-6 py-3 text-right font-semibold text-muted-foreground">Preço</th>
@@ -254,7 +244,6 @@ export default function InvoiceDetail() {
               <tbody className="divide-y divide-border">
                 {invoice.invoice_items.map(item => (
                   <tr key={item.id}>
-                    <td className="px-6 py-4 text-muted-foreground">{getCategoryName((item as any).category_id)}</td>
                     <td className="px-6 py-4 text-card-foreground">{item.description}</td>
                     <td className="px-6 py-4 text-right text-card-foreground">{item.quantity}</td>
                     <td className="px-6 py-4 text-right text-card-foreground">{formatCurrency(Number(item.unit_price))}</td>
@@ -371,29 +360,16 @@ export default function InvoiceDetail() {
                     </Button>
                   )}
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Serviço (opcional)</Label>
-                    <Select value={item.serviceId} onValueChange={v => updateEditItem(index, 'serviceId', v)}>
-                      <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
-                      <SelectContent>
-                        {services.map(svc => (
-                          <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Categoria</Label>
-                    <Select value={item.categoryId} onValueChange={v => updateEditItem(index, 'categoryId', v)}>
-                      <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                      <SelectContent>
-                        {categories.map(cat => (
-                          <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Serviço (opcional)</Label>
+                  <Select value={item.serviceId} onValueChange={v => updateEditItem(index, 'serviceId', v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
+                    <SelectContent>
+                      {services.map(svc => (
+                        <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Descrição</Label>
