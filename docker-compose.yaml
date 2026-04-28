@@ -139,7 +139,10 @@ services:
       - "${KONG_HTTP_PORT:-54321}:8000"
     environment:
       KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      # Rendered at container start by kong-entrypoint.sh from
+      # /etc/kong/kong.yml.template (envsubst-ing SUPABASE_ANON_KEY +
+      # SUPABASE_SERVICE_KEY).
+      KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
       KONG_DNS_ORDER: LAST,A,CNAME
       KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
       KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
