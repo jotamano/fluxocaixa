@@ -434,11 +434,17 @@ export default function Subscriptions() {
                   ))}
                 </SelectContent>
               </Select>
-              {form.name && form.name !== services.find(s => s.id === form.serviceId)?.name && (
-                <p className="text-xs text-muted-foreground">
-                  Esta subscrição foi guardada como <strong>{form.name}</strong>.
-                </p>
-              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input
+                value={form.name}
+                onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Auto-preenchido a partir do serviço"
+              />
+              <p className="text-xs text-muted-foreground">
+                Preenchido automaticamente quando escolhes um serviço — só edita se quiseres um nome diferente para esta subscrição.
+              </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
