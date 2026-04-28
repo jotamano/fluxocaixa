@@ -1,13 +1,15 @@
 #!/bin/bash
-# Bootstrap Supabase service-account passwords on the very first boot.
+# Create the Supabase service roles required by PostgREST and GoTrue, plus
+# the `auth` schema GoTrue needs for its migrations.
 #
-# supabase/postgres ships with the roles authenticator, supabase_auth_admin,
-# supabase_admin, supabase_storage_admin etc., but they have no password
-# attached. Without a password PostgREST and GoTrue cannot connect (you'll
-# see "password authentication failed for user 'authenticator'" in the logs).
+# `supabase/postgres` ships with a `supabase_admin` superuser (used here to
+# bootstrap) and a `postgres` admin role, but it does NOT create the
+# PostgREST/GoTrue service roles automatically. Without this script you'll
+# see "Role 'authenticator' does not exist" / "Role 'supabase_auth_admin'
+# does not exist" in the logs.
 #
-# This script runs as part of postgres' initdb sequence and uses the
-# POSTGRES_PASSWORD environment variable for every supabase service role.
+# Runs as part of postgres' initdb sequence, so only on the very first boot
+# of an empty data directory.
 set -euo pipefail
 
 if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
@@ -15,32 +17,88 @@ if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
   exit 1
 fi
 
-psql -v ON_ERROR_STOP=1 \
-  --username "${POSTGRES_USER:-postgres}" \
-  --dbname "${POSTGRES_DB:-postgres}" <<-SQL
-  -- Re-use the main POSTGRES_PASSWORD for every Supabase service role.
-  -- Keeps secrets management simple at the cost of one shared secret.
-  ALTER USER authenticator           WITH PASSWORD '${POSTGRES_PASSWORD}';
-  ALTER USER supabase_auth_admin     WITH PASSWORD '${POSTGRES_PASSWORD}';
-  ALTER USER supabase_admin          WITH PASSWORD '${POSTGRES_PASSWORD}';
-  ALTER USER supabase_storage_admin  WITH PASSWORD '${POSTGRES_PASSWORD}';
-  ALTER USER supabase_realtime_admin WITH PASSWORD '${POSTGRES_PASSWORD}';
-  ALTER USER supabase_replication_admin WITH PASSWORD '${POSTGRES_PASSWORD}';
-  ALTER USER supabase_read_only_user WITH PASSWORD '${POSTGRES_PASSWORD}';
+# `psql` connects locally as the user that initdb created. The supabase
+# image defaults POSTGRES_USER to `supabase_admin`, so we use that as the
+# bootstrap superuser.
+SUPER="${POSTGRES_USER:-supabase_admin}"
+DB="${POSTGRES_DB:-postgres}"
 
-  -- Some tools also expect anon / authenticated to have a password set
-  -- (they're login-disabled but do_block_login flips when password is
-  -- missing on certain pg versions). Set them just in case.
+psql -v ON_ERROR_STOP=1 \
+  --username "${SUPER}" \
+  --dbname "${DB}" <<-SQL
+  -- ─── Service roles ────────────────────────────────────────────────────
+  -- PostgREST authenticator: the only LOGIN role of the four. Switches to
+  -- anon / authenticated / service_role via SET ROLE based on the JWT.
   DO \$\$
   BEGIN
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
-      EXECUTE format('ALTER USER anon WITH PASSWORD %L', '${POSTGRES_PASSWORD}');
+    -- 'postgres' is referenced by tools (Studio, healthcheck, migrations)
+    -- but supabase/postgres only creates 'supabase_admin' by default.
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN
+      EXECUTE format(
+        'CREATE ROLE postgres LOGIN SUPERUSER CREATEDB CREATEROLE PASSWORD %L',
+        '${POSTGRES_PASSWORD}'
+      );
+    ELSE
+      EXECUTE format(
+        'ALTER ROLE postgres WITH LOGIN SUPERUSER CREATEDB CREATEROLE PASSWORD %L',
+        '${POSTGRES_PASSWORD}'
+      );
     END IF;
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
-      EXECUTE format('ALTER USER authenticated WITH PASSWORD %L', '${POSTGRES_PASSWORD}');
+
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+      CREATE ROLE anon NOLOGIN NOINHERIT;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+      CREATE ROLE authenticated NOLOGIN NOINHERIT;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+      CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticator') THEN
+      EXECUTE format(
+        'CREATE ROLE authenticator NOINHERIT LOGIN PASSWORD %L',
+        '${POSTGRES_PASSWORD}'
+      );
+    ELSE
+      EXECUTE format(
+        'ALTER ROLE authenticator WITH LOGIN PASSWORD %L',
+        '${POSTGRES_PASSWORD}'
+      );
+    END IF;
+
+    -- GoTrue's admin role. Owns the auth schema and runs migrations.
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supabase_auth_admin') THEN
+      EXECUTE format(
+        'CREATE ROLE supabase_auth_admin LOGIN CREATEROLE NOINHERIT PASSWORD %L',
+        '${POSTGRES_PASSWORD}'
+      );
+    ELSE
+      EXECUTE format(
+        'ALTER ROLE supabase_auth_admin WITH LOGIN CREATEROLE NOINHERIT PASSWORD %L',
+        '${POSTGRES_PASSWORD}'
+      );
     END IF;
   END
   \$\$;
+
+  -- ─── Role hierarchy ──────────────────────────────────────────────────
+  GRANT anon, authenticated, service_role TO authenticator;
+
+  -- ─── auth schema (for GoTrue) ────────────────────────────────────────
+  CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_auth_admin;
+  GRANT USAGE ON SCHEMA auth TO postgres, anon, authenticated, service_role;
+
+  -- ─── public schema permissions ───────────────────────────────────────
+  GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT ALL ON TABLES    TO anon, authenticated, service_role;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;
 SQL
 
-echo "00-roles.sh: supabase service roles password set."
+echo "00-roles.sh: supabase service roles created."

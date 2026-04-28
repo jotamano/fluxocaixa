@@ -28,11 +28,10 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXP: ${JWT_EXPIRY:-3600}
     volumes:
-      # Renamed from db-data -> db-data-v2 to force Postgres to init from
-      # scratch (so the role-bootstrap script + migrations actually run).
-      # The old db-data volume can be removed manually after the new
-      # deployment comes up cleanly.
-      - db-data-v2:/var/lib/postgresql/data
+      # Volume bumped (db-data -> db-data-v2 -> db-data-v3) every time the
+      # init scripts in Dockerfile.db change in a way that requires re-init.
+      # Old volumes can be removed manually after the new deployment is up.
+      - db-data-v3:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
       interval: 5s
@@ -160,4 +159,4 @@ services:
       - "${APP_PORT:-8080}:80"
 
 volumes:
-  db-data-v2:
+  db-data-v3:
