@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { ArrowLeft, Building2, Mail, Phone, FileDown, Trash2, FileText, CreditCard, UserPlus, Clock, Pencil } from "lucide-react";
+import { ArrowLeft, Building2, Mail, Phone, FileDown, Trash2, FileText, CreditCard, UserPlus, Clock, Pencil, FilePlus2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,6 +106,11 @@ export default function ClientDetail() {
           </div>
           <div className="flex flex-col gap-3">
             <div className="flex gap-2 flex-wrap">
+              <Link to={`/faturas/nova?clientId=${client.id}`}>
+                <Button className="gap-2">
+                  <FilePlus2 className="h-4 w-4" /> Nova fatura
+                </Button>
+              </Link>
               <Button variant="outline" className="gap-2" onClick={openEdit}>
                 <Pencil className="h-4 w-4" /> Editar
               </Button>

@@ -280,20 +280,61 @@ export function useSubscriptions() {
 export function useAddSubscription() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (sub: TablesInsert<"subscriptions">) => {
-      const { data, error } = await supabase.from("subscriptions").insert(sub).select("*, clients(*)").single();
+    mutationFn: async (
+      sub: TablesInsert<"subscriptions"> & { setup_fee?: number | null },
+    ) => {
+      const { setup_fee, ...row } = sub;
+      const { data, error } = await supabase.from("subscriptions").insert(row).select("*, clients(*)").single();
       if (error) throw error;
+
+      // Always seed one recurring line equal to the subscription's headline amount,
+      // so price-history + invoice generation work uniformly with the items model.
+      const items: TablesInsert<"subscription_items">[] = [
+        {
+          subscription_id: data.id,
+          description: row.name,
+          kind: "recurring",
+          amount: Number(row.amount ?? 0),
+          category_id: row.category_id ?? null,
+          position: 0,
+        },
+      ];
+      if (setup_fee && setup_fee > 0) {
+        items.push({
+          subscription_id: data.id,
+          description: `Setup ${row.name}`,
+          kind: "setup",
+          amount: setup_fee,
+          category_id: row.category_id ?? null,
+          position: 1,
+        });
+      }
+      const { error: itemsError } = await supabase.from("subscription_items").insert(items);
+      if (itemsError) throw itemsError;
+
       return data as Subscription;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["subscriptions"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["subscription_items"] });
+    },
   });
 }
 
-export function useToggleSubscription() {
+export type SubscriptionStatus = "active" | "paused" | "cancelled";
+
+/**
+ * Update a subscription's status. When moving to `paused`, an optional
+ * `paused_until` date schedules automatic reactivation by the daily pg_cron
+ * job. Moving to anything other than `paused` clears `paused_until`.
+ */
+export function useSetSubscriptionStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
-      const { error } = await supabase.from("subscriptions").update({ active }).eq("id", id);
+    mutationFn: async ({ id, status, pausedUntil }: { id: string; status: SubscriptionStatus; pausedUntil?: string | null }) => {
+      const updates: TablesUpdate<"subscriptions"> = { status };
+      updates.paused_until = status === "paused" ? (pausedUntil ?? null) : null;
+      const { error } = await supabase.from("subscriptions").update(updates).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["subscriptions"] }),
@@ -456,4 +497,282 @@ async function recalcInvoiceStatus(invoiceId: string) {
     .from("invoices")
     .update({ status: nextStatus as any })
     .eq("id", invoiceId);
+}
+
+// ─── Subscription items ───
+
+export type SubscriptionItem = Tables<"subscription_items">;
+
+export function useSubscriptionItems(subscriptionId: string | undefined) {
+  return useQuery({
+    queryKey: ["subscription_items", subscriptionId],
+    enabled: !!subscriptionId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subscription_items")
+        .select("*")
+        .eq("subscription_id", subscriptionId!)
+        .order("position");
+      if (error) throw error;
+      return data as SubscriptionItem[];
+    },
+  });
+}
+
+export function useAddSubscriptionItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (item: TablesInsert<"subscription_items">) => {
+      const { data, error } = await supabase.from("subscription_items").insert(item).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["subscription_items", vars.subscription_id] });
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+    },
+  });
+}
+
+export function useUpdateSubscriptionItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: TablesUpdate<"subscription_items"> }) => {
+      const { data, error } = await supabase.from("subscription_items").update(updates).eq("id", id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscription_items"] });
+      qc.invalidateQueries({ queryKey: ["subscription_price_history"] });
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+    },
+  });
+}
+
+export function useDeleteSubscriptionItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("subscription_items").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["subscription_items"] }),
+  });
+}
+
+// ─── Subscription detail composites ───
+
+export function useSubscription(id: string | undefined) {
+  return useQuery({
+    queryKey: ["subscription", id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .select("*, clients(*)")
+        .eq("id", id!)
+        .single();
+      if (error) throw error;
+      return data as Subscription;
+    },
+  });
+}
+
+export function useSubscriptionInvoices(subscriptionId: string | undefined) {
+  return useQuery({
+    queryKey: ["subscription_invoices", subscriptionId],
+    enabled: !!subscriptionId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("*, invoice_items(*)")
+        .eq("subscription_id", subscriptionId!)
+        .order("issue_date", { ascending: false });
+      if (error) throw error;
+      return data as (Tables<"invoices"> & { invoice_items: InvoiceItem[] })[];
+    },
+  });
+}
+
+export interface SubscriptionPriceHistoryRow {
+  id: string;
+  subscription_id: string;
+  subscription_item_id: string | null;
+  amount: number;
+  valid_from: string;
+  valid_to: string | null;
+  reason: string | null;
+}
+
+export function useSubscriptionPriceHistory(subscriptionId: string | undefined) {
+  return useQuery({
+    queryKey: ["subscription_price_history", subscriptionId],
+    enabled: !!subscriptionId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subscription_price_history")
+        .select("*")
+        .eq("subscription_id", subscriptionId!)
+        .order("valid_from", { ascending: false });
+      if (error) throw error;
+      return data as SubscriptionPriceHistoryRow[];
+    },
+  });
+}
+
+/**
+ * Aggregated stats per subscription, computed in-memory from invoices/items so
+ * we avoid extra round-trips. Returns: revenue this year and the date of the
+ * most recent invoice. Both are 0/undefined for subscriptions with no
+ * invoices linked yet.
+ */
+export function useSubscriptionStats() {
+  return useQuery({
+    queryKey: ["subscription_stats"],
+    queryFn: async () => {
+      const yearStart = `${new Date().getFullYear()}-01-01`;
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("subscription_id, issue_date, status, invoice_items(quantity, unit_price)")
+        .not("subscription_id", "is", null);
+      if (error) throw error;
+
+      const stats: Record<string, { revenueThisYear: number; lastInvoiceDate: string | null }> = {};
+      for (const inv of data ?? []) {
+        const subId = inv.subscription_id as string;
+        const total = (inv.invoice_items ?? []).reduce(
+          (s: number, it: { quantity: number; unit_price: number }) => s + it.quantity * Number(it.unit_price),
+          0,
+        );
+        const entry = stats[subId] ?? { revenueThisYear: 0, lastInvoiceDate: null };
+        if (inv.status === "paid" && inv.issue_date >= yearStart) entry.revenueThisYear += total;
+        if (!entry.lastInvoiceDate || inv.issue_date > entry.lastInvoiceDate) entry.lastInvoiceDate = inv.issue_date;
+        stats[subId] = entry;
+      }
+      return stats;
+    },
+  });
+}
+
+export function usePendingInvoicesForSubscription(subscriptionId: string | undefined) {
+  return useQuery({
+    queryKey: ["pending_invoices_for_subscription", subscriptionId],
+    enabled: !!subscriptionId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("id, number, status, due_date")
+        .eq("subscription_id", subscriptionId!)
+        .in("status", ["draft", "pending", "partially_paid", "overdue"]);
+      if (error) throw error;
+      return data as { id: string; number: string; status: string; due_date: string }[];
+    },
+  });
+}
+
+// ─── Invoice helpers ───
+
+/**
+ * Duplicate an invoice: new invoice in `draft` status, same client + items,
+ * fresh number + dates. Original is left untouched.
+ */
+export function useDuplicateInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (sourceId: string) => {
+      const [{ data: src, error: srcErr }, { data: items, error: itemsErr }] = await Promise.all([
+        supabase.from("invoices").select("*").eq("id", sourceId).single(),
+        supabase.from("invoice_items").select("*").eq("invoice_id", sourceId).order("position"),
+      ]);
+      if (srcErr) throw srcErr;
+      if (itemsErr) throw itemsErr;
+
+      const year = new Date().getFullYear();
+      const { data: latest } = await supabase
+        .from("invoices")
+        .select("number")
+        .like("number", `FT ${year}/%`)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      let nextNum = 1;
+      if (latest && latest.length > 0) {
+        const m = latest[0].number.match(/\/(\d+)$/);
+        if (m) nextNum = parseInt(m[1], 10) + 1;
+      }
+
+      const today = new Date();
+      const due = new Date(today);
+      due.setDate(due.getDate() + 30);
+
+      const { data: created, error: createErr } = await supabase
+        .from("invoices")
+        .insert({
+          number: `FT ${year}/${String(nextNum).padStart(3, "0")}`,
+          client_id: src.client_id,
+          subscription_id: null,
+          status: "draft",
+          issue_date: today.toISOString().split("T")[0],
+          due_date: due.toISOString().split("T")[0],
+          notes: src.notes,
+        })
+        .select()
+        .single();
+      if (createErr) throw createErr;
+
+      if (items && items.length > 0) {
+        const cloned = items.map((it) => ({
+          invoice_id: created.id,
+          description: it.description,
+          quantity: it.quantity,
+          unit_price: it.unit_price,
+          category_id: it.category_id,
+          position: it.position,
+        }));
+        const { error: insErr } = await supabase.from("invoice_items").insert(cloned);
+        if (insErr) throw insErr;
+      }
+      return created;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+  });
+}
+
+/**
+ * Persist a new ordering of invoice items by writing back the `position`
+ * column for every row. The dnd-kit lib gives us the new array order; we
+ * map it to indices.
+ */
+export function useReorderInvoiceItems() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ invoiceId, orderedIds }: { invoiceId: string; orderedIds: string[] }) => {
+      // PostgREST does not support bulk-update-by-id so we fan out N updates.
+      // Lists are tiny (typically <20 items) so this is fine.
+      await Promise.all(
+        orderedIds.map((id, idx) =>
+          supabase.from("invoice_items").update({ position: idx }).eq("id", id),
+        ),
+      );
+      return invoiceId;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+  });
+}
+
+// ─── Manual trigger of the daily generator ───
+
+export function useGenerateSubscriptionInvoices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc("generate_subscription_invoices");
+      if (error) throw error;
+      return data as number;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+    },
+  });
 }

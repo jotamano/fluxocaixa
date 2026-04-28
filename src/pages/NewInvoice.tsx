@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Trash2, ArrowLeft, UserPlus, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, Trash2, ArrowLeft, UserPlus, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber, useActiveServices, useCategories, useAddSubscription } from "@/hooks/use-data";
 import { formatCurrency, type SubscriptionFrequency, frequencyLabels } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +21,7 @@ const MONTHS_PT = [
 ];
 
 interface FormItem {
+  id: string;
   serviceId: string;
   description: string;
   quantity: number;
@@ -29,6 +33,7 @@ interface FormItem {
 
 function getDefaultItem(): FormItem {
   return {
+    id: crypto.randomUUID(),
     serviceId: "",
     description: "",
     quantity: 1,
@@ -42,6 +47,7 @@ function getDefaultItem(): FormItem {
 export default function NewInvoice() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
   const { data: clients = [] } = useClients();
   const { data: services = [] } = useActiveServices();
   const { data: categories = [] } = useCategories();
@@ -49,8 +55,17 @@ export default function NewInvoice() {
   const addClient = useAddClient();
   const addSubscription = useAddSubscription();
   const { data: nextNumber = "" } = useNextInvoiceNumber();
-  const [clientId, setClientId] = useState("");
+  const initialClientId = searchParams.get("clientId") ?? "";
+  const [clientId, setClientId] = useState(initialClientId);
   const [items, setItems] = useState<FormItem[]>([getDefaultItem()]);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  // Pre-fill client from URL once clients are loaded.
+  useEffect(() => {
+    if (initialClientId && !clientId && clients.some((c) => c.id === initialClientId)) {
+      setClientId(initialClientId);
+    }
+  }, [initialClientId, clientId, clients]);
   const [notes, setNotes] = useState("");
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const [newClient, setNewClient] = useState({ name: '', email: '', company: '', phone: '', nif: '' });
@@ -76,6 +91,17 @@ export default function NewInvoice() {
       }
       return updated;
     }));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setItems((prev) => {
+      const oldIndex = prev.findIndex((it) => it.id === active.id);
+      const newIndex = prev.findIndex((it) => it.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
   };
 
   const total = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
@@ -113,7 +139,7 @@ export default function NewInvoice() {
         due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
         notes: notes || null,
       },
-      items: items.map(i => {
+      items: items.map((i, idx) => {
         let desc = i.description;
         if (i.startDate && i.endDate) {
           desc += ` (${new Date(i.startDate).toLocaleDateString('pt-PT')} - ${new Date(i.endDate).toLocaleDateString('pt-PT')})`;
@@ -123,6 +149,7 @@ export default function NewInvoice() {
           quantity: i.quantity,
           unit_price: i.unitPrice,
           category_id: i.categoryId || null,
+          position: idx,
         };
       }),
     }, {
@@ -203,59 +230,21 @@ export default function NewInvoice() {
             </Button>
           </div>
 
-          {items.map((item, index) => (
-            <div key={index} className="rounded-lg border border-border p-4 space-y-3">
-              <div className="grid gap-3 sm:grid-cols-12">
-                <div className="sm:col-span-4 space-y-1">
-                  <Label className="text-xs">Serviço</Label>
-                  <Select value={item.serviceId} onValueChange={v => updateItem(index, 'serviceId', v)}>
-                    <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
-                    <SelectContent>
-                      {services.map(svc => (
-                        <SelectItem key={svc.id} value={svc.id}>
-                          {svc.name} {svc.service_categories ? `(${svc.service_categories.name})` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="sm:col-span-4 space-y-1">
-                  <Label className="text-xs">Descrição</Label>
-                  <Input
-                    placeholder="Ex: Gestão Instagram - Março"
-                    value={item.description}
-                    onChange={e => updateItem(index, 'description', e.target.value)}
-                  />
-                </div>
-                <div className="sm:col-span-1 space-y-1">
-                  <Label className="text-xs">Qtd</Label>
-                  <Input type="number" min={1} value={item.quantity} onChange={e => updateItem(index, 'quantity', Number(e.target.value))} />
-                </div>
-                <div className="sm:col-span-2 space-y-1">
-                  <Label className="text-xs">Preço (€)</Label>
-                  <Input type="number" min={0} value={item.unitPrice} onChange={e => updateItem(index, 'unitPrice', Number(e.target.value))} />
-                </div>
-                <div className="sm:col-span-1 flex items-end">
-                  {items.length > 1 && (
-                    <Button variant="ghost" size="icon" onClick={() => removeItem(index)} className="text-destructive hover:text-destructive">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-              {/* Date range */}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Data início (opcional)</Label>
-                  <Input type="date" value={item.startDate} onChange={e => updateItem(index, 'startDate', e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Data fim (opcional)</Label>
-                  <Input type="date" value={item.endDate} onChange={e => updateItem(index, 'endDate', e.target.value)} />
-                </div>
-              </div>
-            </div>
-          ))}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+              {items.map((item, index) => (
+                <SortableInvoiceItem
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  canRemove={items.length > 1}
+                  services={services}
+                  onUpdate={updateItem}
+                  onRemove={removeItem}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
         </div>
 
         <div className="space-y-2">
@@ -332,6 +321,88 @@ export default function NewInvoice() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+interface SortableInvoiceItemProps {
+  item: FormItem;
+  index: number;
+  canRemove: boolean;
+  services: ReturnType<typeof useActiveServices>["data"] extends infer T ? (T extends Array<infer S> ? S[] : never) : never;
+  onUpdate: (index: number, field: keyof FormItem, value: string | number) => void;
+  onRemove: (index: number) => void;
+}
+
+function SortableInvoiceItem({ item, index, canRemove, services, onUpdate, onRemove }: SortableInvoiceItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="rounded-lg border border-border p-4 space-y-3 bg-card">
+      <div className="flex items-start gap-2">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label="Arrastar para reordenar"
+          className="mt-7 text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+        <div className="flex-1 grid gap-3 sm:grid-cols-12">
+          <div className="sm:col-span-4 space-y-1">
+            <Label className="text-xs">Serviço</Label>
+            <Select value={item.serviceId} onValueChange={v => onUpdate(index, 'serviceId', v)}>
+              <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
+              <SelectContent>
+                {services?.map(svc => (
+                  <SelectItem key={svc.id} value={svc.id}>
+                    {svc.name} {svc.service_categories ? `(${svc.service_categories.name})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="sm:col-span-4 space-y-1">
+            <Label className="text-xs">Descrição</Label>
+            <Input
+              placeholder="Ex: Gestão Instagram - Março"
+              value={item.description}
+              onChange={e => onUpdate(index, 'description', e.target.value)}
+            />
+          </div>
+          <div className="sm:col-span-1 space-y-1">
+            <Label className="text-xs">Qtd</Label>
+            <Input type="number" min={1} value={item.quantity} onChange={e => onUpdate(index, 'quantity', Number(e.target.value))} />
+          </div>
+          <div className="sm:col-span-2 space-y-1">
+            <Label className="text-xs">Preço (€)</Label>
+            <Input type="number" min={0} value={item.unitPrice} onChange={e => onUpdate(index, 'unitPrice', Number(e.target.value))} />
+          </div>
+          <div className="sm:col-span-1 flex items-end">
+            {canRemove && (
+              <Button variant="ghost" size="icon" onClick={() => onRemove(index)} className="text-destructive hover:text-destructive">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Data início (opcional)</Label>
+          <Input type="date" value={item.startDate} onChange={e => onUpdate(index, 'startDate', e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Data fim (opcional)</Label>
+          <Input type="date" value={item.endDate} onChange={e => onUpdate(index, 'endDate', e.target.value)} />
+        </div>
+      </div>
     </div>
   );
 }

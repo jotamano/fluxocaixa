@@ -50,6 +50,7 @@ export type Database = {
           description: string
           id: string
           invoice_id: string
+          position: number
           quantity: number
           service_type: Database["public"]["Enums"]["service_type"]
           unit_price: number
@@ -59,6 +60,7 @@ export type Database = {
           description: string
           id?: string
           invoice_id: string
+          position?: number
           quantity?: number
           service_type?: Database["public"]["Enums"]["service_type"]
           unit_price?: number
@@ -68,6 +70,7 @@ export type Database = {
           description?: string
           id?: string
           invoice_id?: string
+          position?: number
           quantity?: number
           service_type?: Database["public"]["Enums"]["service_type"]
           unit_price?: number
@@ -99,6 +102,7 @@ export type Database = {
           notes: string | null
           number: string
           status: Database["public"]["Enums"]["invoice_status"]
+          subscription_id: string | null
         }
         Insert: {
           client_id: string
@@ -109,6 +113,7 @@ export type Database = {
           notes?: string | null
           number: string
           status?: Database["public"]["Enums"]["invoice_status"]
+          subscription_id?: string | null
         }
         Update: {
           client_id?: string
@@ -119,6 +124,7 @@ export type Database = {
           notes?: string | null
           number?: string
           status?: Database["public"]["Enums"]["invoice_status"]
+          subscription_id?: string | null
         }
         Relationships: [
           {
@@ -126,6 +132,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
             referencedColumns: ["id"]
           },
         ]
@@ -234,6 +247,80 @@ export type Database = {
           },
         ]
       }
+      subscription_items: {
+        Row: {
+          amount: number
+          category_id: string | null
+          created_at: string
+          description: string
+          id: string
+          invoiced_at: string | null
+          kind: Database["public"]["Enums"]["subscription_item_kind"]
+          position: number
+          subscription_id: string
+        }
+        Insert: {
+          amount?: number
+          category_id?: string | null
+          created_at?: string
+          description: string
+          id?: string
+          invoiced_at?: string | null
+          kind?: Database["public"]["Enums"]["subscription_item_kind"]
+          position?: number
+          subscription_id: string
+        }
+        Update: {
+          amount?: number
+          category_id?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          invoiced_at?: string | null
+          kind?: Database["public"]["Enums"]["subscription_item_kind"]
+          position?: number
+          subscription_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_items_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscription_price_history: {
+        Row: {
+          amount: number
+          id: string
+          reason: string | null
+          subscription_id: string
+          subscription_item_id: string | null
+          valid_from: string
+          valid_to: string | null
+        }
+        Insert: {
+          amount: number
+          id?: string
+          reason?: string | null
+          subscription_id: string
+          subscription_item_id?: string | null
+          valid_from?: string
+          valid_to?: string | null
+        }
+        Update: {
+          amount?: number
+          id?: string
+          reason?: string | null
+          subscription_id?: string
+          subscription_item_id?: string | null
+          valid_from?: string
+          valid_to?: string | null
+        }
+        Relationships: []
+      }
       subscriptions: {
         Row: {
           active: boolean
@@ -241,38 +328,48 @@ export type Database = {
           category_id: string | null
           client_id: string
           created_at: string
+          first_invoice_generated_at: string | null
           frequency: Database["public"]["Enums"]["subscription_frequency"]
           id: string
           name: string
           next_billing_date: string
+          paused_until: string | null
+          prorate_first_invoice: boolean
           service_type: Database["public"]["Enums"]["service_type"]
           start_date: string
+          status: Database["public"]["Enums"]["subscription_status"]
         }
         Insert: {
-          active?: boolean
           amount?: number
           category_id?: string | null
           client_id: string
           created_at?: string
+          first_invoice_generated_at?: string | null
           frequency?: Database["public"]["Enums"]["subscription_frequency"]
           id?: string
           name: string
           next_billing_date?: string
+          paused_until?: string | null
+          prorate_first_invoice?: boolean
           service_type?: Database["public"]["Enums"]["service_type"]
           start_date?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
         }
         Update: {
-          active?: boolean
           amount?: number
           category_id?: string | null
           client_id?: string
           created_at?: string
+          first_invoice_generated_at?: string | null
           frequency?: Database["public"]["Enums"]["subscription_frequency"]
           id?: string
           name?: string
           next_billing_date?: string
+          paused_until?: string | null
+          prorate_first_invoice?: boolean
           service_type?: Database["public"]["Enums"]["service_type"]
           start_date?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
         }
         Relationships: [
           {
@@ -296,7 +393,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_subscription_invoices: {
+        Args: Record<string, never>
+        Returns: number
+      }
     }
     Enums: {
       invoice_status:
@@ -308,6 +408,8 @@ export type Database = {
       payment_method: "transfer" | "mbway" | "cash" | "card"
       service_type: "social_media" | "website" | "marketing" | "subscription"
       subscription_frequency: "monthly" | "quarterly" | "yearly"
+      subscription_item_kind: "recurring" | "setup" | "addon"
+      subscription_status: "active" | "paused" | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never

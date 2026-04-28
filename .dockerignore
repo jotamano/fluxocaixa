@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-ssr
+.git
+.github
+.vscode
+*.log
+.env
+.env.local
+.env.selfhost
+playwright-report
+test-results
+coverage
+.idea
+.DS_Store

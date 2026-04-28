@@ -1,0 +1,137 @@
+_format_version: "2.1"
+_transform: true
+
+###
+# Consumers — a Supabase deployment ships with two API keys (anon + service_role)
+# baked into the JWT secret. The same JWT_SECRET that signs them is shared with
+# GoTrue and PostgREST so they validate end-user tokens identically.
+###
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: $SUPABASE_ANON_KEY
+  - username: service_role
+    keyauth_credentials:
+      - key: $SUPABASE_SERVICE_KEY
+
+acls:
+  - consumer: anon
+    group: anon
+  - consumer: service_role
+    group: admin
+
+###
+# CORS plugin — applied globally so the SPA can call the API from any origin
+# on the LAN. Tighten if you have a fixed hostname.
+###
+plugins:
+  - name: cors
+    config:
+      origins:
+        - "*"
+      methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD]
+      headers:
+        - Accept
+        - Authorization
+        - Content-Type
+        - X-Auth-Token
+        - X-Client-Info
+        - apikey
+        - x-supabase-api-version
+      exposed_headers:
+        - Content-Length
+        - Content-Range
+      credentials: true
+      max_age: 3600
+
+###
+# Services + routes
+###
+services:
+  ## Auth (GoTrue)
+  - name: auth-v1-open
+    url: http://auth:9999/verify
+    routes:
+      - name: auth-v1-open
+        strip_path: true
+        paths:
+          - /auth/v1/verify
+    plugins:
+      - name: cors
+  - name: auth-v1-open-callback
+    url: http://auth:9999/callback
+    routes:
+      - name: auth-v1-open-callback
+        strip_path: true
+        paths:
+          - /auth/v1/callback
+    plugins:
+      - name: cors
+  - name: auth-v1-open-authorize
+    url: http://auth:9999/authorize
+    routes:
+      - name: auth-v1-open-authorize
+        strip_path: true
+        paths:
+          - /auth/v1/authorize
+    plugins:
+      - name: cors
+  - name: auth-v1
+    _comment: "GoTrue: /auth/v1/* -> http://auth:9999/*"
+    url: http://auth:9999/
+    routes:
+      - name: auth-v1-all
+        strip_path: true
+        paths:
+          - /auth/v1/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  ## REST (PostgREST)
+  - name: rest-v1
+    _comment: "PostgREST: /rest/v1/* -> http://rest:3000/*"
+    url: http://rest:3000/
+    routes:
+      - name: rest-v1-all
+        strip_path: true
+        paths:
+          - /rest/v1/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: true
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  ## Postgres-meta (admin only)
+  - name: meta
+    _comment: "postgres-meta: /pg/* -> http://meta:8080/*"
+    url: http://meta:8080/
+    routes:
+      - name: meta-all
+        strip_path: true
+        paths:
+          - /pg/
+    plugins:
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
