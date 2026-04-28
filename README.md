@@ -115,7 +115,7 @@ echo "VITE_SUPABASE_PROJECT_ID=local" >> .env.local
 ## Project layout
 
 ```
-docker-compose.yml          # full self-host stack
+docker-compose.yaml         # full self-host stack
 Dockerfile                  # builds the frontend, served via nginx
 supabase/
   migrations/               # SQL migrations (applied on db init)
