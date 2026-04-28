@@ -78,7 +78,6 @@ Deno.serve(async (req) => {
         description: `${sub.name} — ${monthName} ${billingDate.getFullYear()}`,
         quantity: 1,
         unit_price: sub.amount,
-        category_id: sub.category_id || null,
       });
 
       const nextDate = new Date(sub.next_billing_date);
