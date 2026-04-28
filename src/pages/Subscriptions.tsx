@@ -413,11 +413,14 @@ export default function Subscriptions() {
               <Select value={form.serviceId} onValueChange={value => {
                 const svc = services.find(s => s.id === value);
                 if (svc) {
+                  // Picking a service overwrites name + amount with the
+                  // service's current values. The user can still edit
+                  // either field afterwards if they want a one-off tweak.
                   setForm(prev => ({
                     ...prev,
                     serviceId: value,
-                    name: prev.name || svc.name,
-                    amount: prev.amount || String(Number(svc.default_price)),
+                    name: svc.name,
+                    amount: String(Number(svc.default_price)),
                     categoryId: svc.category_id || "",
                   }));
                 }
@@ -434,7 +437,14 @@ export default function Subscriptions() {
             </div>
             <div className="space-y-2">
               <Label>Nome</Label>
-              <Input value={form.name} onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))} placeholder="Ex: Gestão Redes Sociais" />
+              <Input
+                value={form.name}
+                onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Auto-preenchido a partir do serviço"
+              />
+              <p className="text-xs text-muted-foreground">
+                Preenchido automaticamente quando escolhes um serviço — só edita se quiseres um nome diferente para esta subscrição.
+              </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
