@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, Download, Wallet, Trash2, Pencil, Plus, X } from "lucide-react";
+import { ArrowLeft, Download, Wallet, Trash2, Pencil, Plus, X, Copy } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useCategories } from "@/hooks/use-data";
+import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useCategories, useDuplicateInvoice } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, methodLabels } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
@@ -39,6 +39,7 @@ export default function InvoiceDetail() {
   const deleteInvoice = useDeleteInvoice();
   const updateInvoice = useUpdateInvoice();
   const updateItems = useUpdateInvoiceItems();
+  const duplicateInvoice = useDuplicateInvoice();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -185,6 +186,22 @@ export default function InvoiceDetail() {
         <div className="flex flex-wrap gap-3">
           <Button variant="outline" className="gap-2" onClick={openEdit}>
             <Pencil className="h-4 w-4" /> Editar
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() =>
+              duplicateInvoice.mutate(invoice.id, {
+                onSuccess: (created) => {
+                  toast({ title: "Fatura duplicada", description: `Criada ${created.number} em rascunho.` });
+                  navigate(`/faturas/${created.id}`);
+                },
+                onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+              })
+            }
+            disabled={duplicateInvoice.isPending}
+          >
+            <Copy className="h-4 w-4" /> Duplicar
           </Button>
           <Button variant="outline" className="gap-2" onClick={() => invoice.clients && generateInvoicePDF(invoice, invoice.clients)} disabled={!invoice.clients}>
             <Download className="h-4 w-4" /> PDF

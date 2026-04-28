@@ -1,11 +1,12 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, FileText, RefreshCw, Plus, Menu, CreditCard, CalendarDays, ChevronLeft, ChevronRight, Package } from "lucide-react";
+import { LayoutDashboard, Users, FileText, RefreshCw, Plus, Menu, CreditCard, CalendarDays, ChevronLeft, ChevronRight, Package, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState, createContext, useContext } from "react";
 import ghostLogo from "@/assets/ghostinvoice-logo.svg";
+import { useAuth } from "@/hooks/use-auth";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -76,7 +77,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border">
+      <div className="p-4 border-t border-sidebar-border space-y-2">
         <NavLink to="/faturas/nova" onClick={onNavigate}>
           <Button className={cn(
             "w-full gap-2 bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90",
@@ -86,8 +87,36 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             {showLabels && "Nova Fatura"}
           </Button>
         </NavLink>
+        <SidebarFooter showLabels={showLabels} />
       </div>
     </>
+  );
+}
+
+function SidebarFooter({ showLabels }: { showLabels: boolean }) {
+  const { user, signOut } = useAuth();
+  if (!user) return null;
+  return (
+    <div className="space-y-2">
+      {showLabels && (
+        <p className="text-xs text-sidebar-foreground/60 truncate" title={user.email ?? ""}>
+          {user.email}
+        </p>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => void signOut()}
+        className={cn(
+          "w-full gap-2 text-sidebar-foreground/70 hover:text-sidebar-foreground",
+          !showLabels && "justify-center px-2",
+        )}
+        title="Sair"
+      >
+        <LogOut className="h-4 w-4 shrink-0" />
+        {showLabels && "Sair"}
+      </Button>
+    </div>
   );
 }
 

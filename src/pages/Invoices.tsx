@@ -13,13 +13,17 @@ export default function Invoices() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "all">("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   const filtered = invoices.filter(invoice => {
     const matchesSearch =
       invoice.number.toLowerCase().includes(search.toLowerCase()) ||
       (invoice.clients?.company?.toLowerCase().includes(search.toLowerCase()) ?? false);
     const matchesStatus = statusFilter === "all" || invoice.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesFrom = !fromDate || invoice.issue_date >= fromDate;
+    const matchesTo = !toDate || invoice.issue_date <= toDate;
+    return matchesSearch && matchesStatus && matchesFrom && matchesTo;
   });
 
   const statuses: Array<{ value: InvoiceStatus | "all"; label: string }> = [
@@ -44,10 +48,13 @@ export default function Invoices() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative max-w-sm flex-1">
+        <div className="relative max-w-sm flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Pesquisar faturas..." className="pl-10" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+        <Input type="date" className="w-40" value={fromDate} onChange={(e) => setFromDate(e.target.value)} aria-label="Data inicial" />
+        <span className="text-xs text-muted-foreground">até</span>
+        <Input type="date" className="w-40" value={toDate} onChange={(e) => setToDate(e.target.value)} aria-label="Data final" />
         <div className="flex gap-1 flex-wrap">
           {statuses.map(s => (
             <Button key={s.value} variant={statusFilter === s.value ? "default" : "outline"} size="sm" onClick={() => setStatusFilter(s.value)}>
