@@ -4,4 +4,14 @@
 # and Kong then errors with "kong.yml: Is a directory").
 FROM kong:2.8.1
 
-COPY supabase/selfhost/kong.yml /var/lib/kong/kong.yml
+USER root
+RUN apk add --no-cache gettext
+
+COPY supabase/selfhost/kong.yml /etc/kong/kong.yml.template
+COPY supabase/selfhost/kong-entrypoint.sh /usr/local/bin/kong-entrypoint.sh
+RUN chmod +x /usr/local/bin/kong-entrypoint.sh
+
+USER kong
+
+ENTRYPOINT ["/usr/local/bin/kong-entrypoint.sh"]
+CMD ["kong", "docker-start"]
