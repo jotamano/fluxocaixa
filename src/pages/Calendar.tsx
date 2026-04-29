@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSubscriptions, useInvoices, useCategories } from "@/hooks/use-data";
+import { useSubscriptions, useInvoices } from "@/hooks/use-data";
 import { frequencyLabels, formatCurrency } from "@/lib/data";
 import { StatusBadge } from "@/components/StatusBadge";
 import { cn } from "@/lib/utils";
@@ -15,11 +15,6 @@ const DAYS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS_PT = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-];
-
-const CATEGORY_COLORS = [
-  "bg-blue-500", "bg-emerald-500", "bg-amber-500", "bg-purple-500",
-  "bg-pink-500", "bg-cyan-500", "bg-orange-500", "bg-teal-500",
 ];
 
 function getDaysInMonth(year: number, month: number) {
@@ -62,23 +57,9 @@ export default function CalendarPage() {
 
   const { data: allSubscriptions = [] } = useSubscriptions();
   const { data: invoices = [] } = useInvoices();
-  const { data: categories = [] } = useCategories();
   const activeSubscriptions = allSubscriptions.filter(s => s.active);
 
-  // Build color map for categories
-  const categoryColorMap = useMemo(() => {
-    const map = new Map<string, string>();
-    categories.forEach((cat, idx) => {
-      map.set(cat.id, CATEGORY_COLORS[idx % CATEGORY_COLORS.length]);
-    });
-    return map;
-  }, [categories]);
-
-  const getSubColor = (sub: Subscription) => {
-    const catId = (sub as any).category_id;
-    if (catId && categoryColorMap.has(catId)) return categoryColorMap.get(catId)!;
-    return "bg-muted-foreground";
-  };
+  const getSubColor = (_sub: Subscription) => "bg-primary";
 
   const subscriptionsByDay = useMemo(() => {
     const map = new Map<number, { sub: Subscription; client: string }[]>();
@@ -205,12 +186,10 @@ export default function CalendarPage() {
             </div>
           </div>
           <div className="border-t border-border px-6 py-3 flex flex-wrap gap-4">
-            {categories.map((cat, idx) => (
-              <div key={cat.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <div className={cn("h-2 w-2 rounded-full", CATEGORY_COLORS[idx % CATEGORY_COLORS.length])} />
-                {cat.name}
-              </div>
-            ))}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="h-2 w-2 rounded-full bg-primary" />
+              Subscrição
+            </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <div className="h-2 w-2 rounded-full bg-warning" />
               Fatura pendente

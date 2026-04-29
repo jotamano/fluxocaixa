@@ -8,67 +8,7 @@ export type InvoiceRow = Tables<"invoices">;
 export type InvoiceItem = Tables<"invoice_items">;
 export type Subscription = Tables<"subscriptions"> & { clients?: Client };
 export type Payment = Tables<"payments">;
-export type Service = Tables<"services"> & { service_categories?: { id: string; name: string } | null };
-
-export interface ServiceCategory {
-  id: string;
-  name: string;
-  created_at: string;
-}
-
-// ─── Service Categories ───
-
-export function useCategories() {
-  return useQuery({
-    queryKey: ["service_categories"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("service_categories").select("*").order("name");
-      if (error) throw error;
-      return data as ServiceCategory[];
-    },
-  });
-}
-
-export function useAddCategory() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (cat: { name: string }) => {
-      const { data, error } = await supabase.from("service_categories").insert(cat).select().single();
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["service_categories"] }),
-  });
-}
-
-export function useUpdateCategory() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      const { data, error } = await supabase.from("service_categories").update({ name }).eq("id", id).select().single();
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["service_categories"] });
-      qc.invalidateQueries({ queryKey: ["services"] });
-    },
-  });
-}
-
-export function useDeleteCategory() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("service_categories").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["service_categories"] });
-      qc.invalidateQueries({ queryKey: ["services"] });
-    },
-  });
-}
+export type Service = Tables<"services">;
 
 // ─── Services ───
 
@@ -76,7 +16,7 @@ export function useServices() {
   return useQuery({
     queryKey: ["services"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("services").select("*, service_categories(id, name)").order("name");
+      const { data, error } = await supabase.from("services").select("*").order("name");
       if (error) throw error;
       return data as Service[];
     },
@@ -87,7 +27,7 @@ export function useActiveServices() {
   return useQuery({
     queryKey: ["services", "active"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("services").select("*, service_categories(id, name)").eq("active", true).order("name");
+      const { data, error } = await supabase.from("services").select("*").eq("active", true).order("name");
       if (error) throw error;
       return data as Service[];
     },
@@ -295,7 +235,6 @@ export function useAddSubscription() {
           description: row.name,
           kind: "recurring",
           amount: Number(row.amount ?? 0),
-          category_id: row.category_id ?? null,
           position: 0,
         },
       ];
@@ -305,7 +244,6 @@ export function useAddSubscription() {
           description: `Setup ${row.name}`,
           kind: "setup",
           amount: setup_fee,
-          category_id: row.category_id ?? null,
           position: 1,
         });
       }
@@ -726,7 +664,6 @@ export function useDuplicateInvoice() {
           description: it.description,
           quantity: it.quantity,
           unit_price: it.unit_price,
-          category_id: it.category_id,
           position: it.position,
         }));
         const { error: insErr } = await supabase.from("invoice_items").insert(cloned);

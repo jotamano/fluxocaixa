@@ -3,19 +3,10 @@ import { Euro, Users, RefreshCw, TrendingUp, AlertTriangle, Bell } from "lucide-
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatCurrency, getInvoiceItemsTotal } from "@/lib/data";
-import { useInvoices, useClients, useSubscriptions, usePayments, useCategories } from "@/hooks/use-data";
+import { useInvoices, useClients, useSubscriptions, usePayments } from "@/hooks/use-data";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
-
-const CHART_COLORS = [
-  "hsl(220, 70%, 45%)",
-  "hsl(160, 60%, 40%)",
-  "hsl(38, 92%, 50%)",
-  "hsl(280, 60%, 50%)",
-  "hsl(340, 65%, 47%)",
-  "hsl(190, 70%, 42%)",
-];
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -43,7 +34,6 @@ export default function Dashboard() {
   const { data: clients = [] } = useClients();
   const { data: subscriptions = [] } = useSubscriptions();
   const { data: payments = [] } = usePayments();
-  const { data: categories = [] } = useCategories();
   const [dateRange, setDateRange] = useState<DateRange>("year");
 
   const { start, end } = getDateRange(dateRange);
@@ -106,20 +96,19 @@ export default function Dashboard() {
     });
   }, [filteredPayments, dateRange]);
 
-  // Revenue by category (using invoice_items.category_id)
-  const categoryRevenue = useMemo(() => {
-    const catMap = new Map<string, number>();
-    filteredInvoices.forEach(inv => {
-      inv.invoice_items.forEach(item => {
-        const catId = (item as any).category_id;
-        const catName = catId
-          ? categories.find(c => c.id === catId)?.name || "Sem categoria"
-          : "Sem categoria";
-        catMap.set(catName, (catMap.get(catName) || 0) + item.quantity * Number(item.unit_price));
-      });
+  // Top clients by revenue in the selected period
+  const topClients = useMemo(() => {
+    const map = new Map<string, number>();
+    filteredPayments.forEach(p => {
+      const inv = invoices.find(i => i.id === p.invoice_id);
+      const company = inv?.clients?.company || inv?.clients?.name || "Sem cliente";
+      map.set(company, (map.get(company) || 0) + Number(p.amount));
     });
-    return Array.from(catMap.entries()).map(([name, value]) => ({ name, value }));
-  }, [filteredInvoices, categories]);
+    return Array.from(map.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+  }, [filteredPayments, invoices]);
 
   const dateFilters: { value: DateRange; label: string }[] = [
     { value: "month", label: "Este mês" },
@@ -187,22 +176,19 @@ export default function Dashboard() {
         </div>
 
         <div className="rounded-xl border border-border bg-card shadow-card p-6">
-          <h2 className="font-display font-semibold text-card-foreground mb-4">Receita por Categoria</h2>
+          <h2 className="font-display font-semibold text-card-foreground mb-4">Top Clientes</h2>
           <div className="h-64">
-            {categoryRevenue.length === 0 ? (
+            {topClients.length === 0 ? (
               <div className="flex items-center justify-center h-full text-sm text-muted-foreground">Sem dados para o período selecionado</div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={categoryRevenue} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={3}>
-                    {categoryRevenue.map((_, idx) => (
-                      <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={{ borderRadius: 8, border: "1px solid hsl(220, 15%, 90%)", fontSize: 13 }} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
+              <ul className="divide-y divide-border">
+                {topClients.map((c) => (
+                  <li key={c.name} className="flex items-center justify-between py-3 text-sm">
+                    <span className="text-card-foreground truncate pr-3">{c.name}</span>
+                    <span className="font-semibold text-card-foreground whitespace-nowrap">{formatCurrency(c.value)}</span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </div>

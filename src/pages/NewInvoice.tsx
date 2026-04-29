@@ -11,7 +11,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber, useActiveServices, useCategories, useAddSubscription } from "@/hooks/use-data";
+import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber, useActiveServices, useAddSubscription } from "@/hooks/use-data";
 import { formatCurrency, type SubscriptionFrequency, frequencyLabels } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 
@@ -28,7 +28,6 @@ interface FormItem {
   unitPrice: number;
   startDate: string;
   endDate: string;
-  categoryId: string;
 }
 
 function getDefaultItem(): FormItem {
@@ -40,7 +39,6 @@ function getDefaultItem(): FormItem {
     unitPrice: 0,
     startDate: "",
     endDate: "",
-    categoryId: "",
   };
 }
 
@@ -50,7 +48,6 @@ export default function NewInvoice() {
   const [searchParams] = useSearchParams();
   const { data: clients = [] } = useClients();
   const { data: services = [] } = useActiveServices();
-  const { data: categories = [] } = useCategories();
   const addInvoice = useAddInvoice();
   const addClient = useAddClient();
   const addSubscription = useAddSubscription();
@@ -86,7 +83,6 @@ export default function NewInvoice() {
           const now = new Date();
           updated.unitPrice = Number(svc.default_price);
           updated.description = `${svc.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`;
-          updated.categoryId = svc.category_id || "";
         }
       }
       return updated;
@@ -148,7 +144,6 @@ export default function NewInvoice() {
           description: desc,
           quantity: i.quantity,
           unit_price: i.unitPrice,
-          category_id: i.categoryId || null,
           position: idx,
         };
       }),
@@ -172,7 +167,6 @@ export default function NewInvoice() {
             frequency: recurringFrequency,
             next_billing_date: nextBilling.toISOString().split('T')[0],
             start_date: new Date().toISOString().split('T')[0],
-            category_id: mainItem.categoryId || null,
           }, {
             onSuccess: () => toast({ title: "Subscrição criada!", description: "Fatura recorrente configurada." }),
           });
@@ -362,7 +356,7 @@ function SortableInvoiceItem({ item, index, canRemove, services, onUpdate, onRem
               <SelectContent>
                 {services?.map(svc => (
                   <SelectItem key={svc.id} value={svc.id}>
-                    {svc.name} {svc.service_categories ? `(${svc.service_categories.name})` : ""}
+                    {svc.name}
                   </SelectItem>
                 ))}
               </SelectContent>
