@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Euro, Users, RefreshCw, TrendingUp, AlertTriangle, Bell } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
-import { formatCurrency, getInvoiceItemsTotal } from "@/lib/data";
+import { formatCurrency, getInvoiceItemsTotal, frequencyDays, type SubscriptionFrequency } from "@/lib/data";
 import { useInvoices, useClients, useSubscriptions, usePayments } from "@/hooks/use-data";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -66,10 +66,8 @@ export default function Dashboard() {
   const activeSubscriptions = subscriptions.filter(s => s.active);
   const monthlyRecurring = activeSubscriptions.reduce((sum, s) => {
     const amt = Number(s.amount);
-    if (s.frequency === 'monthly') return sum + amt;
-    if (s.frequency === 'quarterly') return sum + amt / 3;
-    if (s.frequency === 'yearly') return sum + amt / 12;
-    return sum;
+    const periodDays = frequencyDays[s.frequency as SubscriptionFrequency] ?? 30;
+    return sum + (amt * 30) / periodDays;
   }, 0);
 
   const overdueInvoices = filteredInvoices.filter(i => i.status === 'overdue');

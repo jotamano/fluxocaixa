@@ -12,7 +12,13 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber, useActiveServices, useAddSubscription } from "@/hooks/use-data";
-import { formatCurrency, type SubscriptionFrequency, frequencyLabels } from "@/lib/data";
+import {
+  formatCurrency,
+  type SubscriptionFrequency,
+  frequencyLabels,
+  frequencyDays,
+  inferFrequencyFromRange,
+} from "@/lib/data";
 import { randomUUID } from "@/lib/uuid";
 import { useToast } from "@/hooks/use-toast";
 
@@ -162,26 +168,43 @@ export default function NewInvoice() {
       // the common case for service businesses where a client has e.g.
       // hosting + domain + SEO as separate recurring products.
       if (isRecurring) {
-        const nextBilling = new Date();
-        if (recurringFrequency === 'monthly') nextBilling.setMonth(nextBilling.getMonth() + 1);
-        else if (recurringFrequency === 'quarterly') nextBilling.setMonth(nextBilling.getMonth() + 3);
-        else if (recurringFrequency === 'yearly') nextBilling.setFullYear(nextBilling.getFullYear() + 1);
-
         const today = new Date().toISOString().split('T')[0];
-        const nextBillingStr = nextBilling.toISOString().split('T')[0];
         const validLines = items.filter(i => i.description && i.unitPrice > 0);
 
         const results = await Promise.allSettled(
           validLines.map((line) => {
+            // Prefer per-line frequency derived from the user-entered
+            // date range (e.g. a line with "30/04/2026 - 30/04/2027" is
+            // obviously yearly). Fall back to the global toggle when the
+            // line has no dates, same dates, or an ambiguous span.
+            const lineFrequency: SubscriptionFrequency =
+              inferFrequencyFromRange(line.startDate, line.endDate) ?? recurringFrequency;
+
+            // Anchor next_billing_date on the end of the first period
+            // (either the user-supplied endDate when present, else
+            // today + frequencyDays). Using frequencyDays is deliberately
+            // approximate — it only matters for the first run, after
+            // which generate_subscription_invoices() advances with the
+            // exact Postgres interval ('1 month', '1 year', etc.).
+            const lineStart = line.startDate || today;
+            let nextBillingStr: string;
+            if (line.endDate) {
+              nextBillingStr = line.endDate;
+            } else {
+              const d = new Date(lineStart);
+              d.setDate(d.getDate() + frequencyDays[lineFrequency]);
+              nextBillingStr = d.toISOString().split('T')[0];
+            }
+
             const svc = services.find(s => s.id === line.serviceId);
             const lineAmount = line.unitPrice * line.quantity;
             return addSubscription.mutateAsync({
               client_id: clientId,
               name: svc?.name || line.description,
               amount: lineAmount,
-              frequency: recurringFrequency,
+              frequency: lineFrequency,
               next_billing_date: nextBillingStr,
-              start_date: today,
+              start_date: lineStart,
             });
           }),
         );
@@ -294,7 +317,10 @@ export default function NewInvoice() {
             <RefreshCw className="h-4 w-4 text-primary" />
             <div>
               <p className="text-sm font-medium text-card-foreground">Fatura recorrente</p>
-              <p className="text-xs text-muted-foreground">Cria automaticamente uma subscrição</p>
+              <p className="text-xs text-muted-foreground">
+                Cria uma subscrição por linha. Linhas com data início + fim usam a frequência
+                correspondente ao intervalo; as restantes usam a frequência padrão abaixo.
+              </p>
             </div>
           </div>
           <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />

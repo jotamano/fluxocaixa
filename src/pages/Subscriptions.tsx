@@ -15,7 +15,7 @@ import {
   useSubscriptionStats,
   useGenerateSubscriptionInvoices,
 } from "@/hooks/use-data";
-import { frequencyLabels, formatCurrency, type SubscriptionFrequency } from "@/lib/data";
+import { frequencyLabels, formatCurrency, frequencyDays, type SubscriptionFrequency } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -84,14 +84,15 @@ export default function Subscriptions() {
   const paused = filtered.filter(s => s.status === "paused");
   const cancelled = filtered.filter(s => s.status === "cancelled");
 
+  // Normalize every billing frequency into an equivalent monthly value
+  // so MRR across mixed frequencies (weekly hosting, monthly SEO, annual
+  // domains, ...) is comparable.
   const totalMRR = subscriptions
     .filter(s => s.status === "active")
     .reduce((sum, s) => {
       const amt = Number(s.amount);
-      if (s.frequency === 'monthly') return sum + amt;
-      if (s.frequency === 'quarterly') return sum + amt / 3;
-      if (s.frequency === 'yearly') return sum + amt / 12;
-      return sum;
+      const periodDays = frequencyDays[s.frequency as SubscriptionFrequency] ?? 30;
+      return sum + (amt * 30) / periodDays;
     }, 0);
 
   const openEditor = (id: string) => {
