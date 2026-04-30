@@ -72,8 +72,8 @@ Sign in at `http://localhost:8080/login` with the user you created.
 # follow logs
 docker compose logs -f app db kong
 
-# restart just the frontend after pulling new code
-docker compose up -d --build app
+# restart just the frontend after pulling new code — BUILD_ID busts the cache
+BUILD_ID=$(date +%s) docker compose --env-file .env.selfhost up -d --build app
 
 # apply new migrations (auto-runs on db boot, but to re-run by hand:)
 docker compose exec db psql -U postgres -f /docker-entrypoint-initdb.d/<file>.sql
@@ -81,6 +81,24 @@ docker compose exec db psql -U postgres -f /docker-entrypoint-initdb.d/<file>.sq
 # wipe everything and start over (DESTRUCTIVE)
 docker compose down -v
 ```
+
+## Deploying on Coolify
+
+Coolify auto-sets `SOURCE_COMMIT` to the commit SHA it just checked out.
+The `app` service in `docker-compose.yaml` picks this up via
+`BUILD_ID: ${BUILD_ID:-${SOURCE_COMMIT:-dev}}` and bakes it into the
+Docker build as a cache-busting `ARG`. This guarantees that every commit
+produces a different layer hash — no more "I merged a PR but the deployed
+bundle is stale" problem.
+
+The deployed build ID is **visible in the sidebar footer** (small grey
+text under the user email). If it matches the latest commit on `main`,
+you know you're on the newest code.
+
+If you ever need to force a rebuild without a new commit (e.g. while
+debugging), you can override `BUILD_ID` in Coolify's environment
+variables (Project → Environment → add `BUILD_ID=<any unique value>`)
+and click **Redeploy**. Coolify will rebuild from scratch.
 
 ## Working offline
 
