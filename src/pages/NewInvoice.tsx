@@ -69,6 +69,7 @@ export default function NewInvoice() {
   const [newClient, setNewClient] = useState({ name: '', email: '', company: '', phone: '', nif: '' });
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringFrequency, setRecurringFrequency] = useState<SubscriptionFrequency>("monthly");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const addItem = () => setItems(prev => [...prev, getDefaultItem()]);
 
@@ -115,7 +116,7 @@ export default function NewInvoice() {
     });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!clientId) {
       toast({ title: "Erro", description: "Seleciona um cliente", variant: "destructive" });
       return;
@@ -124,94 +125,98 @@ export default function NewInvoice() {
       toast({ title: "Erro", description: "Preenche todos os campos dos serviços", variant: "destructive" });
       return;
     }
+    if (isSubmitting) return;
 
     const invoiceNumber = nextNumber || `FT ${new Date().getFullYear()}/${String(Date.now()).slice(-3).padStart(3, '0')}`;
 
-    addInvoice.mutate({
-      invoice: {
-        number: invoiceNumber,
-        client_id: clientId,
-        status: 'draft',
-        issue_date: new Date().toISOString().split('T')[0],
-        due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-        notes: notes || null,
-      },
-      items: items.map((i, idx) => {
-        let desc = i.description;
-        if (i.startDate && i.endDate) {
-          desc += ` (${new Date(i.startDate).toLocaleDateString('pt-PT')} - ${new Date(i.endDate).toLocaleDateString('pt-PT')})`;
-        }
-        return {
-          description: desc,
-          quantity: i.quantity,
-          unit_price: i.unitPrice,
-          position: idx,
-        };
-      }),
-    }, {
-      onSuccess: async () => {
-        toast({ title: "Fatura criada!", description: `Fatura no valor de ${formatCurrency(total)} criada com sucesso.` });
-
-        // Create one subscription per invoice line when "Fatura recorrente"
-        // is toggled on. Keeping subscriptions one-per-service means the
-        // user can pause / cancel / change pricing on each independently —
-        // the common case for service businesses where a client has e.g.
-        // hosting + domain + SEO as separate recurring products.
-        if (isRecurring && clientId) {
-          const nextBilling = new Date();
-          if (recurringFrequency === 'monthly') nextBilling.setMonth(nextBilling.getMonth() + 1);
-          else if (recurringFrequency === 'quarterly') nextBilling.setMonth(nextBilling.getMonth() + 3);
-          else if (recurringFrequency === 'yearly') nextBilling.setFullYear(nextBilling.getFullYear() + 1);
-
-          const today = new Date().toISOString().split('T')[0];
-          const nextBillingStr = nextBilling.toISOString().split('T')[0];
-          const validLines = items.filter(i => i.description && i.unitPrice > 0);
-
-          // Await each subscription insert sequentially so the success
-          // toast + navigation only fire after the DB actually confirms
-          // the writes. If any line fails, we surface the error and keep
-          // the user on the page (the invoice itself is already saved).
-          const results = await Promise.allSettled(
-            validLines.map((line) => {
-              const svc = services.find(s => s.id === line.serviceId);
-              const lineAmount = line.unitPrice * line.quantity;
-              return addSubscription.mutateAsync({
-                client_id: clientId,
-                name: svc?.name || line.description,
-                amount: lineAmount,
-                frequency: recurringFrequency,
-                next_billing_date: nextBillingStr,
-                start_date: today,
-              });
-            }),
-          );
-
-          const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
-          const succeeded = results.length - failures.length;
-
-          if (failures.length > 0) {
-            const firstErr = failures[0].reason as Error;
-            toast({
-              title: succeeded > 0 ? "Subscrições parcialmente criadas" : "Erro ao criar subscrições",
-              description: `${succeeded}/${results.length} criadas. Primeiro erro: ${firstErr?.message ?? "desconhecido"}`,
-              variant: "destructive",
-            });
-            // Keep the user on the page so they can retry the missing
-            // subscriptions via /subscricoes without thinking everything
-            // is fine.
-            return;
+    setIsSubmitting(true);
+    try {
+      await addInvoice.mutateAsync({
+        invoice: {
+          number: invoiceNumber,
+          client_id: clientId,
+          status: 'draft',
+          issue_date: new Date().toISOString().split('T')[0],
+          due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+          notes: notes || null,
+        },
+        items: items.map((i, idx) => {
+          let desc = i.description;
+          if (i.startDate && i.endDate) {
+            desc += ` (${new Date(i.startDate).toLocaleDateString('pt-PT')} - ${new Date(i.endDate).toLocaleDateString('pt-PT')})`;
           }
+          return {
+            description: desc,
+            quantity: i.quantity,
+            unit_price: i.unitPrice,
+            position: idx,
+          };
+        }),
+      });
 
+      toast({ title: "Fatura criada!", description: `Fatura no valor de ${formatCurrency(total)} criada com sucesso.` });
+
+      // Create one subscription per invoice line when "Fatura recorrente"
+      // is toggled on. Keeping subscriptions one-per-service means the
+      // user can pause / cancel / change pricing on each independently —
+      // the common case for service businesses where a client has e.g.
+      // hosting + domain + SEO as separate recurring products.
+      if (isRecurring) {
+        const nextBilling = new Date();
+        if (recurringFrequency === 'monthly') nextBilling.setMonth(nextBilling.getMonth() + 1);
+        else if (recurringFrequency === 'quarterly') nextBilling.setMonth(nextBilling.getMonth() + 3);
+        else if (recurringFrequency === 'yearly') nextBilling.setFullYear(nextBilling.getFullYear() + 1);
+
+        const today = new Date().toISOString().split('T')[0];
+        const nextBillingStr = nextBilling.toISOString().split('T')[0];
+        const validLines = items.filter(i => i.description && i.unitPrice > 0);
+
+        const results = await Promise.allSettled(
+          validLines.map((line) => {
+            const svc = services.find(s => s.id === line.serviceId);
+            const lineAmount = line.unitPrice * line.quantity;
+            return addSubscription.mutateAsync({
+              client_id: clientId,
+              name: svc?.name || line.description,
+              amount: lineAmount,
+              frequency: recurringFrequency,
+              next_billing_date: nextBillingStr,
+              start_date: today,
+            });
+          }),
+        );
+
+        const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+        const succeeded = results.length - failures.length;
+
+        if (failures.length > 0) {
+          const firstErr = failures[0].reason as Error;
           toast({
-            title: succeeded === 1 ? "Subscrição criada!" : `${succeeded} subscrições criadas!`,
-            description: "Cada serviço fica como subscrição independente.",
+            title: succeeded > 0 ? "Subscrições parcialmente criadas" : "Erro ao criar subscrições",
+            description: `${succeeded}/${results.length} criadas. Primeiro erro: ${firstErr?.message ?? "desconhecido"}`,
+            variant: "destructive",
           });
+          // Stay on the page so the user can retry the missing
+          // subscriptions via /subscricoes; the invoice is already saved.
+          return;
         }
 
-        navigate("/faturas");
-      },
-      onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
-    });
+        toast({
+          title: succeeded === 1 ? "Subscrição criada!" : `${succeeded} subscrições criadas!`,
+          description: "Cada serviço fica como subscrição independente.",
+        });
+      }
+
+      navigate("/faturas");
+    } catch (err) {
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : "Falha ao criar fatura",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -315,8 +320,8 @@ export default function NewInvoice() {
           </div>
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => window.history.back()}>Cancelar</Button>
-            <Button onClick={handleSubmit} disabled={addInvoice.isPending}>
-              {addInvoice.isPending ? "A criar..." : "Criar Fatura"}
+            <Button onClick={handleSubmit} disabled={isSubmitting}>
+              {isSubmitting ? "A criar..." : "Criar Fatura"}
             </Button>
           </div>
         </div>
