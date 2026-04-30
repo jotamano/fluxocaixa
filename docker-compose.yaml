@@ -159,12 +159,11 @@ services:
       args:
         VITE_SUPABASE_URL: ${PUBLIC_API_URL:-http://localhost:54321}
         VITE_SUPABASE_PUBLISHABLE_KEY: ${ANON_KEY}
-        # BUILD_ID busts the Docker layer cache every deploy. Different
-        # orchestrators expose the git SHA under different names — this
-        # tries Coolify's COOLIFY_GIT_COMMIT_SHA, generic SOURCE_COMMIT,
-        # and GIT_COMMIT before giving up. If none are set (running
-        # compose locally) export BUILD_ID=$(date +%s) before build.
-        BUILD_ID: ${BUILD_ID:-${COOLIFY_GIT_COMMIT_SHA:-${SOURCE_COMMIT:-${GIT_COMMIT:-dev}}}}
+        # BUILD_ID is normally auto-derived by the Dockerfile from .git/HEAD
+        # at build time (no orchestrator env vars needed). This override is
+        # only for unusual setups where you want to pin a custom version
+        # string: export BUILD_ID=my-tag before `docker compose build`.
+        BUILD_ID: ${BUILD_ID:-}
     restart: unless-stopped
     depends_on:
       kong:
