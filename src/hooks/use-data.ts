@@ -153,7 +153,10 @@ export function useAddInvoice() {
       if (itemsError) throw itemsError;
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["next-invoice-number"] });
+    },
   });
 }
 

@@ -193,18 +193,19 @@ export default function NewInvoice() {
           const firstErr = failures[0].reason as Error;
           toast({
             title: succeeded > 0 ? "Subscrições parcialmente criadas" : "Erro ao criar subscrições",
-            description: `${succeeded}/${results.length} criadas. Primeiro erro: ${firstErr?.message ?? "desconhecido"}`,
+            description: `${succeeded}/${results.length} criadas. Primeiro erro: ${firstErr?.message ?? "desconhecido"}. Fatura já foi guardada — cria as subscrições em falta a partir de /subscricoes.`,
             variant: "destructive",
           });
-          // Stay on the page so the user can retry the missing
-          // subscriptions via /subscricoes; the invoice is already saved.
-          return;
+          // Still navigate: the invoice IS saved at this point, and
+          // staying on the form would let the user re-submit and
+          // create a duplicate invoice. From /faturas or /subscricoes
+          // they can re-create just the missing subscriptions.
+        } else {
+          toast({
+            title: succeeded === 1 ? "Subscrição criada!" : `${succeeded} subscrições criadas!`,
+            description: "Cada serviço fica como subscrição independente.",
+          });
         }
-
-        toast({
-          title: succeeded === 1 ? "Subscrição criada!" : `${succeeded} subscrições criadas!`,
-          description: "Cada serviço fica como subscrição independente.",
-        });
       }
 
       navigate("/faturas");
