@@ -26,26 +26,55 @@ function getFirstDayOfMonth(year: number, month: number) {
   return day === 0 ? 6 : day - 1;
 }
 
+// Month-period count for each frequency value. A value of N means the
+// subscription re-bills every N months on the anchor day. Week-level
+// frequencies (weekly / biweekly) are flagged with 0 so callers can
+// expand them into multiple days within the month.
+const monthsBetweenBillings: Record<string, number> = {
+  weekly: 0,
+  biweekly: 0,
+  monthly: 1,
+  bimonthly: 2,
+  quarterly: 3,
+  semiannual: 6,
+  yearly: 12,
+  biannual: 24,
+};
+
 function getSubscriptionDatesForMonth(sub: Subscription, year: number, month: number): number[] {
   if (!sub.active) return [];
   const startDate = new Date(sub.start_date);
-  const billingDay = new Date(sub.next_billing_date).getDate();
   const daysInMonth = getDaysInMonth(year, month);
+  const nextBilling = new Date(sub.next_billing_date);
+  const step = monthsBetweenBillings[sub.frequency] ?? 0;
+
+  // Weekly / biweekly: step forward from next_billing_date by 7 or 14
+  // days and emit every date that falls in the requested month.
+  if (step === 0) {
+    const intervalDays = sub.frequency === 'weekly' ? 7 : 14;
+    const dates: number[] = [];
+    const cursor = new Date(nextBilling);
+    // Rewind to find the earliest billing in or before this month.
+    while (cursor.getFullYear() > year || (cursor.getFullYear() === year && cursor.getMonth() > month)) {
+      cursor.setDate(cursor.getDate() - intervalDays);
+    }
+    while (cursor.getFullYear() < year || (cursor.getFullYear() === year && cursor.getMonth() < month)) {
+      cursor.setDate(cursor.getDate() + intervalDays);
+    }
+    while (cursor.getFullYear() === year && cursor.getMonth() === month) {
+      if (cursor >= startDate) dates.push(cursor.getDate());
+      cursor.setDate(cursor.getDate() + intervalDays);
+    }
+    return dates;
+  }
+
+  // Month-aligned frequencies: emit a single day per matching month.
+  const billingDay = nextBilling.getDate();
   const effectiveDay = Math.min(billingDay, daysInMonth);
   const checkDate = new Date(year, month, effectiveDay);
   if (checkDate < startDate) return [];
-  if (sub.frequency === 'monthly') return [effectiveDay];
-  if (sub.frequency === 'quarterly') {
-    const nextBilling = new Date(sub.next_billing_date);
-    const monthDiff = (year * 12 + month) - (nextBilling.getFullYear() * 12 + nextBilling.getMonth());
-    if (monthDiff % 3 === 0) return [effectiveDay];
-    return [];
-  }
-  if (sub.frequency === 'yearly') {
-    const nextBilling = new Date(sub.next_billing_date);
-    if (nextBilling.getMonth() === month) return [effectiveDay];
-    return [];
-  }
+  const monthDiff = (year * 12 + month) - (nextBilling.getFullYear() * 12 + nextBilling.getMonth());
+  if (monthDiff % step === 0) return [effectiveDay];
   return [];
 }
 

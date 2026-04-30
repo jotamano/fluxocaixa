@@ -407,7 +407,15 @@ export type Database = {
         | "partially_paid"
       payment_method: "transfer" | "mbway" | "cash" | "card"
       service_type: "social_media" | "website" | "marketing" | "subscription"
-      subscription_frequency: "monthly" | "quarterly" | "yearly"
+      subscription_frequency:
+        | "weekly"
+        | "biweekly"
+        | "monthly"
+        | "bimonthly"
+        | "quarterly"
+        | "semiannual"
+        | "yearly"
+        | "biannual"
       subscription_item_kind: "recurring" | "setup" | "addon"
       subscription_status: "active" | "paused" | "cancelled"
     }
@@ -540,7 +548,16 @@ export const Constants = {
       invoice_status: ["paid", "pending", "overdue", "draft", "partially_paid"],
       payment_method: ["transfer", "mbway", "cash", "card"],
       service_type: ["social_media", "website", "marketing", "subscription"],
-      subscription_frequency: ["monthly", "quarterly", "yearly"],
+      subscription_frequency: [
+        "weekly",
+        "biweekly",
+        "monthly",
+        "bimonthly",
+        "quarterly",
+        "semiannual",
+        "yearly",
+        "biannual",
+      ],
     },
   },
 } as const
