@@ -152,39 +152,37 @@ export default function NewInvoice() {
       onSuccess: () => {
         toast({ title: "Fatura criada!", description: `Fatura no valor de ${formatCurrency(total)} criada com sucesso.` });
 
-        // Create subscription if recurring
+        // Create one subscription per invoice line when "Fatura recorrente"
+        // is toggled on. Keeping subscriptions one-per-service means the
+        // user can pause / cancel / change pricing on each independently —
+        // the common case for service businesses where a client has e.g.
+        // hosting + domain + SEO as separate recurring products.
         if (isRecurring && clientId) {
-          const mainItem = items[0];
-          const svc = services.find(s => s.id === mainItem.serviceId);
           const nextBilling = new Date();
           if (recurringFrequency === 'monthly') nextBilling.setMonth(nextBilling.getMonth() + 1);
           else if (recurringFrequency === 'quarterly') nextBilling.setMonth(nextBilling.getMonth() + 3);
           else if (recurringFrequency === 'yearly') nextBilling.setFullYear(nextBilling.getFullYear() + 1);
 
-          // One subscription_item per invoice row so each service keeps
-          // its own description + price on future auto-generated invoices.
-          // Without this the whole invoice collapses into a single line
-          // with the total sum — losing per-service detail.
-          const lines = items
-            .filter(i => i.description && i.unitPrice > 0)
-            .map(i => {
-              const ln = services.find(s => s.id === i.serviceId);
-              return {
-                description: ln?.name ?? i.description,
-                amount: i.unitPrice * i.quantity,
-              };
-            });
+          const today = new Date().toISOString().split('T')[0];
+          const nextBillingStr = nextBilling.toISOString().split('T')[0];
+          const validLines = items.filter(i => i.description && i.unitPrice > 0);
 
-          addSubscription.mutate({
-            client_id: clientId,
-            name: lines.length === 1 ? (svc?.name || mainItem.description) : `Subscrição ${invoiceNumber}`,
-            amount: total,
-            frequency: recurringFrequency,
-            next_billing_date: nextBilling.toISOString().split('T')[0],
-            start_date: new Date().toISOString().split('T')[0],
-            lines,
-          }, {
-            onSuccess: () => toast({ title: "Subscrição criada!", description: `Fatura recorrente configurada com ${lines.length} linha${lines.length === 1 ? "" : "s"}.` }),
+          validLines.forEach((line) => {
+            const svc = services.find(s => s.id === line.serviceId);
+            const lineAmount = line.unitPrice * line.quantity;
+            addSubscription.mutate({
+              client_id: clientId,
+              name: svc?.name || line.description,
+              amount: lineAmount,
+              frequency: recurringFrequency,
+              next_billing_date: nextBillingStr,
+              start_date: today,
+            });
+          });
+
+          toast({
+            title: validLines.length === 1 ? "Subscrição criada!" : `${validLines.length} subscrições criadas!`,
+            description: "Cada serviço fica como subscrição independente.",
           });
         }
 
@@ -365,21 +363,30 @@ function SortableInvoiceItem({ item, index, canRemove, services, onUpdate, onRem
         >
           <GripVertical className="h-4 w-4" />
         </button>
-        <div className="flex-1 grid gap-3 sm:grid-cols-12">
-          <div className="sm:col-span-4 space-y-1">
-            <Label className="text-xs">Serviço</Label>
-            <Select value={item.serviceId} onValueChange={v => onUpdate(index, 'serviceId', v)}>
-              <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
-              <SelectContent>
-                {services?.map(svc => (
-                  <SelectItem key={svc.id} value={svc.id}>
-                    {svc.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="flex-1 space-y-3">
+          {/* Row 1: Serviço + action button at the right */}
+          <div className="flex items-end gap-2">
+            <div className="flex-1 space-y-1">
+              <Label className="text-xs">Serviço</Label>
+              <Select value={item.serviceId} onValueChange={v => onUpdate(index, 'serviceId', v)}>
+                <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
+                <SelectContent>
+                  {services?.map(svc => (
+                    <SelectItem key={svc.id} value={svc.id}>
+                      {svc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {canRemove && (
+              <Button variant="ghost" size="icon" onClick={() => onRemove(index)} className="text-destructive hover:text-destructive shrink-0">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
-          <div className="sm:col-span-4 space-y-1">
+          {/* Row 2: Descrição full-width */}
+          <div className="space-y-1">
             <Label className="text-xs">Descrição</Label>
             <Input
               placeholder="Ex: Gestão Instagram - Março"
@@ -387,20 +394,16 @@ function SortableInvoiceItem({ item, index, canRemove, services, onUpdate, onRem
               onChange={e => onUpdate(index, 'description', e.target.value)}
             />
           </div>
-          <div className="sm:col-span-1 space-y-1">
-            <Label className="text-xs">Qtd</Label>
-            <Input type="number" min={1} value={item.quantity} onChange={e => onUpdate(index, 'quantity', Number(e.target.value))} />
-          </div>
-          <div className="sm:col-span-2 space-y-1">
-            <Label className="text-xs">Preço (€)</Label>
-            <Input type="number" min={0} value={item.unitPrice} onChange={e => onUpdate(index, 'unitPrice', Number(e.target.value))} />
-          </div>
-          <div className="sm:col-span-1 flex items-end">
-            {canRemove && (
-              <Button variant="ghost" size="icon" onClick={() => onRemove(index)} className="text-destructive hover:text-destructive">
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            )}
+          {/* Row 3: Qtd + Preço side by side, both with enough width */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Quantidade</Label>
+              <Input type="number" min={1} value={item.quantity} onChange={e => onUpdate(index, 'quantity', Number(e.target.value))} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Preço unitário (€)</Label>
+              <Input type="number" min={0} step="0.01" value={item.unitPrice} onChange={e => onUpdate(index, 'unitPrice', Number(e.target.value))} />
+            </div>
           </div>
         </div>
       </div>
