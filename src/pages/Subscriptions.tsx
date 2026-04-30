@@ -64,7 +64,6 @@ export default function Subscriptions() {
     setupFee: "",
     frequency: "monthly" as SubscriptionFrequency,
     nextBillingDate: new Date().toISOString().split('T')[0],
-    prorate: false,
   });
 
   const filtered = useMemo(() => {
@@ -108,7 +107,6 @@ export default function Subscriptions() {
       setupFee: "",
       frequency: subscription.frequency,
       nextBillingDate: subscription.next_billing_date,
-      prorate: subscription.prorate_first_invoice ?? false,
     });
     setGenerateInvoice(false);
     setDialogOpen(true);
@@ -124,7 +122,6 @@ export default function Subscriptions() {
       setupFee: "",
       frequency: "monthly",
       nextBillingDate: new Date().toISOString().split('T')[0],
-      prorate: false,
     });
     setGenerateInvoice(true);
     setDialogOpen(true);
@@ -157,7 +154,6 @@ export default function Subscriptions() {
             amount: Number(form.amount),
             frequency: form.frequency,
             next_billing_date: form.nextBillingDate,
-            prorate_first_invoice: form.prorate,
           },
         },
         { onSuccess: () => handleDialogChange(false) },
@@ -171,7 +167,6 @@ export default function Subscriptions() {
           frequency: form.frequency,
           next_billing_date: form.nextBillingDate,
           start_date: new Date().toISOString().split('T')[0],
-          prorate_first_invoice: form.prorate,
           setup_fee: form.setupFee ? Number(form.setupFee) : null,
         },
         {
@@ -464,13 +459,6 @@ export default function Subscriptions() {
             <div className="space-y-2">
               <Label>Próxima faturação</Label>
               <Input type="date" value={form.nextBillingDate} onChange={e => setForm(prev => ({ ...prev, nextBillingDate: e.target.value }))} />
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3 bg-muted/40">
-              <div>
-                <p className="text-sm font-medium text-card-foreground">Pro-rata na 1ª fatura</p>
-                <p className="text-xs text-muted-foreground">Reduz proporcionalmente se entrar a meio do período</p>
-              </div>
-              <Switch checked={form.prorate} onCheckedChange={(checked) => setForm(prev => ({ ...prev, prorate: checked }))} />
             </div>
             {!editingId && (
               <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3 bg-muted/40">

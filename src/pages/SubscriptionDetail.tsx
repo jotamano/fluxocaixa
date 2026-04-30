@@ -122,11 +122,10 @@ export default function SubscriptionDetail() {
             {sub.status === "active" ? "Ativa" : sub.status === "paused" ? "Pausada" : "Cancelada"}
           </span>
         </div>
-        <div className="mt-6 grid gap-4 sm:grid-cols-4">
+        <div className="mt-6 grid gap-4 sm:grid-cols-3">
           <Stat label="Mensalidade" value={formatCurrency(total)} suffix={`/${frequencyLabels[sub.frequency].toLowerCase()}`} />
           <Stat label="Setup pendente" value={formatCurrency(setupTotal)} />
           <Stat label="Próxima faturação" value={new Date(sub.next_billing_date).toLocaleDateString('pt-PT')} />
-          <Stat label="Pro-rata 1ª fatura" value={sub.prorate_first_invoice ? "Sim" : "Não"} />
         </div>
       </div>
 

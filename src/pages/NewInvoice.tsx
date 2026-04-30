@@ -35,6 +35,11 @@ interface FormItem {
   unitPrice: number;
   startDate: string;
   endDate: string;
+  // Per-line frequency for the recurring case. "" means "use the global
+  // fallback below". When the user enters a start+end range we auto-fill
+  // this with the inferred frequency, but they can still override by
+  // picking another value from the dropdown.
+  frequency: SubscriptionFrequency | "";
 }
 
 function getDefaultItem(): FormItem {
@@ -46,6 +51,7 @@ function getDefaultItem(): FormItem {
     unitPrice: 0,
     startDate: "",
     endDate: "",
+    frequency: "",
   };
 }
 
@@ -91,6 +97,15 @@ export default function NewInvoice() {
           const now = new Date();
           updated.unitPrice = Number(svc.default_price);
           updated.description = `${svc.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`;
+        }
+      }
+      // When the user fills both dates, auto-pick the inferred frequency
+      // — but only if they haven't manually set one yet. Mirrors how the
+      // submit path used to work, just with the result visible upfront.
+      if (field === 'startDate' || field === 'endDate') {
+        if (!item.frequency) {
+          const inferred = inferFrequencyFromRange(updated.startDate, updated.endDate);
+          if (inferred) updated.frequency = inferred;
         }
       }
       return updated;
@@ -173,12 +188,15 @@ export default function NewInvoice() {
 
         const results = await Promise.allSettled(
           validLines.map((line) => {
-            // Prefer per-line frequency derived from the user-entered
-            // date range (e.g. a line with "30/04/2026 - 30/04/2027" is
-            // obviously yearly). Fall back to the global toggle when the
-            // line has no dates, same dates, or an ambiguous span.
+            // Resolution order: explicit per-line picker → date-range
+            // inference → global fallback. The picker is auto-prefilled
+            // by inference when the user supplies dates, so most of the
+            // time these three converge on the same value; the picker
+            // just lets the user override when it doesn't.
             const lineFrequency: SubscriptionFrequency =
-              inferFrequencyFromRange(line.startDate, line.endDate) ?? recurringFrequency;
+              line.frequency ||
+              inferFrequencyFromRange(line.startDate, line.endDate) ||
+              recurringFrequency;
 
             // Anchor next_billing_date on the end of the first period
             // (either the user-supplied endDate when present, else
@@ -298,6 +316,7 @@ export default function NewInvoice() {
                   index={index}
                   canRemove={items.length > 1}
                   services={services}
+                  showFrequency={isRecurring}
                   onUpdate={updateItem}
                   onRemove={removeItem}
                 />
@@ -328,7 +347,10 @@ export default function NewInvoice() {
 
         {isRecurring && (
           <div className="space-y-2">
-            <Label>Frequência da recorrência</Label>
+            <Label>Frequência por defeito</Label>
+            <p className="text-xs text-muted-foreground">
+              Usada nas linhas que não tenham frequência própria escolhida.
+            </p>
             <Select value={recurringFrequency} onValueChange={v => setRecurringFrequency(v as SubscriptionFrequency)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -393,11 +415,12 @@ interface SortableInvoiceItemProps {
   index: number;
   canRemove: boolean;
   services: ReturnType<typeof useActiveServices>["data"] extends infer T ? (T extends Array<infer S> ? S[] : never) : never;
+  showFrequency: boolean;
   onUpdate: (index: number, field: keyof FormItem, value: string | number) => void;
   onRemove: (index: number) => void;
 }
 
-function SortableInvoiceItem({ item, index, canRemove, services, onUpdate, onRemove }: SortableInvoiceItemProps) {
+function SortableInvoiceItem({ item, index, canRemove, services, showFrequency, onUpdate, onRemove }: SortableInvoiceItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -470,6 +493,27 @@ function SortableInvoiceItem({ item, index, canRemove, services, onUpdate, onRem
           <Label className="text-xs">Data fim (opcional)</Label>
           <Input type="date" value={item.endDate} onChange={e => onUpdate(index, 'endDate', e.target.value)} />
         </div>
+        {showFrequency && (
+          <div className="space-y-1 sm:col-span-2">
+            <Label className="text-xs">Frequência da subscrição</Label>
+            <Select
+              value={item.frequency || ""}
+              onValueChange={(v) => onUpdate(index, 'frequency', v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Usar frequência por defeito" />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.entries(frequencyLabels) as [SubscriptionFrequency, string][]).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">
+              Define de quanto em quanto tempo este item volta a faturar. Se preencheres datas, é pré-selecionada automaticamente; se ficar vazio, usa a frequência por defeito.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
