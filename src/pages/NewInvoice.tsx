@@ -13,6 +13,7 @@ import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber, useActiveServices, useAddSubscription } from "@/hooks/use-data";
 import { formatCurrency, type SubscriptionFrequency, frequencyLabels } from "@/lib/data";
+import { randomUUID } from "@/lib/uuid";
 import { useToast } from "@/hooks/use-toast";
 
 const MONTHS_PT = [
@@ -32,7 +33,7 @@ interface FormItem {
 
 function getDefaultItem(): FormItem {
   return {
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     serviceId: "",
     description: "",
     quantity: 1,
