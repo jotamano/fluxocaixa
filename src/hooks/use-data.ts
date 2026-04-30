@@ -217,34 +217,57 @@ export function useSubscriptions() {
   });
 }
 
+export interface AddSubscriptionLineInput {
+  description: string;
+  amount: number;
+  kind?: "recurring" | "setup" | "addon";
+}
+
 export function useAddSubscription() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (
-      sub: TablesInsert<"subscriptions"> & { setup_fee?: number | null },
+      sub: TablesInsert<"subscriptions"> & {
+        setup_fee?: number | null;
+        // Optional: caller can provide the exact breakdown of recurring
+        // lines. When set, seeds one subscription_item per entry instead
+        // of the default single-line fallback. Used by NewInvoice when
+        // the invoice has multiple billable rows so each row becomes its
+        // own billable line on the subscription.
+        lines?: AddSubscriptionLineInput[];
+      },
     ) => {
-      const { setup_fee, ...row } = sub;
+      const { setup_fee, lines, ...row } = sub;
       const { data, error } = await supabase.from("subscriptions").insert(row).select("*, clients(*)").single();
       if (error) throw error;
 
-      // Always seed one recurring line equal to the subscription's headline amount,
-      // so price-history + invoice generation work uniformly with the items model.
-      const items: TablesInsert<"subscription_items">[] = [
-        {
-          subscription_id: data.id,
-          description: row.name,
-          kind: "recurring",
-          amount: Number(row.amount ?? 0),
-          position: 0,
-        },
-      ];
+      // Always seed at least one recurring line so price-history + invoice
+      // generation work uniformly with the items model.
+      const items: TablesInsert<"subscription_items">[] =
+        lines && lines.length > 0
+          ? lines.map((line, idx) => ({
+              subscription_id: data.id,
+              description: line.description,
+              kind: line.kind ?? "recurring",
+              amount: Number(line.amount ?? 0),
+              position: idx,
+            }))
+          : [
+              {
+                subscription_id: data.id,
+                description: row.name,
+                kind: "recurring",
+                amount: Number(row.amount ?? 0),
+                position: 0,
+              },
+            ];
       if (setup_fee && setup_fee > 0) {
         items.push({
           subscription_id: data.id,
           description: `Setup ${row.name}`,
           kind: "setup",
           amount: setup_fee,
-          position: 1,
+          position: items.length,
         });
       }
       const { error: itemsError } = await supabase.from("subscription_items").insert(items);

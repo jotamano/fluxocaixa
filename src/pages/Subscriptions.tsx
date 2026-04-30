@@ -259,7 +259,9 @@ export default function Subscriptions() {
             <Link to={`/subscricoes/${sub.id}`} className="font-display font-semibold text-card-foreground hover:underline truncate flex items-center gap-1">
               {sub.name} <ExternalLink className="h-3 w-3 opacity-50" />
             </Link>
-            <p className="text-xs text-muted-foreground truncate">{sub.clients?.company}</p>
+            <p className="text-xs text-muted-foreground truncate">
+              {sub.clients?.company || sub.clients?.name || "Sem cliente"}
+            </p>
           </div>
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold border whitespace-nowrap ${
             isActive ? 'bg-success/10 text-success border-success/20'
