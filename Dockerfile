@@ -7,14 +7,26 @@ ARG VITE_SUPABASE_PUBLISHABLE_KEY
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
 
+# BUILD_ID is a unique identifier for this build (commit SHA, deployment UUID,
+# or timestamp). Passed by docker-compose from the environment so that every
+# deploy produces a different layer hash — prevents Coolify / BuildKit from
+# silently reusing cached layers when source changes are subtle or when the
+# compose rebuild is triggered without "no cache".
+ARG BUILD_ID=dev
+ENV VITE_BUILD_ID=$BUILD_ID
+LABEL build_id=$BUILD_ID
+RUN echo "Building app with BUILD_ID=$BUILD_ID"
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+RUN echo "$BUILD_ID" > /app/public/BUILD_ID.txt && npm run build
 
 # Runtime stage
 FROM nginx:1.27-alpine
+ARG BUILD_ID=dev
+LABEL build_id=$BUILD_ID
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY supabase/selfhost/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

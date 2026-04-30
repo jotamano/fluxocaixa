@@ -95,13 +95,23 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
 function SidebarFooter({ showLabels }: { showLabels: boolean }) {
   const { user, signOut } = useAuth();
+  const buildId = (import.meta.env.VITE_BUILD_ID as string | undefined) ?? "dev";
+  const shortBuild = buildId.length > 10 ? buildId.slice(0, 7) : buildId;
   if (!user) return null;
   return (
     <div className="space-y-2">
       {showLabels && (
-        <p className="text-xs text-sidebar-foreground/60 truncate" title={user.email ?? ""}>
-          {user.email}
-        </p>
+        <>
+          <p className="text-xs text-sidebar-foreground/60 truncate" title={user.email ?? ""}>
+            {user.email}
+          </p>
+          <p
+            className="text-[10px] text-sidebar-foreground/40 font-mono truncate"
+            title={`Build ${buildId}`}
+          >
+            build {shortBuild}
+          </p>
+        </>
       )}
       <Button
         variant="ghost"
