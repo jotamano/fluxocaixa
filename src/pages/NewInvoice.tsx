@@ -27,6 +27,11 @@ const MONTHS_PT = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
 
+// Sentinel value used in the per-line frequency <Select> to mean
+// "no manual override — let the dates / global default decide". We can't
+// use an empty string because shadcn's <SelectItem> rejects "" values.
+const FREQUENCY_AUTO = "__auto__";
+
 interface FormItem {
   id: string;
   serviceId: string;
@@ -99,15 +104,11 @@ export default function NewInvoice() {
           updated.description = `${svc.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`;
         }
       }
-      // When the user fills both dates, auto-pick the inferred frequency
-      // — but only if they haven't manually set one yet. Mirrors how the
-      // submit path used to work, just with the result visible upfront.
-      if (field === 'startDate' || field === 'endDate') {
-        if (!item.frequency) {
-          const inferred = inferFrequencyFromRange(updated.startDate, updated.endDate);
-          if (inferred) updated.frequency = inferred;
-        }
-      }
+      // `frequency` only stores explicit manual overrides. Inferred values
+      // are computed at render and submit time from the current dates, so
+      // editing the date range always re-flows through the inference path
+      // — no "sticky" stale frequency after the user shrinks/extends a
+      // period (Devin Review #19).
       return updated;
     }));
   };
@@ -188,11 +189,11 @@ export default function NewInvoice() {
 
         const results = await Promise.allSettled(
           validLines.map((line) => {
-            // Resolution order: explicit per-line picker → date-range
-            // inference → global fallback. The picker is auto-prefilled
-            // by inference when the user supplies dates, so most of the
-            // time these three converge on the same value; the picker
-            // just lets the user override when it doesn't.
+            // Resolution order: explicit per-line override → fresh
+            // inference from current dates → global fallback. Inference
+            // is always re-run from the current (startDate, endDate) so
+            // edits to the dates after picking flow through correctly,
+            // even if the dropdown was previously "auto".
             const lineFrequency: SubscriptionFrequency =
               line.frequency ||
               inferFrequencyFromRange(line.startDate, line.endDate) ||
@@ -493,27 +494,43 @@ function SortableInvoiceItem({ item, index, canRemove, services, showFrequency, 
           <Label className="text-xs">Data fim (opcional)</Label>
           <Input type="date" value={item.endDate} onChange={e => onUpdate(index, 'endDate', e.target.value)} />
         </div>
-        {showFrequency && (
-          <div className="space-y-1 sm:col-span-2">
-            <Label className="text-xs">Frequência da subscrição</Label>
-            <Select
-              value={item.frequency || ""}
-              onValueChange={(v) => onUpdate(index, 'frequency', v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Usar frequência por defeito" />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.entries(frequencyLabels) as [SubscriptionFrequency, string][]).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[10px] text-muted-foreground">
-              Define de quanto em quanto tempo este item volta a faturar. Se preencheres datas, é pré-selecionada automaticamente; se ficar vazio, usa a frequência por defeito.
-            </p>
-          </div>
-        )}
+        {showFrequency && (() => {
+          const inferred = inferFrequencyFromRange(item.startDate, item.endDate);
+          // Display order: manual override first; otherwise show what
+          // would actually be used at submit time (inferred from dates,
+          // or the FREQUENCY_AUTO sentinel meaning "fall back to global").
+          const displayValue = item.frequency || inferred || FREQUENCY_AUTO;
+          return (
+            <div className="space-y-1 sm:col-span-2">
+              <Label className="text-xs">Frequência da subscrição</Label>
+              <Select
+                value={displayValue}
+                onValueChange={(v) =>
+                  onUpdate(index, 'frequency', v === FREQUENCY_AUTO ? "" : v)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={FREQUENCY_AUTO}>
+                    Automática (datas / por defeito)
+                  </SelectItem>
+                  {(Object.entries(frequencyLabels) as [SubscriptionFrequency, string][]).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                {item.frequency
+                  ? "Frequência fixa para este item. Escolhe “Automática” para voltar a usar as datas / a frequência por defeito."
+                  : inferred
+                    ? `Inferida a partir das datas (${frequencyLabels[inferred].toLowerCase()}). Editar as datas re-calcula automaticamente.`
+                    : "Sem datas: usa a frequência por defeito definida acima."}
+              </p>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
