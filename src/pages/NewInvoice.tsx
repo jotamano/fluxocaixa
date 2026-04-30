@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -161,15 +161,30 @@ export default function NewInvoice() {
           else if (recurringFrequency === 'quarterly') nextBilling.setMonth(nextBilling.getMonth() + 3);
           else if (recurringFrequency === 'yearly') nextBilling.setFullYear(nextBilling.getFullYear() + 1);
 
+          // One subscription_item per invoice row so each service keeps
+          // its own description + price on future auto-generated invoices.
+          // Without this the whole invoice collapses into a single line
+          // with the total sum — losing per-service detail.
+          const lines = items
+            .filter(i => i.description && i.unitPrice > 0)
+            .map(i => {
+              const ln = services.find(s => s.id === i.serviceId);
+              return {
+                description: ln?.name ?? i.description,
+                amount: i.unitPrice * i.quantity,
+              };
+            });
+
           addSubscription.mutate({
             client_id: clientId,
-            name: svc?.name || mainItem.description,
+            name: lines.length === 1 ? (svc?.name || mainItem.description) : `Subscrição ${invoiceNumber}`,
             amount: total,
             frequency: recurringFrequency,
             next_billing_date: nextBilling.toISOString().split('T')[0],
             start_date: new Date().toISOString().split('T')[0],
+            lines,
           }, {
-            onSuccess: () => toast({ title: "Subscrição criada!", description: "Fatura recorrente configurada." }),
+            onSuccess: () => toast({ title: "Subscrição criada!", description: `Fatura recorrente configurada com ${lines.length} linha${lines.length === 1 ? "" : "s"}.` }),
           });
         }
 
@@ -292,10 +307,11 @@ export default function NewInvoice() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="font-display">Novo Cliente Rápido</DialogTitle>
+            <DialogDescription>Só o nome é obrigatório — os outros campos podem ser preenchidos mais tarde na página do cliente.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-4">
             {[
-              { key: 'name', label: 'Nome', placeholder: 'Nome completo' },
+              { key: 'name', label: 'Nome *', placeholder: 'Nome completo' },
               { key: 'email', label: 'Email', placeholder: 'email@exemplo.pt' },
               { key: 'company', label: 'Empresa', placeholder: 'Nome da empresa' },
               { key: 'phone', label: 'Telefone', placeholder: '+351 ...' },
@@ -310,7 +326,7 @@ export default function NewInvoice() {
                 />
               </div>
             ))}
-            <Button onClick={handleAddClient} className="w-full" disabled={addClient.isPending || !newClient.name || !newClient.email || !newClient.company}>
+            <Button onClick={handleAddClient} className="w-full" disabled={addClient.isPending || !newClient.name.trim()}>
               {addClient.isPending ? "A criar..." : "Criar Cliente"}
             </Button>
           </div>
