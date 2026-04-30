@@ -1,7 +1,9 @@
 node_modules
 dist
 dist-ssr
-.git
+# .git intentionally NOT ignored — Dockerfile reads HEAD to derive
+# the commit SHA for VITE_BUILD_ID so the sidebar shows a real
+# version, rather than depending on orchestrator-specific env vars.
 .github
 .vscode
 *.log
