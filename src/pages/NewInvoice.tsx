@@ -149,7 +149,7 @@ export default function NewInvoice() {
         };
       }),
     }, {
-      onSuccess: () => {
+      onSuccess: async () => {
         toast({ title: "Fatura criada!", description: `Fatura no valor de ${formatCurrency(total)} criada com sucesso.` });
 
         // Create one subscription per invoice line when "Fatura recorrente"
@@ -167,21 +167,43 @@ export default function NewInvoice() {
           const nextBillingStr = nextBilling.toISOString().split('T')[0];
           const validLines = items.filter(i => i.description && i.unitPrice > 0);
 
-          validLines.forEach((line) => {
-            const svc = services.find(s => s.id === line.serviceId);
-            const lineAmount = line.unitPrice * line.quantity;
-            addSubscription.mutate({
-              client_id: clientId,
-              name: svc?.name || line.description,
-              amount: lineAmount,
-              frequency: recurringFrequency,
-              next_billing_date: nextBillingStr,
-              start_date: today,
+          // Await each subscription insert sequentially so the success
+          // toast + navigation only fire after the DB actually confirms
+          // the writes. If any line fails, we surface the error and keep
+          // the user on the page (the invoice itself is already saved).
+          const results = await Promise.allSettled(
+            validLines.map((line) => {
+              const svc = services.find(s => s.id === line.serviceId);
+              const lineAmount = line.unitPrice * line.quantity;
+              return addSubscription.mutateAsync({
+                client_id: clientId,
+                name: svc?.name || line.description,
+                amount: lineAmount,
+                frequency: recurringFrequency,
+                next_billing_date: nextBillingStr,
+                start_date: today,
+              });
+            }),
+          );
+
+          const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+          const succeeded = results.length - failures.length;
+
+          if (failures.length > 0) {
+            const firstErr = failures[0].reason as Error;
+            toast({
+              title: succeeded > 0 ? "Subscrições parcialmente criadas" : "Erro ao criar subscrições",
+              description: `${succeeded}/${results.length} criadas. Primeiro erro: ${firstErr?.message ?? "desconhecido"}`,
+              variant: "destructive",
             });
-          });
+            // Keep the user on the page so they can retry the missing
+            // subscriptions via /subscricoes without thinking everything
+            // is fine.
+            return;
+          }
 
           toast({
-            title: validLines.length === 1 ? "Subscrição criada!" : `${validLines.length} subscrições criadas!`,
+            title: succeeded === 1 ? "Subscrição criada!" : `${succeeded} subscrições criadas!`,
             description: "Cada serviço fica como subscrição independente.",
           });
         }
