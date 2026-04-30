@@ -22,6 +22,11 @@ const MONTHS_PT = [
 ];
 
 interface EditItem {
+  // Carry the row's DB id when it already exists. Without this the
+  // update path becomes destructive (delete+insert), which would null
+  // out subscription_items.source_invoice_item_id and break the link
+  // between an invoice line and the subscription line it spawned.
+  id?: string;
   serviceId: string;
   description: string;
   quantity: number;
@@ -50,24 +55,22 @@ export default function InvoiceDetail() {
   const invoice = useMemo(() => invoices.find(item => item.id === id), [invoices, id]);
   const invoicePayments = useMemo(() => payments.filter(payment => payment.invoice_id === id), [payments, id]);
 
-  // Subscriptions "associated" with this invoice. We don't keep an
-  // explicit invoice→subscription back-reference for manually-created
-  // invoices, so the heuristic is: show every subscription belonging to
-  // the invoice's client. The auto-generated cron case is handled too:
-  // invoice.subscription_id directly identifies the source subscription,
-  // and we surface that one first (explicitly labelled) above the rest.
-  const clientSubscriptions = useMemo(() => {
-    if (!invoice) return [];
-    return subscriptions.filter(s => s.client_id === invoice.client_id);
-  }, [subscriptions, invoice]);
+  // Subscriptions actually associated with this invoice:
+  //   1. invoice.subscription_id  — set on cron-generated invoices
+  //      (subscription → invoice direction).
+  //   2. subscription.source_invoice_id == invoice.id — set on subs
+  //      created by NewInvoice's "Fatura recorrente" toggle for *this*
+  //      invoice (invoice → subscription direction).
+  // Subs that just happen to belong to the same client without either
+  // link are *not* shown here — those are reachable from /subscricoes.
   const sourceSubscription = useMemo(() => {
     if (!invoice?.subscription_id) return null;
     return subscriptions.find(s => s.id === invoice.subscription_id) ?? null;
   }, [subscriptions, invoice]);
-  const otherClientSubscriptions = useMemo(
-    () => clientSubscriptions.filter(s => s.id !== sourceSubscription?.id),
-    [clientSubscriptions, sourceSubscription],
-  );
+  const childSubscriptions = useMemo(() => {
+    if (!invoice) return [];
+    return subscriptions.filter(s => s.source_invoice_id === invoice.id);
+  }, [subscriptions, invoice]);
 
   if (invoicesLoading || paymentsLoading) {
     return <div className="py-10 text-sm text-muted-foreground">A carregar fatura...</div>;
@@ -127,6 +130,7 @@ export default function InvoiceDetail() {
 
   const openEditItems = () => {
     setEditItems(invoice.invoice_items.map(item => ({
+      id: item.id,
       serviceId: "",
       description: item.description,
       quantity: item.quantity,
@@ -164,15 +168,31 @@ export default function InvoiceDetail() {
       toast({ title: "Erro", description: "Preenche todos os campos dos serviços", variant: "destructive" });
       return;
     }
+    // Sync edits into linked subscription_items only while the invoice
+    // is still un-paid. Once the user has marked it paid, the invoice
+    // is a historical record — we don't retroactively change the
+    // subscription pricing based on changes to a paid invoice.
+    const syncToSubscriptions = invoice.status !== "paid";
     updateItems.mutate({
       invoiceId: invoice.id,
-      items: editItems.map(i => ({
+      syncToSubscriptions,
+      items: editItems.map((i, idx) => ({
+        id: i.id,
         description: i.description,
         quantity: i.quantity,
         unit_price: i.unitPrice,
+        position: idx,
       })),
     }, {
-      onSuccess: () => { setEditItemsOpen(false); toast({ title: "Itens atualizados!" }); },
+      onSuccess: () => {
+        setEditItemsOpen(false);
+        toast({
+          title: "Itens atualizados!",
+          description: syncToSubscriptions
+            ? "Linhas ligadas a subscrições foram também sincronizadas."
+            : "Fatura paga — subscrições associadas não foram alteradas.",
+        });
+      },
       onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
     });
   };
@@ -321,13 +341,15 @@ export default function InvoiceDetail() {
             </div>
           )}
 
-          {(sourceSubscription || otherClientSubscriptions.length > 0) && (
+          {(sourceSubscription || childSubscriptions.length > 0) && (
             <div className="rounded-xl border border-border bg-card p-6 shadow-card">
               <h2 className="font-display text-lg font-semibold text-card-foreground">
                 Subscrições associadas
               </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Edita aqui frequência, valor ou estado de cada subscrição deste cliente.
+                {invoice.status === "paid"
+                  ? "Fatura paga — abre cada subscrição para a editar (mudanças aqui não se propagam)."
+                  : "Editar preço ou descrição nos itens da fatura sincroniza com a subscrição respectiva."}
               </p>
               <div className="mt-4 space-y-2">
                 {sourceSubscription && (
@@ -336,8 +358,8 @@ export default function InvoiceDetail() {
                     badge="Origem desta fatura"
                   />
                 )}
-                {otherClientSubscriptions.map(sub => (
-                  <SubscriptionRow key={sub.id} subscription={sub} />
+                {childSubscriptions.map(sub => (
+                  <SubscriptionRow key={sub.id} subscription={sub} badge="Criada desta fatura" />
                 ))}
               </div>
             </div>
