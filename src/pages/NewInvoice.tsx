@@ -157,7 +157,13 @@ export default function NewInvoice() {
         invoice: {
           number: invoiceNumber,
           client_id: clientId,
-          status: 'draft',
+          // New invoices default to 'pending' to match the rest of the
+          // app: Subscriptions auto-generation, dashboard "Pendentes"
+          // counters, and the Payments view all treat 'pending' as the
+          // normal post-creation state. 'draft' is only useful when the
+          // user wants to keep editing — they can switch from the
+          // invoice detail page if needed.
+          status: 'pending',
           issue_date: new Date().toISOString().split('T')[0],
           due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
           notes: notes || null,
