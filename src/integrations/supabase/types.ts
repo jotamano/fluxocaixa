@@ -257,6 +257,7 @@ export type Database = {
           invoiced_at: string | null
           kind: Database["public"]["Enums"]["subscription_item_kind"]
           position: number
+          source_invoice_item_id: string | null
           subscription_id: string
         }
         Insert: {
@@ -268,6 +269,7 @@ export type Database = {
           invoiced_at?: string | null
           kind?: Database["public"]["Enums"]["subscription_item_kind"]
           position?: number
+          source_invoice_item_id?: string | null
           subscription_id: string
         }
         Update: {
@@ -279,6 +281,7 @@ export type Database = {
           invoiced_at?: string | null
           kind?: Database["public"]["Enums"]["subscription_item_kind"]
           position?: number
+          source_invoice_item_id?: string | null
           subscription_id?: string
         }
         Relationships: [
@@ -336,6 +339,7 @@ export type Database = {
           paused_until: string | null
           prorate_first_invoice: boolean
           service_type: Database["public"]["Enums"]["service_type"]
+          source_invoice_id: string | null
           start_date: string
           status: Database["public"]["Enums"]["subscription_status"]
         }
@@ -352,6 +356,7 @@ export type Database = {
           paused_until?: string | null
           prorate_first_invoice?: boolean
           service_type?: Database["public"]["Enums"]["service_type"]
+          source_invoice_id?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["subscription_status"]
         }
@@ -368,6 +373,7 @@ export type Database = {
           paused_until?: string | null
           prorate_first_invoice?: boolean
           service_type?: Database["public"]["Enums"]["service_type"]
+          source_invoice_id?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["subscription_status"]
         }

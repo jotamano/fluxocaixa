@@ -149,9 +149,14 @@ export function useAddInvoice() {
       const { data, error } = await supabase.from("invoices").insert(invoice).select().single();
       if (error) throw error;
       const itemsWithId = items.map(item => ({ ...item, invoice_id: data.id }));
-      const { error: itemsError } = await supabase.from("invoice_items").insert(itemsWithId);
+      // Return the inserted items so callers (NewInvoice) can link
+      // their auto-created subscriptions to the exact invoice_item rows.
+      const { data: insertedItems, error: itemsError } = await supabase
+        .from("invoice_items")
+        .insert(itemsWithId)
+        .select();
       if (itemsError) throw itemsError;
-      return data;
+      return { invoice: data, items: (insertedItems ?? []) as InvoiceItem[] };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["invoices"] });
@@ -172,19 +177,144 @@ export function useUpdateInvoice() {
   });
 }
 
+export interface UpdateInvoiceItemInput {
+  // Present when the row already exists in the DB. Absent for newly
+  // added lines. Preserving these IDs across edits is what lets
+  // subscription_items.source_invoice_item_id keep tracking the same
+  // line through future edits — a delete+insert would break the link.
+  id?: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  position: number;
+}
+
 export function useUpdateInvoiceItems() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ invoiceId, items }: { invoiceId: string; items: Omit<TablesInsert<"invoice_items">, "invoice_id">[] }) => {
-      // Delete existing items
-      const { error: delError } = await supabase.from("invoice_items").delete().eq("invoice_id", invoiceId);
-      if (delError) throw delError;
-      // Insert new items
-      const itemsWithId = items.map(item => ({ ...item, invoice_id: invoiceId }));
-      const { error: insError } = await supabase.from("invoice_items").insert(itemsWithId);
-      if (insError) throw insError;
+    mutationFn: async ({
+      invoiceId,
+      items,
+      syncToSubscriptions = false,
+    }: {
+      invoiceId: string;
+      items: UpdateInvoiceItemInput[];
+      // When true, propagate description/amount changes into any
+      // subscription_items that were originally created from these
+      // invoice items (only if the invoice is not yet paid). Caller
+      // is responsible for the not-paid check.
+      syncToSubscriptions?: boolean;
+    }) => {
+      // 1. Fetch existing items to know which to delete (those not in
+      //    the new list) without nuking IDs the FK depends on.
+      const { data: existing, error: fetchError } = await supabase
+        .from("invoice_items")
+        .select("id")
+        .eq("invoice_id", invoiceId);
+      if (fetchError) throw fetchError;
+      const submittedIds = new Set(items.map(i => i.id).filter(Boolean) as string[]);
+      const toDelete = (existing ?? []).filter(e => !submittedIds.has(e.id)).map(e => e.id);
+
+      if (toDelete.length > 0) {
+        const { error: delError } = await supabase
+          .from("invoice_items")
+          .delete()
+          .in("id", toDelete);
+        if (delError) throw delError;
+      }
+
+      // 2. Update existing rows and insert new ones in parallel.
+      const updates = items.filter(i => i.id);
+      const inserts = items.filter(i => !i.id);
+
+      if (updates.length > 0) {
+        const results = await Promise.all(
+          updates.map(u =>
+            supabase
+              .from("invoice_items")
+              .update({
+                description: u.description,
+                quantity: u.quantity,
+                unit_price: u.unit_price,
+                position: u.position,
+              })
+              .eq("id", u.id!),
+          ),
+        );
+        const firstError = results.find(r => r.error)?.error;
+        if (firstError) throw firstError;
+      }
+
+      if (inserts.length > 0) {
+        const rows = inserts.map(i => ({
+          description: i.description,
+          quantity: i.quantity,
+          unit_price: i.unit_price,
+          position: i.position,
+          invoice_id: invoiceId,
+        }));
+        const { error: insError } = await supabase.from("invoice_items").insert(rows);
+        if (insError) throw insError;
+      }
+
+      // 3. Optional sync into linked subscription_items + recalc the
+      //    parent subscription.amount. Only runs for items that still
+      //    have a back-link (subscription_items.source_invoice_item_id).
+      if (syncToSubscriptions && updates.length > 0) {
+        const updatedIds = updates.map(u => u.id!);
+        const { data: subItems, error: subItemsError } = await supabase
+          .from("subscription_items")
+          .select("id, subscription_id, source_invoice_item_id, kind")
+          .in("source_invoice_item_id", updatedIds);
+        if (subItemsError) throw subItemsError;
+
+        const updateById = new Map(updates.map(u => [u.id!, u]));
+        const affectedSubIds = new Set<string>();
+        await Promise.all(
+          (subItems ?? []).map(async si => {
+            const srcId = si.source_invoice_item_id;
+            if (!srcId) return;
+            const src = updateById.get(srcId);
+            if (!src) return;
+            affectedSubIds.add(si.subscription_id);
+            // The subscription line stores the *total* recurring
+            // amount per period (qty * unit price). We mirror that
+            // calculation when syncing.
+            const newAmount = Number(src.unit_price) * src.quantity;
+            const { error: updErr } = await supabase
+              .from("subscription_items")
+              .update({ description: src.description, amount: newAmount })
+              .eq("id", si.id);
+            if (updErr) throw updErr;
+          }),
+        );
+
+        // Recalc subscription.amount = sum of recurring item amounts
+        // for every affected subscription.
+        await Promise.all(
+          Array.from(affectedSubIds).map(async subId => {
+            const { data: itemsForSub, error: e } = await supabase
+              .from("subscription_items")
+              .select("amount, kind")
+              .eq("subscription_id", subId);
+            if (e) throw e;
+            const recurringTotal = (itemsForSub ?? [])
+              .filter(it => it.kind === "recurring")
+              .reduce((s, it) => s + Number(it.amount), 0);
+            const { error: updErr } = await supabase
+              .from("subscriptions")
+              .update({ amount: recurringTotal })
+              .eq("id", subId);
+            if (updErr) throw updErr;
+          }),
+        );
+      }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["subscription_items"] });
+    },
   });
 }
 
@@ -224,6 +354,10 @@ export interface AddSubscriptionLineInput {
   description: string;
   amount: number;
   kind?: "recurring" | "setup" | "addon";
+  // When the subscription is being created from a NewInvoice flow, link
+  // each line back to the invoice_item that originated it. Lets later
+  // edits to the invoice propagate cleanly into the subscription.
+  source_invoice_item_id?: string | null;
 }
 
 export function useAddSubscription() {
@@ -254,6 +388,7 @@ export function useAddSubscription() {
               kind: line.kind ?? "recurring",
               amount: Number(line.amount ?? 0),
               position: idx,
+              source_invoice_item_id: line.source_invoice_item_id ?? null,
             }))
           : [
               {

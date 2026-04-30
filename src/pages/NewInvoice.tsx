@@ -153,7 +153,7 @@ export default function NewInvoice() {
 
     setIsSubmitting(true);
     try {
-      await addInvoice.mutateAsync({
+      const { invoice: createdInvoice, items: createdItems } = await addInvoice.mutateAsync({
         invoice: {
           number: invoiceNumber,
           client_id: clientId,
@@ -191,10 +191,20 @@ export default function NewInvoice() {
       // hosting + domain + SEO as separate recurring products.
       if (isRecurring) {
         const today = new Date().toISOString().split('T')[0];
-        const validLines = items.filter(i => i.description && i.unitPrice > 0);
+        // Pair each form line with the corresponding inserted invoice
+        // item by position so we can store source_invoice_item_id on
+        // each subscription line. After this, edits in the invoice
+        // detail page can sync straight back into the right
+        // subscription line.
+        const validLines = items
+          .map((line, idx) => ({
+            line,
+            invoiceItem: createdItems.find(it => it.position === idx) ?? null,
+          }))
+          .filter(({ line }) => line.description && line.unitPrice > 0);
 
         const results = await Promise.allSettled(
-          validLines.map((line) => {
+          validLines.map(({ line, invoiceItem }) => {
             // Resolution order: explicit per-line override → fresh
             // inference from current dates → global fallback. Inference
             // is always re-run from the current (startDate, endDate) so
@@ -230,6 +240,17 @@ export default function NewInvoice() {
               frequency: lineFrequency,
               next_billing_date: nextBillingStr,
               start_date: lineStart,
+              source_invoice_id: createdInvoice.id,
+              lines: invoiceItem
+                ? [
+                    {
+                      description: svc?.name || line.description,
+                      amount: lineAmount,
+                      kind: "recurring",
+                      source_invoice_item_id: invoiceItem.id,
+                    },
+                  ]
+                : undefined,
             });
           }),
         );
