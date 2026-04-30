@@ -75,12 +75,36 @@ docker compose logs -f app db kong
 # restart just the frontend after pulling new code — BUILD_ID busts the cache
 BUILD_ID=$(date +%s) docker compose --env-file .env.selfhost up -d --build app
 
-# apply new migrations (auto-runs on db boot, but to re-run by hand:)
-docker compose exec db psql -U postgres -f /docker-entrypoint-initdb.d/<file>.sql
+# apply new migrations to a running database (idempotent — tracks state in
+# public.schema_migrations and only runs files that haven't been applied yet)
+./scripts/apply-migrations.sh
+# Coolify uses opaque container names — pass them explicitly if auto-detect
+# can't find the db container:
+DB_CONTAINER=db-v5xudtj41ezyw-... ./scripts/apply-migrations.sh
 
 # wipe everything and start over (DESTRUCTIVE)
 docker compose down -v
 ```
+
+### Migration runner
+
+Migrations live in `supabase/migrations/`. They're applied in two ways:
+
+1. **First boot of an empty volume**: `Dockerfile.db` copies every `.sql`
+   file into `/docker-entrypoint-initdb.d/`, so they run as part of
+   Postgres' initdb sequence.
+2. **Existing database**: `./scripts/apply-migrations.sh` connects to the
+   running `db` container via `docker exec`, ensures
+   `public.schema_migrations(version, applied_at)` exists, and applies any
+   migration whose filename is not yet in that table. Re-runs are safe —
+   already-applied files are skipped.
+
+**First-run safety net for existing deployments**: when the runner sees
+that `schema_migrations` is empty but `public.invoices` already exists
+(i.e. you've been applying migrations manually with
+`docker exec -i ... psql -f ...`), it **backfills** `schema_migrations`
+with all current filenames marked as already applied — without re-running
+any SQL. From that point on, future migrations apply automatically.
 
 ## Deploying on Coolify
 
