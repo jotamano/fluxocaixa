@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, methodLabels } from "@/lib/data";
+import type { Subscription } from "@/hooks/use-data";
+import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions } from "@/hooks/use-data";
+import { formatCurrency, getInvoiceItemsTotal, methodLabels, frequencyLabels } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
 
@@ -34,6 +35,7 @@ export default function InvoiceDetail() {
   const { data: invoices = [], isLoading: invoicesLoading } = useInvoices();
   const { data: payments = [], isLoading: paymentsLoading } = usePayments();
   const { data: services = [] } = useActiveServices();
+  const { data: subscriptions = [] } = useSubscriptions();
   const deleteInvoice = useDeleteInvoice();
   const updateInvoice = useUpdateInvoice();
   const updateItems = useUpdateInvoiceItems();
@@ -47,6 +49,25 @@ export default function InvoiceDetail() {
 
   const invoice = useMemo(() => invoices.find(item => item.id === id), [invoices, id]);
   const invoicePayments = useMemo(() => payments.filter(payment => payment.invoice_id === id), [payments, id]);
+
+  // Subscriptions "associated" with this invoice. We don't keep an
+  // explicit invoice→subscription back-reference for manually-created
+  // invoices, so the heuristic is: show every subscription belonging to
+  // the invoice's client. The auto-generated cron case is handled too:
+  // invoice.subscription_id directly identifies the source subscription,
+  // and we surface that one first (explicitly labelled) above the rest.
+  const clientSubscriptions = useMemo(() => {
+    if (!invoice) return [];
+    return subscriptions.filter(s => s.client_id === invoice.client_id);
+  }, [subscriptions, invoice]);
+  const sourceSubscription = useMemo(() => {
+    if (!invoice?.subscription_id) return null;
+    return subscriptions.find(s => s.id === invoice.subscription_id) ?? null;
+  }, [subscriptions, invoice]);
+  const otherClientSubscriptions = useMemo(
+    () => clientSubscriptions.filter(s => s.id !== sourceSubscription?.id),
+    [clientSubscriptions, sourceSubscription],
+  );
 
   if (invoicesLoading || paymentsLoading) {
     return <div className="py-10 text-sm text-muted-foreground">A carregar fatura...</div>;
@@ -299,6 +320,28 @@ export default function InvoiceDetail() {
               <p className="mt-4 text-sm text-muted-foreground">{invoice.notes}</p>
             </div>
           )}
+
+          {(sourceSubscription || otherClientSubscriptions.length > 0) && (
+            <div className="rounded-xl border border-border bg-card p-6 shadow-card">
+              <h2 className="font-display text-lg font-semibold text-card-foreground">
+                Subscrições associadas
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Edita aqui frequência, valor ou estado de cada subscrição deste cliente.
+              </p>
+              <div className="mt-4 space-y-2">
+                {sourceSubscription && (
+                  <SubscriptionRow
+                    subscription={sourceSubscription}
+                    badge="Origem desta fatura"
+                  />
+                )}
+                {otherClientSubscriptions.map(sub => (
+                  <SubscriptionRow key={sub.id} subscription={sub} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -405,5 +448,47 @@ export default function InvoiceDetail() {
       <PaymentDialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen} invoices={[invoice]} initialInvoiceId={invoice.id} initialAmount={outstanding > 0 ? String(outstanding) : ""} title="Registar pagamento nesta fatura" />
       <ConfirmDialog open={confirmOpen} onOpenChange={setConfirmOpen} title="Anular fatura" description={`Tens a certeza que queres anular a fatura ${invoice.number}? Esta ação é irreversível.`} onConfirm={handleDelete} isPending={deleteInvoice.isPending} />
     </div>
+  );
+}
+
+const subscriptionStatusLabels: Record<Subscription["status"], string> = {
+  active: "Ativa",
+  paused: "Pausada",
+  cancelled: "Cancelada",
+};
+
+const subscriptionStatusClasses: Record<Subscription["status"], string> = {
+  active: "bg-success/10 text-success border-success/20",
+  paused: "bg-warning/10 text-warning border-warning/20",
+  cancelled: "bg-muted text-muted-foreground border-border",
+};
+
+function SubscriptionRow({ subscription, badge }: { subscription: Subscription; badge?: string }) {
+  return (
+    <Link
+      to={`/subscricoes/${subscription.id}`}
+      className="block rounded-lg border border-border px-4 py-3 transition-colors hover:bg-muted/40"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-medium text-card-foreground">{subscription.name}</p>
+            {badge && (
+              <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                {badge}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {formatCurrency(Number(subscription.amount))} / {frequencyLabels[subscription.frequency].toLowerCase()}
+            {" · próxima "}
+            {new Date(subscription.next_billing_date).toLocaleDateString("pt-PT")}
+          </p>
+        </div>
+        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${subscriptionStatusClasses[subscription.status]}`}>
+          {subscriptionStatusLabels[subscription.status]}
+        </span>
+      </div>
+    </Link>
   );
 }
