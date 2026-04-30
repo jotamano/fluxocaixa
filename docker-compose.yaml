@@ -159,11 +159,12 @@ services:
       args:
         VITE_SUPABASE_URL: ${PUBLIC_API_URL:-http://localhost:54321}
         VITE_SUPABASE_PUBLISHABLE_KEY: ${ANON_KEY}
-        # BUILD_ID busts the Docker layer cache every deploy. Coolify
-        # populates SOURCE_COMMIT automatically from the git SHA; if you
-        # are running compose locally, export BUILD_ID=$(date +%s) before
-        # `docker compose build` to force a fresh build.
-        BUILD_ID: ${BUILD_ID:-${SOURCE_COMMIT:-dev}}
+        # BUILD_ID busts the Docker layer cache every deploy. Different
+        # orchestrators expose the git SHA under different names — this
+        # tries Coolify's COOLIFY_GIT_COMMIT_SHA, generic SOURCE_COMMIT,
+        # and GIT_COMMIT before giving up. If none are set (running
+        # compose locally) export BUILD_ID=$(date +%s) before build.
+        BUILD_ID: ${BUILD_ID:-${COOLIFY_GIT_COMMIT_SHA:-${SOURCE_COMMIT:-${GIT_COMMIT:-dev}}}}
     restart: unless-stopped
     depends_on:
       kong:
