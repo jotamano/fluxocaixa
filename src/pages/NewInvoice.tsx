@@ -168,18 +168,18 @@ export default function NewInvoice() {
           due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
           notes: notes || null,
         },
-        items: items.map((i, idx) => {
-          let desc = i.description;
-          if (i.startDate && i.endDate) {
-            desc += ` (${new Date(i.startDate).toLocaleDateString('pt-PT')} - ${new Date(i.endDate).toLocaleDateString('pt-PT')})`;
-          }
-          return {
-            description: desc,
-            quantity: i.quantity,
-            unit_price: i.unitPrice,
-            position: idx,
-          };
-        }),
+        // Persist start/end as proper columns instead of stuffing them
+        // into the description. The detail-page editor reads/writes the
+        // same columns, so what the user types here is what they see
+        // when they re-open the invoice for editing.
+        items: items.map((i, idx) => ({
+          description: i.description,
+          quantity: i.quantity,
+          unit_price: i.unitPrice,
+          position: idx,
+          service_start_date: i.startDate || null,
+          service_end_date: i.endDate || null,
+        })),
       });
 
       toast({ title: "Fatura criada!", description: `Fatura no valor de ${formatCurrency(total)} criada com sucesso.` });

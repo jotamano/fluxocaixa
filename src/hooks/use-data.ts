@@ -340,6 +340,11 @@ export interface UpdateInvoiceItemInput {
   quantity: number;
   unit_price: number;
   position: number;
+  // Optional service period for this line. ISO date strings (yyyy-mm-dd)
+  // or null when the user cleared the field. `undefined` is treated by
+  // the persist step as "leave whatever is in the DB alone".
+  service_start_date?: string | null;
+  service_end_date?: string | null;
   // Only relevant when this row is a NEW line (no id) AND the caller
   // asked us to spawn a subscription for new lines (see
   // `spawnSubscriptionForNewLines` on `useUpdateInvoiceItems`). When
@@ -438,6 +443,14 @@ export function useUpdateInvoiceItems() {
             if (u.linkToSubscriptionItemId !== undefined) {
               patch.source_subscription_item_id = u.linkToSubscriptionItemId;
             }
+            // Same convention for the optional period dates: undefined
+            // skips, anything else (including null to clear) gets sent.
+            if (u.service_start_date !== undefined) {
+              patch.service_start_date = u.service_start_date;
+            }
+            if (u.service_end_date !== undefined) {
+              patch.service_end_date = u.service_end_date;
+            }
             return supabase.from("invoice_items").update(patch).eq("id", u.id!);
           }),
         );
@@ -457,6 +470,14 @@ export function useUpdateInvoiceItems() {
             unit_price: i.unit_price,
             position: i.position,
             invoice_id: invoiceId,
+            // Persist the optional period if the caller provided values;
+            // omit otherwise so the DB default (NULL) takes effect.
+            ...(i.service_start_date !== undefined
+              ? { service_start_date: i.service_start_date }
+              : {}),
+            ...(i.service_end_date !== undefined
+              ? { service_end_date: i.service_end_date }
+              : {}),
           })
           .select()
           .single();
@@ -1970,12 +1991,17 @@ export function useDuplicateInvoice() {
       if (createErr) throw createErr;
 
       if (items && items.length > 0) {
+        // Carry the optional service period across so the duplicate
+        // arrives ready to send: typical use case is "same scope of
+        // work, new month", and the user can adjust the dates after.
         const cloned = items.map((it) => ({
           invoice_id: created.id,
           description: it.description,
           quantity: it.quantity,
           unit_price: it.unit_price,
           position: it.position,
+          service_start_date: it.service_start_date,
+          service_end_date: it.service_end_date,
         }));
         const { error: insErr } = await supabase.from("invoice_items").insert(cloned);
         if (insErr) throw insErr;

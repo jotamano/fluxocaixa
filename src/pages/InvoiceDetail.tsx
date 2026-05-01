@@ -13,7 +13,7 @@ import { PaymentDialog } from "@/components/PaymentDialog";
 import { DeleteInvoiceDialog } from "@/components/DeleteInvoiceDialog";
 import type { Subscription } from "@/hooks/use-data";
 import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions, useClientSubscriptionItems } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, getClientLabel, methodLabels, frequencyLabels, type SubscriptionFrequency } from "@/lib/data";
+import { formatCurrency, getInvoiceItemsTotal, getClientLabel, formatInvoiceItemPeriod, methodLabels, frequencyLabels, type SubscriptionFrequency } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
 
@@ -37,6 +37,11 @@ interface EditItem {
   description: string;
   quantity: number;
   unitPrice: number;
+  // Optional service period for this line. Empty string when the user
+  // has not set a date (the input is a native <input type="date"> which
+  // returns "" when cleared). Persisted as NULL.
+  startDate: string;
+  endDate: string;
   // Per-new-line picker for spawning subscriptions. `undefined` = use
   // the page-level default; `NO_SPAWN` = explicitly skip.
   newLineFrequency?: SubscriptionFrequency | typeof NO_SPAWN;
@@ -211,6 +216,8 @@ export default function InvoiceDetail() {
       description: item.description,
       quantity: item.quantity,
       unitPrice: Number(item.unit_price),
+      startDate: item.service_start_date ?? "",
+      endDate: item.service_end_date ?? "",
       currentLink: item.source_subscription_item_id ?? null,
     })));
     setLinkPickerForIndex(null);
@@ -234,7 +241,14 @@ export default function InvoiceDetail() {
   };
 
   const addEditItem = () => {
-    setEditItems(prev => [...prev, { serviceId: "", description: "", quantity: 1, unitPrice: 0 }]);
+    setEditItems(prev => [...prev, {
+      serviceId: "",
+      description: "",
+      quantity: 1,
+      unitPrice: 0,
+      startDate: "",
+      endDate: "",
+    }]);
   };
 
   const removeEditItem = (index: number) => {
@@ -270,6 +284,11 @@ export default function InvoiceDetail() {
         quantity: i.quantity,
         unit_price: i.unitPrice,
         position: idx,
+        // Always send the dates (null when blank) so clearing the
+        // input actually clears the column. The hook treats
+        // `undefined` as "don't touch", so we explicitly map "" → null.
+        service_start_date: i.startDate || null,
+        service_end_date: i.endDate || null,
         // NO_SPAWN sentinel maps to "leave undefined"; the mutation
         // skips spawning for any line whose freq is falsy.
         newLineFrequency:
@@ -418,14 +437,22 @@ export default function InvoiceDetail() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {invoice.invoice_items.map(item => (
-                  <tr key={item.id}>
-                    <td className="px-6 py-4 text-card-foreground">{item.description}</td>
-                    <td className="px-6 py-4 text-right text-card-foreground">{item.quantity}</td>
-                    <td className="px-6 py-4 text-right text-card-foreground">{formatCurrency(Number(item.unit_price))}</td>
-                    <td className="px-6 py-4 text-right font-semibold text-card-foreground">{formatCurrency(item.quantity * Number(item.unit_price))}</td>
-                  </tr>
-                ))}
+                {invoice.invoice_items.map(item => {
+                  const period = formatInvoiceItemPeriod(item.service_start_date, item.service_end_date);
+                  return (
+                    <tr key={item.id}>
+                      <td className="px-6 py-4 text-card-foreground">
+                        <div>{item.description}</div>
+                        {period && (
+                          <div className="mt-0.5 text-xs text-muted-foreground">{period}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right text-card-foreground">{item.quantity}</td>
+                      <td className="px-6 py-4 text-right text-card-foreground">{formatCurrency(Number(item.unit_price))}</td>
+                      <td className="px-6 py-4 text-right font-semibold text-card-foreground">{formatCurrency(item.quantity * Number(item.unit_price))}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -583,6 +610,29 @@ export default function InvoiceDetail() {
                   <div className="space-y-1">
                     <Label className="text-xs">Preço (€)</Label>
                     <Input type="number" min={0} step="0.01" value={item.unitPrice} onChange={e => updateEditItem(index, 'unitPrice', Number(e.target.value))} />
+                  </div>
+                </div>
+                {/* Optional service period — both inputs are independent
+                    so the user can set just a start (single-day work
+                    delivered on that date) or a full range. Stored as
+                    invoice_items.service_start_date/service_end_date and
+                    rendered on the detail page + PDF when set. */}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Data início (opcional)</Label>
+                    <Input
+                      type="date"
+                      value={item.startDate}
+                      onChange={e => updateEditItem(index, 'startDate', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Data fim (opcional)</Label>
+                    <Input
+                      type="date"
+                      value={item.endDate}
+                      onChange={e => updateEditItem(index, 'endDate', e.target.value)}
+                    />
                   </div>
                 </div>
                 {/* Frequency picker for NEW lines. Visible whenever

@@ -1,6 +1,13 @@
 import type { Tables } from "@/integrations/supabase/types";
 import type { Invoice } from "@/hooks/use-data";
-import { getInvoiceItemsTotal, formatCurrency } from "./data";
+import { getInvoiceItemsTotal, formatCurrency, formatInvoiceItemPeriod } from "./data";
+
+const escapeHtml = (s: string) =>
+  s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 
 type Client = Tables<"clients">;
 
@@ -9,14 +16,20 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
   const iva = total * 0.23;
   const totalComIva = total + iva;
 
-  const itemsRows = invoice.invoice_items.map(item => `
+  const itemsRows = invoice.invoice_items.map(item => {
+    const period = formatInvoiceItemPeriod(item.service_start_date, item.service_end_date);
+    const descCell = period
+      ? `${escapeHtml(item.description)}<div style="margin-top:2px;font-size:11px;color:#6b7280;">${escapeHtml(period)}</div>`
+      : escapeHtml(item.description);
+    return `
     <tr>
-      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;">${item.description}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;">${descCell}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:center;">${item.quantity}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;">${formatCurrency(Number(item.unit_price))}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;font-weight:600;">${formatCurrency(item.quantity * Number(item.unit_price))}</td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
 
   const html = `
     <!DOCTYPE html>
