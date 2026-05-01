@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { DeleteInvoiceDialog } from "@/components/DeleteInvoiceDialog";
 import type { Subscription } from "@/hooks/use-data";
 import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions, useClientSubscriptionItems } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, getClientLabel, methodLabels, frequencyLabels, type SubscriptionFrequency } from "@/lib/data";
@@ -154,11 +154,29 @@ export default function InvoiceDetail() {
   const lockReason = "Esta fatura está paga e não pode ser editada (documento fiscal). Para alterações, duplica e emite uma nova.";
 
 
-  const handleDelete = () => {
-    deleteInvoice.mutate(invoice.id, {
-      onSuccess: () => { toast({ title: "Fatura eliminada" }); navigate("/faturas"); },
-      onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
-    });
+  const handleDelete = (opts: { cascadePayments: boolean; cascadeSubscription: boolean }) => {
+    deleteInvoice.mutate(
+      { id: invoice.id, ...opts },
+      {
+        onSuccess: ({ cascadedPaymentIds, cascadedSubscriptionId, cascadedInvoiceIds }) => {
+          // Tell the user truthfully what was knocked over so the
+          // /lixo navigation makes sense afterwards.
+          const parts: string[] = ["Fatura eliminada"];
+          if (cascadedPaymentIds.length > 0) {
+            parts.push(`${cascadedPaymentIds.length} pagamento(s)`);
+          }
+          if (cascadedSubscriptionId) {
+            parts.push(`subscrição associada${cascadedInvoiceIds.length > 1 ? ` (+${cascadedInvoiceIds.length - 1} faturas em aberto)` : ""}`);
+          }
+          toast({
+            title: parts[0],
+            description: parts.length > 1 ? `Também eliminados: ${parts.slice(1).join(", ")}.` : undefined,
+          });
+          navigate("/faturas");
+        },
+        onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+      },
+    );
   };
 
   const openEdit = () => {
@@ -630,7 +648,13 @@ export default function InvoiceDetail() {
       </Dialog>
 
       <PaymentDialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen} invoices={[invoice]} initialInvoiceId={invoice.id} title="Registar pagamento nesta fatura" />
-      <ConfirmDialog open={confirmOpen} onOpenChange={setConfirmOpen} title="Anular fatura" description={`Tens a certeza que queres anular a fatura ${invoice.number}? Esta ação é irreversível.`} onConfirm={handleDelete} isPending={deleteInvoice.isPending} />
+      <DeleteInvoiceDialog
+        invoiceId={confirmOpen ? invoice.id : null}
+        invoiceNumber={invoice.number}
+        isPending={deleteInvoice.isPending}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={(opts) => handleDelete(opts)}
+      />
     </div>
   );
 }
