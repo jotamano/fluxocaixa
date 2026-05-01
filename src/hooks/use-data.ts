@@ -75,7 +75,27 @@ export function useClients() {
   return useQuery({
     queryKey: ["clients"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("clients").select("*").order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as Client[];
+    },
+  });
+}
+
+// Trash views — read soft-deleted rows for the /lixo page.
+export function useTrashedClients() {
+  return useQuery({
+    queryKey: ["clients", "trashed"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*")
+        .not("deleted_at", "is", null)
+        .order("deleted_at", { ascending: false });
       if (error) throw error;
       return data as Client[];
     },
@@ -110,7 +130,52 @@ export function useUpdateClient() {
   });
 }
 
+// Soft-delete a client. The DB trigger cascade_soft_delete_client_trg
+// (migration 20260413120000_*) propagates the same timestamp to the
+// client's invoices, subscriptions and payments. Restoring the client
+// only un-deletes the children that share that exact timestamp, so any
+// rows the user had already deleted manually stay deleted.
 export function useDeleteClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("clients")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+    },
+  });
+}
+
+export function useRestoreClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("clients")
+        .update({ deleted_at: null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+    },
+  });
+}
+
+// Hard-delete (used only from /lixo). Children come along via the
+// existing FK CASCADEs.
+export function usePurgeClient() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
@@ -135,7 +200,23 @@ export function useInvoices() {
       const { data, error } = await supabase
         .from("invoices")
         .select("*, invoice_items(*), clients(*)")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as Invoice[];
+    },
+  });
+}
+
+export function useTrashedInvoices() {
+  return useQuery({
+    queryKey: ["invoices", "trashed"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("*, invoice_items(*), clients(*)")
+        .not("deleted_at", "is", null)
+        .order("deleted_at", { ascending: false });
       if (error) throw error;
       return data as Invoice[];
     },
@@ -336,7 +417,49 @@ export function useUpdateInvoiceItems() {
   });
 }
 
+// Soft-delete the invoice. We deliberately don't touch invoice_items
+// (they're scoped to the invoice and only become visible if the parent
+// is) nor payments — payments stay attached so the financial record on
+// the client side remains coherent. To break the link explicitly the
+// user can edit the payment.
 export function useDeleteInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("invoices")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+    },
+  });
+}
+
+export function useRestoreInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("invoices")
+        .update({ deleted_at: null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+    },
+  });
+}
+
+// Hard-delete: matches the previous useDeleteInvoice behaviour exactly
+// (clear FK on payments, drop items, drop the invoice). Used only from
+// /lixo.
+export function usePurgeInvoice() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
@@ -361,7 +484,23 @@ export function useSubscriptions() {
       const { data, error } = await supabase
         .from("subscriptions")
         .select("*, clients(*)")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as Subscription[];
+    },
+  });
+}
+
+export function useTrashedSubscriptions() {
+  return useQuery({
+    queryKey: ["subscriptions", "trashed"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .select("*, clients(*)")
+        .not("deleted_at", "is", null)
+        .order("deleted_at", { ascending: false });
       if (error) throw error;
       return data as Subscription[];
     },
@@ -479,6 +618,34 @@ export function useDeleteSubscription() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("subscriptions")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["subscriptions"] }),
+  });
+}
+
+export function useRestoreSubscription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("subscriptions")
+        .update({ deleted_at: null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["subscriptions"] }),
+  });
+}
+
+export function usePurgeSubscription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
       const { error } = await supabase.from("subscriptions").delete().eq("id", id);
       if (error) throw error;
     },
@@ -492,7 +659,26 @@ export function usePayments() {
   return useQuery({
     queryKey: ["payments"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("payments").select("*").order("date", { ascending: false });
+      const { data, error } = await supabase
+        .from("payments")
+        .select("*")
+        .is("deleted_at", null)
+        .order("date", { ascending: false });
+      if (error) throw error;
+      return data as Payment[];
+    },
+  });
+}
+
+export function useTrashedPayments() {
+  return useQuery({
+    queryKey: ["payments", "trashed"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payments")
+        .select("*")
+        .not("deleted_at", "is", null)
+        .order("deleted_at", { ascending: false });
       if (error) throw error;
       return data as Payment[];
     },
@@ -538,7 +724,10 @@ export function useDeletePayment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (payment: Payment) => {
-      const { error } = await supabase.from("payments").delete().eq("id", payment.id);
+      const { error } = await supabase
+        .from("payments")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", payment.id);
       if (error) throw error;
       if (payment.invoice_id) {
         await recalcInvoiceStatus(payment.invoice_id);
@@ -583,7 +772,7 @@ async function recalcInvoiceStatus(invoiceId: string) {
   const [invoiceItemsResult, invoiceResult, invoicePaymentsResult] = await Promise.all([
     supabase.from("invoice_items").select("quantity, unit_price").eq("invoice_id", invoiceId),
     supabase.from("invoices").select("due_date, status").eq("id", invoiceId).single(),
-    supabase.from("payments").select("amount").eq("invoice_id", invoiceId),
+    supabase.from("payments").select("amount").eq("invoice_id", invoiceId).is("deleted_at", null),
   ]);
 
   if (invoiceItemsResult.error || invoiceResult.error || invoicePaymentsResult.error) return;
@@ -685,13 +874,16 @@ export function useSubscription(id: string | undefined) {
     queryKey: ["subscription", id],
     enabled: !!id,
     queryFn: async () => {
+      // maybeSingle() so a soft-deleted subscription resolves to null
+      // (page falls back to its loading/empty state) instead of throwing.
       const { data, error } = await supabase
         .from("subscriptions")
         .select("*, clients(*)")
         .eq("id", id!)
-        .single();
+        .is("deleted_at", null)
+        .maybeSingle();
       if (error) throw error;
-      return data as Subscription;
+      return data as Subscription | null;
     },
   });
 }
@@ -705,6 +897,7 @@ export function useSubscriptionInvoices(subscriptionId: string | undefined) {
         .from("invoices")
         .select("*, invoice_items(*)")
         .eq("subscription_id", subscriptionId!)
+        .is("deleted_at", null)
         .order("issue_date", { ascending: false });
       if (error) throw error;
       return data as (Tables<"invoices"> & { invoice_items: InvoiceItem[] })[];
@@ -752,7 +945,8 @@ export function useSubscriptionStats() {
       const { data, error } = await supabase
         .from("invoices")
         .select("subscription_id, issue_date, status, invoice_items(quantity, unit_price)")
-        .not("subscription_id", "is", null);
+        .not("subscription_id", "is", null)
+        .is("deleted_at", null);
       if (error) throw error;
 
       const stats: Record<string, { revenueThisYear: number; lastInvoiceDate: string | null }> = {};
