@@ -1,24 +1,15 @@
-import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Plus, Pencil, Trash2, History } from "lucide-react";
+import { ArrowLeft, Pencil, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   useSubscription,
   useSubscriptionItems,
   useSubscriptionInvoices,
   useSubscriptionPriceHistory,
-  useAddSubscriptionItem,
-  useUpdateSubscriptionItem,
-  useDeleteSubscriptionItem,
 } from "@/hooks/use-data";
 import type { SubscriptionItem } from "@/hooks/use-data";
 import { formatCurrency, frequencyLabels } from "@/lib/data";
 import { StatusBadge } from "@/components/StatusBadge";
-import { useToast } from "@/hooks/use-toast";
 
 const KIND_LABELS: Record<SubscriptionItem["kind"], string> = {
   recurring: "Recorrente",
@@ -29,24 +20,11 @@ const KIND_LABELS: Record<SubscriptionItem["kind"], string> = {
 export default function SubscriptionDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { toast } = useToast();
 
   const { data: sub } = useSubscription(id);
   const { data: items = [] } = useSubscriptionItems(id);
   const { data: invoices = [] } = useSubscriptionInvoices(id);
   const { data: priceHistory = [] } = useSubscriptionPriceHistory(id);
-
-  const addItem = useAddSubscriptionItem();
-  const updateItem = useUpdateSubscriptionItem();
-  const deleteItem = useDeleteSubscriptionItem();
-
-  const [itemDialogOpen, setItemDialogOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<SubscriptionItem | null>(null);
-  const [itemForm, setItemForm] = useState({
-    description: "",
-    kind: "recurring" as SubscriptionItem["kind"],
-    amount: "",
-  });
 
   if (!sub) {
     return <div className="p-8 text-muted-foreground">A carregar…</div>;
@@ -54,50 +32,6 @@ export default function SubscriptionDetail() {
 
   const total = items.reduce((sum, it) => sum + (it.kind === "recurring" || it.kind === "addon" ? Number(it.amount) : 0), 0);
   const setupTotal = items.filter(it => it.kind === "setup").reduce((sum, it) => sum + Number(it.amount), 0);
-
-  const openItemEditor = (item: SubscriptionItem | null) => {
-    setEditingItem(item);
-    setItemForm({
-      description: item?.description ?? "",
-      kind: item?.kind ?? "recurring",
-      amount: item ? String(Number(item.amount)) : "",
-    });
-    setItemDialogOpen(true);
-  };
-
-  const handleSaveItem = () => {
-    if (!itemForm.description || !itemForm.amount) return;
-    const payload = {
-      subscription_id: sub.id,
-      description: itemForm.description,
-      kind: itemForm.kind,
-      amount: Number(itemForm.amount),
-      position: editingItem?.position ?? items.length,
-    };
-    if (editingItem) {
-      updateItem.mutate(
-        { id: editingItem.id, updates: payload },
-        {
-          onSuccess: result => {
-            setItemDialogOpen(false);
-            toast({
-              title: "Item atualizado",
-              description: result.syncedInvoiceId
-                ? "A fatura de origem foi também atualizada."
-                : undefined,
-            });
-          },
-        },
-      );
-    } else {
-      addItem.mutate(payload, {
-        onSuccess: () => {
-          setItemDialogOpen(false);
-          toast({ title: "Item adicionado" });
-        },
-      });
-    }
-  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -137,7 +71,9 @@ export default function SubscriptionDetail() {
       <div className="rounded-xl border border-border bg-card p-6 shadow-card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-display font-semibold text-foreground">Itens</h2>
-          <Button size="sm" className="gap-2" onClick={() => openItemEditor(null)}><Plus className="h-4 w-4" /> Adicionar item</Button>
+          <p className="text-xs text-muted-foreground">
+            Para alterar valores ou nome, usa o botão <span className="font-medium">Editar subscrição</span>.
+          </p>
         </div>
         {items.length === 0 ? (
           <p className="text-sm text-muted-foreground">Sem itens.</p>
@@ -152,11 +88,7 @@ export default function SubscriptionDetail() {
                     {it.kind === "setup" && it.invoiced_at ? " · já faturado" : ""}
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold">{formatCurrency(Number(it.amount))}</span>
-                  <Button variant="ghost" size="icon" onClick={() => openItemEditor(it)}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteItem.mutate(it.id)}><Trash2 className="h-4 w-4" /></Button>
-                </div>
+                <span className="text-sm font-semibold">{formatCurrency(Number(it.amount))}</span>
               </div>
             ))}
           </div>
@@ -210,40 +142,6 @@ export default function SubscriptionDetail() {
           </div>
         )}
       </div>
-
-      <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="font-display">{editingItem ? "Editar item" : "Novo item"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Input value={itemForm.description} onChange={(e) => setItemForm(f => ({ ...f, description: e.target.value }))} />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Select value={itemForm.kind} onValueChange={(v) => setItemForm(f => ({ ...f, kind: v as SubscriptionItem["kind"] }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {(Object.entries(KIND_LABELS) as [SubscriptionItem["kind"], string][]).map(([v, l]) => (
-                      <SelectItem key={v} value={v}>{l}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Valor (€)</Label>
-                <Input type="number" min="0" step="0.01" value={itemForm.amount} onChange={(e) => setItemForm(f => ({ ...f, amount: e.target.value }))} />
-              </div>
-            </div>
-            <Button className="w-full" onClick={handleSaveItem} disabled={addItem.isPending || updateItem.isPending}>
-              {editingItem ? "Guardar alterações" : "Adicionar item"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
