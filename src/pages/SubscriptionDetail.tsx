@@ -78,9 +78,14 @@ export default function SubscriptionDetail() {
       updateItem.mutate(
         { id: editingItem.id, updates: payload },
         {
-          onSuccess: () => {
+          onSuccess: result => {
             setItemDialogOpen(false);
-            toast({ title: "Item atualizado" });
+            toast({
+              title: "Item atualizado",
+              description: result.syncedInvoiceId
+                ? "A fatura de origem foi também atualizada."
+                : undefined,
+            });
           },
         },
       );
