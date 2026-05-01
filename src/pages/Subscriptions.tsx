@@ -170,7 +170,7 @@ export default function Subscriptions() {
           setup_fee: form.setupFee ? Number(form.setupFee) : null,
         },
         {
-          onSuccess: () => {
+          onSuccess: (createdSub) => {
             handleDialogChange(false);
             toast({ title: "Subscrição criada!" });
 
@@ -180,11 +180,28 @@ export default function Subscriptions() {
               const dueDate = new Date(now);
               dueDate.setDate(dueDate.getDate() + 30);
 
-              const items = [
+              // Match every invoice line to the subscription_item it
+              // came from so the bidirectional sync works from the
+              // first second. The auto-generated invoice mirrors the
+              // shape produced by useAddSubscription:
+              //   sub_items[0] = recurring (description = sub name)
+              //   sub_items[1] = setup    (when setup_fee > 0)
+              // We pair by `kind` to be resilient to future changes
+              // in seeding order.
+              const recurringSubItem = createdSub.sub_items.find(si => si.kind === "recurring");
+              const setupSubItem = createdSub.sub_items.find(si => si.kind === "setup");
+
+              const items: Array<{
+                description: string;
+                quantity: number;
+                unit_price: number;
+                source_subscription_item_id: string | null;
+              }> = [
                 {
                   description: `${form.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`,
                   quantity: 1,
                   unit_price: Number(form.amount),
+                  source_subscription_item_id: recurringSubItem?.id ?? null,
                 },
               ];
               if (form.setupFee && Number(form.setupFee) > 0) {
@@ -192,6 +209,7 @@ export default function Subscriptions() {
                   description: `Setup ${form.name}`,
                   quantity: 1,
                   unit_price: Number(form.setupFee),
+                  source_subscription_item_id: setupSubItem?.id ?? null,
                 });
               }
 
@@ -199,6 +217,12 @@ export default function Subscriptions() {
                 invoice: {
                   number: invoiceNumber,
                   client_id: form.clientId,
+                  // Stamp the parent reference on the invoice itself
+                  // so InvoiceDetail's "Subscrições associadas"
+                  // section picks it up immediately. Without this,
+                  // the invoice shows up as orphan even though its
+                  // line items are linked.
+                  subscription_id: createdSub.id,
                   status: 'pending',
                   issue_date: now.toISOString().split('T')[0],
                   due_date: dueDate.toISOString().split('T')[0],

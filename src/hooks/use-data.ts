@@ -246,6 +246,29 @@ export function useAddInvoice() {
             .insert(itemsWithId)
             .select();
           if (itemsError) throw itemsError;
+          // Close the inverse link automatically: when a caller passes
+          // `source_subscription_item_id` on an item (e.g. the
+          // /subscricoes/nova flow that auto-generates the first
+          // invoice from a freshly created subscription), stamp the
+          // matching `subscription_items.source_invoice_item_id` so
+          // future edits in either direction can resolve the pair via
+          // a single column lookup. Without this, the sub→invoice
+          // direction of sync silently no-ops because there is no
+          // pointer back from the sub_item to the invoice_item.
+          const inverseTargets = (insertedItems ?? []).filter(
+            ii => (ii as InvoiceItem).source_subscription_item_id,
+          );
+          if (inverseTargets.length > 0) {
+            const inverseUpdates = inverseTargets.map(ii =>
+              supabase
+                .from("subscription_items")
+                .update({ source_invoice_item_id: ii.id })
+                .eq("id", (ii as InvoiceItem).source_subscription_item_id!),
+            );
+            const results = await Promise.all(inverseUpdates);
+            const firstErr = results.find(r => r.error)?.error;
+            if (firstErr) throw firstErr;
+          }
           return { invoice: data, items: (insertedItems ?? []) as InvoiceItem[] };
         }
         const isNumberConflict =
@@ -735,7 +758,15 @@ export function useAddSubscription() {
         if (firstError) throw firstError;
       }
 
-      return data as Subscription;
+      // Expose inserted sub_items so callers can immediately link
+      // them to a freshly-created invoice without an extra round-trip
+      // (used by /subscricoes/nova when it auto-issues the first
+      // invoice and needs to write `source_subscription_item_id` on
+      // each invoice line).
+      return {
+        ...(data as Subscription),
+        sub_items: (insertedSubItems ?? []) as Tables<"subscription_items">[],
+      };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["subscriptions"] });
