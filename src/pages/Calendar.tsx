@@ -6,10 +6,7 @@ import { frequencyLabels, formatCurrency } from "@/lib/data";
 import { StatusBadge } from "@/components/StatusBadge";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
-import type { Tables } from "@/integrations/supabase/types";
-import type { Invoice } from "@/hooks/use-data";
-
-type Subscription = Tables<"subscriptions">;
+import type { Subscription, Invoice } from "@/hooks/use-data";
 
 const DAYS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS_PT = [
@@ -96,7 +93,7 @@ export default function CalendarPage() {
       const days = getSubscriptionDatesForMonth(sub, currentYear, currentMonth);
       days.forEach(day => {
         if (!map.has(day)) map.set(day, []);
-        map.get(day)!.push({ sub, client: (sub as any).clients?.company || "—" });
+        map.get(day)!.push({ sub, client: sub.clients?.company || "—" });
       });
     });
     return map;
@@ -177,36 +174,97 @@ export default function CalendarPage() {
             </div>
             <div className="grid grid-cols-7 gap-1">
               {Array.from({ length: firstDay }).map((_, i) => (
-                <div key={`empty-${i}`} className="aspect-square" />
+                <div key={`empty-${i}`} className="aspect-square sm:aspect-auto sm:min-h-[96px]" />
               ))}
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const day = i + 1;
                 const daySubs = subscriptionsByDay.get(day) || [];
                 const dayInvoices = invoicesByDay.get(day) || [];
-                const hasEvents = daySubs.length > 0 || dayInvoices.length > 0;
+                const totalEvents = daySubs.length + dayInvoices.length;
+                const hasEvents = totalEvents > 0;
                 const isToday = day === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear();
                 const isSelected = day === selectedDay;
+                // On desktop we show event pills; on small screens we
+                // fall back to dots because each cell is too narrow to
+                // render readable text.
+                const MAX_PILLS = 3;
+                const visibleInvoices = dayInvoices.slice(0, MAX_PILLS);
+                const remainingForSubs = Math.max(0, MAX_PILLS - visibleInvoices.length);
+                const visibleSubs = daySubs.slice(0, remainingForSubs);
+                const overflow = totalEvents - (visibleInvoices.length + visibleSubs.length);
                 return (
                   <button
                     key={day}
                     onClick={() => setSelectedDay(day === selectedDay ? null : day)}
                     className={cn(
-                      "aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5 text-sm transition-colors relative",
+                      "rounded-lg text-sm transition-colors relative text-left",
+                      "aspect-square sm:aspect-auto sm:min-h-[96px]",
+                      "flex flex-col gap-0.5",
+                      "items-center justify-center sm:items-stretch sm:justify-start sm:p-1.5",
                       isToday && "ring-2 ring-primary",
                       isSelected && "bg-primary text-primary-foreground",
                       !isSelected && "hover:bg-accent",
-                      !isSelected && hasEvents && "bg-accent/50"
+                      !isSelected && hasEvents && "bg-accent/30"
                     )}
                   >
-                    <span className={cn("font-medium", isSelected ? "text-primary-foreground" : "text-card-foreground")}>{day}</span>
+                    <span className={cn(
+                      "font-medium shrink-0",
+                      isSelected ? "text-primary-foreground" : "text-card-foreground",
+                    )}>{day}</span>
+
+                    {/* Mobile: dot indicators (cells are too narrow for text). */}
                     {hasEvents && (
-                      <div className="flex gap-0.5">
+                      <div className="flex gap-0.5 sm:hidden">
                         {daySubs.slice(0, 2).map(({ sub }, idx) => (
                           <div key={`s-${idx}`} className={cn("h-1.5 w-1.5 rounded-full", isSelected ? "bg-primary-foreground/80" : getSubColor(sub))} />
                         ))}
                         {dayInvoices.slice(0, 2).map((inv, idx) => (
                           <div key={`i-${idx}`} className={cn("h-1.5 w-1.5 rounded-full", isSelected ? "bg-primary-foreground/80" : inv.status === 'overdue' ? "bg-destructive" : "bg-warning")} />
                         ))}
+                      </div>
+                    )}
+
+                    {/* Desktop: stacked pills with names. Invoices come
+                        first because they are calls-to-action (a due
+                        date is more urgent than a recurring billing). */}
+                    {hasEvents && (
+                      <div className="hidden sm:flex flex-col gap-0.5 w-full overflow-hidden">
+                        {visibleInvoices.map(inv => (
+                          <span
+                            key={`i-${inv.id}`}
+                            title={`Fatura ${inv.number} · ${inv.clients?.company ?? ""}`}
+                            className={cn(
+                              "truncate rounded px-1.5 py-0.5 text-[10px] leading-tight font-medium",
+                              isSelected
+                                ? "bg-primary-foreground/20 text-primary-foreground"
+                                : inv.status === 'overdue'
+                                  ? "bg-destructive/15 text-destructive"
+                                  : "bg-warning/20 text-warning-foreground",
+                            )}
+                          >
+                            {inv.number}
+                          </span>
+                        ))}
+                        {visibleSubs.map(({ sub, client }, idx) => (
+                          <span
+                            key={`s-${sub.id}-${idx}`}
+                            title={`${sub.name} · ${client}`}
+                            className={cn(
+                              "truncate rounded px-1.5 py-0.5 text-[10px] leading-tight font-medium",
+                              isSelected
+                                ? "bg-primary-foreground/20 text-primary-foreground"
+                                : "bg-primary/15 text-primary",
+                            )}
+                          >
+                            {sub.name}
+                          </span>
+                        ))}
+                        {overflow > 0 && (
+                          <span className={cn(
+                            "text-[10px] leading-tight px-1.5",
+                            isSelected ? "text-primary-foreground/80" : "text-muted-foreground",
+                          )}>+{overflow} mais</span>
+                        )}
                       </div>
                     )}
                   </button>
