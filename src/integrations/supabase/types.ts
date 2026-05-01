@@ -56,6 +56,7 @@ export type Database = {
           position: number
           quantity: number
           service_type: Database["public"]["Enums"]["service_type"]
+          source_subscription_item_id: string | null
           unit_price: number
         }
         Insert: {
@@ -66,6 +67,7 @@ export type Database = {
           position?: number
           quantity?: number
           service_type?: Database["public"]["Enums"]["service_type"]
+          source_subscription_item_id?: string | null
           unit_price?: number
         }
         Update: {
@@ -76,6 +78,7 @@ export type Database = {
           position?: number
           quantity?: number
           service_type?: Database["public"]["Enums"]["service_type"]
+          source_subscription_item_id?: string | null
           unit_price?: number
         }
         Relationships: [
