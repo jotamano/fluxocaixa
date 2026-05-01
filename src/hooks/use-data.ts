@@ -364,6 +364,11 @@ export interface UpdateInvoiceItemInput {
 export interface UpdateInvoiceItemsResult {
   syncedSubscriptionIds: string[];
   spawnedSubscriptionIds: string[];
+  // Subscriptions that were soft-deleted because the invoice line that
+  // spawned them ("Criada desta fatura") was removed in this save.
+  // Surfaced so the caller can mention them in the toast and the user
+  // knows to look in /lixo if they want to restore.
+  cascadedSubscriptionIds: string[];
 }
 
 /**
@@ -407,7 +412,11 @@ export function useUpdateInvoiceItems() {
       // fiscal documents and must not have their items rewritten.
       if (await isInvoicePaid(invoiceId)) throw new Error(PAID_INVOICE_LOCK_MESSAGE);
 
-      const result: UpdateInvoiceItemsResult = { syncedSubscriptionIds: [], spawnedSubscriptionIds: [] };
+      const result: UpdateInvoiceItemsResult = {
+        syncedSubscriptionIds: [],
+        spawnedSubscriptionIds: [],
+        cascadedSubscriptionIds: [],
+      };
 
       // 1. Reconcile rows: figure out what to delete (existing IDs
       //    that aren't in the new list) without disturbing the rows
@@ -420,8 +429,75 @@ export function useUpdateInvoiceItems() {
       const submittedIds = new Set(items.map(i => i.id).filter(Boolean) as string[]);
       const toDelete = (existing ?? []).filter(e => !submittedIds.has(e.id)).map(e => e.id);
       if (toDelete.length > 0) {
-        const { error: delError } = await supabase.from("invoice_items").delete().in("id", toDelete);
+        // Cascade: when a line that *spawned* a subscription via the
+        // "Fatura recorrente" toggle (or its later sibling, the
+        // editor's per-line spawn) is removed, the subscription is
+        // orphaned — it would keep billing for something that no
+        // longer exists on its origin invoice. Soft-delete those subs
+        // so they go to /lixo (recoverable).
+        //
+        // Distinguishing spawned vs manually-linked: a sub created
+        // from this invoice has subscriptions.source_invoice_id set
+        // to the invoice. Manual links via the picker leave that
+        // column NULL, so removing the line just unlinks (clears
+        // source_invoice_item_id on the sub_item) without deleting
+        // the pre-existing subscription.
+        const { data: linkedSubItems, error: linkErr } = await supabase
+          .from("subscription_items")
+          .select("id, subscription_id, source_invoice_item_id")
+          .in("source_invoice_item_id", toDelete);
+        if (linkErr) throw linkErr;
+
+        const candidateSubIds = Array.from(
+          new Set((linkedSubItems ?? []).map(si => si.subscription_id as string)),
+        );
+        let spawnedSubIds: string[] = [];
+        if (candidateSubIds.length > 0) {
+          const { data: candidateSubs, error: subErr } = await supabase
+            .from("subscriptions")
+            .select("id, source_invoice_id, deleted_at")
+            .in("id", candidateSubIds);
+          if (subErr) throw subErr;
+          spawnedSubIds = (candidateSubs ?? [])
+            .filter(s => s.source_invoice_id === invoiceId && !s.deleted_at)
+            .map(s => s.id as string);
+        }
+
+        // For sub_items whose parent sub is NOT being cascaded
+        // (manual link), clear the back-pointer so the FK doesn't
+        // dangle once the invoice_item is gone.
+        const subItemsToUnlink = (linkedSubItems ?? [])
+          .filter(si => !spawnedSubIds.includes(si.subscription_id as string))
+          .map(si => si.id as string);
+        if (subItemsToUnlink.length > 0) {
+          const { error: unlinkErr } = await supabase
+            .from("subscription_items")
+            .update({ source_invoice_item_id: null })
+            .in("id", subItemsToUnlink);
+          if (unlinkErr) throw unlinkErr;
+        }
+
+        // Drop the invoice_items first. The sub_items' FK is
+        // ON DELETE SET NULL, so doing this before the cascade keeps
+        // the table consistent even if the cascade fails midway.
+        const { error: delError } = await supabase
+          .from("invoice_items")
+          .delete()
+          .in("id", toDelete);
         if (delError) throw delError;
+
+        // Cascade-soft-delete the spawned subscriptions. Reuses the
+        // same helper that powers useDeleteSubscription / the
+        // checkbox in DeleteInvoiceDialog so behaviour stays
+        // consistent (also drags any other unpaid invoices owned by
+        // those subs to /lixo).
+        if (spawnedSubIds.length > 0) {
+          const now = new Date().toISOString();
+          for (const subId of spawnedSubIds) {
+            await cascadeSoftDeleteSubscription(subId, now);
+          }
+          result.cascadedSubscriptionIds = spawnedSubIds;
+        }
       }
 
       // 2. Apply updates to existing rows and insert any new ones.
