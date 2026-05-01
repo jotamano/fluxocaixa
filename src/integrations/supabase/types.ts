@@ -55,6 +55,8 @@ export type Database = {
           invoice_id: string
           position: number
           quantity: number
+          service_end_date: string | null
+          service_start_date: string | null
           service_type: Database["public"]["Enums"]["service_type"]
           source_subscription_item_id: string | null
           unit_price: number
@@ -66,6 +68,8 @@ export type Database = {
           invoice_id: string
           position?: number
           quantity?: number
+          service_end_date?: string | null
+          service_start_date?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
           source_subscription_item_id?: string | null
           unit_price?: number
@@ -77,6 +81,8 @@ export type Database = {
           invoice_id?: string
           position?: number
           quantity?: number
+          service_end_date?: string | null
+          service_start_date?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
           source_subscription_item_id?: string | null
           unit_price?: number

@@ -109,3 +109,24 @@ export function getClientLabel(
   if (name) return name;
   return fallback;
 }
+
+/**
+ * Format the optional service period stored on `invoice_items` as a
+ * single short string. Both inputs are independent: a line may have
+ * just a start (single-day delivery), just an end, or both. Returns
+ * `null` when neither is set so callers can branch cleanly without
+ * littering their JSX with `&&` chains.
+ *
+ * Inputs are ISO date strings (`yyyy-mm-dd`) as returned by Postgres.
+ * Output is locale-formatted `dd/mm/yyyy` for pt-PT.
+ */
+export function formatInvoiceItemPeriod(
+  start: string | null | undefined,
+  end: string | null | undefined,
+): string | null {
+  const fmt = (iso: string) => new Date(iso).toLocaleDateString("pt-PT");
+  if (start && end) return `${fmt(start)} – ${fmt(end)}`;
+  if (start) return fmt(start);
+  if (end) return fmt(end);
+  return null;
+}
