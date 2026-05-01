@@ -12,7 +12,7 @@ import { PaymentDialog } from "@/components/PaymentDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import type { Subscription } from "@/hooks/use-data";
 import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, methodLabels, frequencyLabels } from "@/lib/data";
+import { formatCurrency, getInvoiceItemsTotal, methodLabels, frequencyLabels, type SubscriptionFrequency } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
 
@@ -24,13 +24,17 @@ const MONTHS_PT = [
 interface EditItem {
   // Carry the row's DB id when it already exists. Without this the
   // update path becomes destructive (delete+insert), which would null
-  // out subscription_items.source_invoice_item_id and break the link
+  // out invoice_items.source_subscription_item_id and break the link
   // between an invoice line and the subscription line it spawned.
   id?: string;
   serviceId: string;
   description: string;
   quantity: number;
   unitPrice: number;
+  // Only used on NEW lines (no id) when the invoice is part of a
+  // recurring flow: the user picks per-line frequency and we spawn
+  // one fresh subscription per new line on save.
+  newLineFrequency?: SubscriptionFrequency;
 }
 
 export default function InvoiceDetail() {
@@ -71,6 +75,31 @@ export default function InvoiceDetail() {
     if (!invoice) return [];
     return subscriptions.filter(s => s.source_invoice_id === invoice.id);
   }, [subscriptions, invoice]);
+
+  // True when at least one line on this invoice is already linked to a
+  // subscription (cron-generated invoice OR NewInvoice-spawned subs).
+  // Used to decide whether NEW lines should also spawn subscriptions on
+  // save — matching the pattern the user already established for this
+  // invoice.
+  const isRecurringInvoice = !!sourceSubscription || childSubscriptions.length > 0;
+
+  // The frequency we'll default to when spawning a sub for a brand-new
+  // line. Picks the most common frequency among already-linked subs to
+  // avoid surprising the user; falls back to monthly otherwise.
+  const defaultSpawnFrequency: SubscriptionFrequency = useMemo(() => {
+    const linked: Subscription[] = [];
+    if (sourceSubscription) linked.push(sourceSubscription);
+    linked.push(...childSubscriptions);
+    if (linked.length === 0) return "monthly";
+    const counts: Partial<Record<SubscriptionFrequency, number>> = {};
+    for (const s of linked) counts[s.frequency] = (counts[s.frequency] ?? 0) + 1;
+    let bestFreq: SubscriptionFrequency = linked[0].frequency;
+    let bestCount = 0;
+    for (const [freq, count] of Object.entries(counts) as [SubscriptionFrequency, number][]) {
+      if (count > bestCount) { bestFreq = freq; bestCount = count; }
+    }
+    return bestFreq;
+  }, [sourceSubscription, childSubscriptions]);
 
   if (invoicesLoading || paymentsLoading) {
     return <div className="py-10 text-sm text-muted-foreground">A carregar fatura...</div>;
@@ -173,24 +202,43 @@ export default function InvoiceDetail() {
     // is a historical record — we don't retroactively change the
     // subscription pricing based on changes to a paid invoice.
     const syncToSubscriptions = invoice.status !== "paid";
+    const hasNewLines = editItems.some(i => !i.id);
+    const shouldSpawn = isRecurringInvoice && hasNewLines && syncToSubscriptions;
+
     updateItems.mutate({
       invoiceId: invoice.id,
       syncToSubscriptions,
+      spawnSubscriptionForNewLines: shouldSpawn
+        ? { clientId: invoice.client_id, defaultFrequency: defaultSpawnFrequency }
+        : undefined,
       items: editItems.map((i, idx) => ({
         id: i.id,
         description: i.description,
         quantity: i.quantity,
         unit_price: i.unitPrice,
         position: idx,
+        newLineFrequency: i.newLineFrequency,
+        newLineServiceName: i.serviceId
+          ? services.find(s => s.id === i.serviceId)?.name
+          : undefined,
       })),
     }, {
-      onSuccess: () => {
+      onSuccess: result => {
         setEditItemsOpen(false);
+        const parts: string[] = [];
+        if (result.syncedSubscriptionIds.length > 0) {
+          parts.push(`${result.syncedSubscriptionIds.length} subscrição(ões) sincronizada(s)`);
+        }
+        if (result.spawnedSubscriptionIds.length > 0) {
+          parts.push(`${result.spawnedSubscriptionIds.length} nova(s) subscrição(ões) criada(s)`);
+        }
         toast({
           title: "Itens atualizados!",
-          description: syncToSubscriptions
-            ? "Linhas ligadas a subscrições foram também sincronizadas."
-            : "Fatura paga — subscrições associadas não foram alteradas.",
+          description: parts.length > 0
+            ? parts.join(" · ")
+            : (syncToSubscriptions
+              ? "Sem subscrições ligadas — apenas a fatura foi alterada."
+              : "Fatura paga — subscrições associadas não foram alteradas."),
         });
       },
       onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
@@ -450,6 +498,28 @@ export default function InvoiceDetail() {
                     <Input type="number" min={0} step="0.01" value={item.unitPrice} onChange={e => updateEditItem(index, 'unitPrice', Number(e.target.value))} />
                   </div>
                 </div>
+                {/* Frequency picker only for NEW lines on a recurring
+                    invoice. Existing lines never need this — their
+                    frequency is already pinned on the linked sub. */}
+                {!item.id && isRecurringInvoice && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Frequência (nova subscrição)</Label>
+                    <Select
+                      value={item.newLineFrequency ?? defaultSpawnFrequency}
+                      onValueChange={v => updateEditItem(index, 'newLineFrequency', v)}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {(Object.entries(frequencyLabels) as [SubscriptionFrequency, string][]).map(([freq, label]) => (
+                          <SelectItem key={freq} value={freq}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Esta linha vai criar uma nova subscrição ao guardar.
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
             <Button variant="outline" className="w-full gap-2" onClick={addEditItem}>
