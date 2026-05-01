@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -142,6 +143,15 @@ export default function InvoiceDetail() {
   const paidTotal = invoicePayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
   const outstanding = Math.max(total - paidTotal, 0);
   const effectiveStatus = outstanding <= 0 && total > 0 ? "paid" : paidTotal > 0 && paidTotal < total ? "partially_paid" : invoice.status;
+
+  // Once an invoice is fully settled it becomes a fiscal document in
+  // PT — altering it after the fact is not allowed (the correct path
+  // is to issue a "nota de crédito" or duplicate the invoice and
+  // re-emit). We block both header and item edits in the UI; the
+  // hooks layer enforces the same rule defensively (see useUpdateInvoice
+  // / useUpdateInvoiceItems) so a stale tab can't bypass it.
+  const isLocked = effectiveStatus === "paid";
+  const lockReason = "Esta fatura está paga e não pode ser editada (documento fiscal). Para alterações, duplica e emite uma nova.";
 
 
   const handleDelete = () => {
@@ -297,9 +307,22 @@ export default function InvoiceDetail() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Button variant="outline" className="gap-2" onClick={openEdit}>
-            <Pencil className="h-4 w-4" /> Editar
-          </Button>
+          {isLocked ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={0}>
+                  <Button variant="outline" className="gap-2" disabled>
+                    <Pencil className="h-4 w-4" /> Editar
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">{lockReason}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Button variant="outline" className="gap-2" onClick={openEdit}>
+              <Pencil className="h-4 w-4" /> Editar
+            </Button>
+          )}
           <Button
             variant="outline"
             className="gap-2"
@@ -349,9 +372,22 @@ export default function InvoiceDetail() {
         <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
           <div className="border-b border-border px-6 py-4 flex items-center justify-between">
             <h2 className="font-display text-lg font-semibold text-card-foreground">Serviços da fatura</h2>
-            <Button variant="outline" size="sm" className="gap-1" onClick={openEditItems}>
-              <Pencil className="h-3 w-3" /> Editar itens
-            </Button>
+            {isLocked ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0}>
+                    <Button variant="outline" size="sm" className="gap-1" disabled>
+                      <Pencil className="h-3 w-3" /> Editar itens
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">{lockReason}</TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button variant="outline" size="sm" className="gap-1" onClick={openEditItems}>
+                <Pencil className="h-3 w-3" /> Editar itens
+              </Button>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
