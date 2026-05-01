@@ -12,7 +12,7 @@ import { PaymentDialog } from "@/components/PaymentDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import type { Subscription } from "@/hooks/use-data";
 import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions, useClientSubscriptionItems } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, methodLabels, frequencyLabels, type SubscriptionFrequency } from "@/lib/data";
+import { formatCurrency, getInvoiceItemsTotal, getClientLabel, methodLabels, frequencyLabels, type SubscriptionFrequency } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
 
@@ -291,7 +291,7 @@ export default function InvoiceDetail() {
               <StatusBadge status={effectiveStatus} />
             </div>
             <p className="mt-1 text-muted-foreground">
-              Cliente: <Link to={`/clientes/${invoice.client_id}`} className="font-medium text-primary hover:underline">{invoice.clients?.company || "Sem cliente"}</Link>
+              Cliente: <Link to={`/clientes/${invoice.client_id}`} className="font-medium text-primary hover:underline">{getClientLabel(invoice)}</Link>
             </p>
           </div>
         </div>
@@ -593,7 +593,7 @@ export default function InvoiceDetail() {
         </DialogContent>
       </Dialog>
 
-      <PaymentDialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen} invoices={[invoice]} initialInvoiceId={invoice.id} initialAmount={outstanding > 0 ? String(outstanding) : ""} title="Registar pagamento nesta fatura" />
+      <PaymentDialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen} invoices={[invoice]} initialInvoiceId={invoice.id} title="Registar pagamento nesta fatura" />
       <ConfirmDialog open={confirmOpen} onOpenChange={setConfirmOpen} title="Anular fatura" description={`Tens a certeza que queres anular a fatura ${invoice.number}? Esta ação é irreversível.`} onConfirm={handleDelete} isPending={deleteInvoice.isPending} />
     </div>
   );

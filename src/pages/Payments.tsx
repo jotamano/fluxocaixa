@@ -129,7 +129,7 @@ export default function Payments() {
                   onClick={() => navigate(`/pagamentos/${payment.id}`)}
                 >
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-card-foreground">{client?.company} — {invoice?.number}</p>
+                    <p className="text-sm font-medium text-card-foreground">{client?.company || client?.name || "Sem cliente"} — {invoice?.number}</p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(payment.date).toLocaleDateString('pt-PT')} · {methodLabels[payment.method]}
                       {payment.notes && ` · ${payment.notes}`}

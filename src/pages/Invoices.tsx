@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useInvoices } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, type InvoiceStatus } from "@/lib/data";
+import { formatCurrency, getInvoiceItemsTotal, getClientLabel, type InvoiceStatus } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -86,8 +86,10 @@ export default function Invoices() {
               >
                 <td className="px-6 py-4 text-sm font-medium text-card-foreground">{invoice.number}</td>
                 <td className="px-6 py-4">
-                  <p className="text-sm font-medium text-card-foreground">{invoice.clients?.company}</p>
-                  <p className="text-xs text-muted-foreground">{invoice.clients?.name}</p>
+                  <p className="text-sm font-medium text-card-foreground">{getClientLabel(invoice)}</p>
+                  {invoice.clients?.name && invoice.clients?.company
+                    ? <p className="text-xs text-muted-foreground">{invoice.clients.name}</p>
+                    : null}
                 </td>
                 <td className="px-6 py-4 text-sm text-muted-foreground">{new Date(invoice.issue_date).toLocaleDateString('pt-PT')}</td>
                 <td className="px-6 py-4 text-sm text-muted-foreground">{new Date(invoice.due_date).toLocaleDateString('pt-PT')}</td>
