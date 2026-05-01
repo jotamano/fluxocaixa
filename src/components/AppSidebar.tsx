@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, FileText, RefreshCw, Plus, Menu, CreditCard, CalendarDays, ChevronLeft, ChevronRight, Package, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, FileText, RefreshCw, Plus, Menu, CreditCard, CalendarDays, ChevronLeft, ChevronRight, Package, LogOut, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -16,6 +16,7 @@ const navItems = [
   { to: "/servicos", icon: Package, label: "Serviços" },
   { to: "/subscricoes", icon: RefreshCw, label: "Subscrições" },
   { to: "/calendario", icon: CalendarDays, label: "Calendário" },
+  { to: "/lixo", icon: Trash2, label: "Lixo" },
 ];
 
 interface SidebarContextType {
