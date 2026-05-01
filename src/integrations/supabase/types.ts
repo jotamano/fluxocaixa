@@ -403,6 +403,10 @@ export type Database = {
         Args: Record<string, never>
         Returns: number
       }
+      next_invoice_number: {
+        Args: { target_year: number }
+        Returns: string
+      }
     }
     Enums: {
       invoice_status:

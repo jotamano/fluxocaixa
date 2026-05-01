@@ -146,17 +146,35 @@ export function useAddInvoice() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ invoice, items }: { invoice: TablesInsert<"invoices">; items: Omit<TablesInsert<"invoice_items">, "invoice_id">[] }) => {
-      const { data, error } = await supabase.from("invoices").insert(invoice).select().single();
-      if (error) throw error;
-      const itemsWithId = items.map(item => ({ ...item, invoice_id: data.id }));
-      // Return the inserted items so callers (NewInvoice) can link
-      // their auto-created subscriptions to the exact invoice_item rows.
-      const { data: insertedItems, error: itemsError } = await supabase
-        .from("invoice_items")
-        .insert(itemsWithId)
-        .select();
-      if (itemsError) throw itemsError;
-      return { invoice: data, items: (insertedItems ?? []) as InvoiceItem[] };
+      // Retry loop for the rare race where the number we computed is
+      // also picked up by a concurrent caller (e.g. the daily pg_cron
+      // generator running while a user clicks "Nova fatura"). The
+      // unique constraint on invoices.number makes the conflict surface
+      // as Postgres SQLSTATE 23505 — we re-fetch a fresh number from
+      // the SQL function and retry up to 3 times.
+      const year = new Date().getFullYear();
+      let payload: TablesInsert<"invoices"> = invoice;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { data, error } = await supabase.from("invoices").insert(payload).select().single();
+        if (!error) {
+          const itemsWithId = items.map(item => ({ ...item, invoice_id: data.id }));
+          // Return the inserted items so callers (NewInvoice) can link
+          // their auto-created subscriptions to the exact invoice_item rows.
+          const { data: insertedItems, error: itemsError } = await supabase
+            .from("invoice_items")
+            .insert(itemsWithId)
+            .select();
+          if (itemsError) throw itemsError;
+          return { invoice: data, items: (insertedItems ?? []) as InvoiceItem[] };
+        }
+        const isNumberConflict =
+          error.code === "23505" &&
+          /invoices_number_unique|number/i.test(error.message ?? "");
+        if (!isNumberConflict || attempt === 2) throw error;
+        const fresh = await fetchNextInvoiceNumber(year);
+        payload = { ...payload, number: fresh };
+      }
+      throw new Error("Could not allocate a unique invoice number after 3 attempts");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["invoices"] });
@@ -534,28 +552,28 @@ export function useDeletePayment() {
 }
 
 // ─── Next invoice number ───
+//
+// Single source of truth lives in the SQL function public.next_invoice_number(year)
+// (see migration 20260413110000_*). The function takes an advisory lock so
+// concurrent callers in the same transaction serialize, and a UNIQUE
+// constraint on invoices.number is the final guard against any race that
+// escapes the lock (e.g. the RPC + INSERT happening in two separate
+// transactions, like this hook's typical flow). useAddInvoice retries on
+// the resulting 23505 below.
+
+async function fetchNextInvoiceNumber(year: number): Promise<string> {
+  const { data, error } = await supabase.rpc("next_invoice_number", { target_year: year });
+  if (error) throw error;
+  if (typeof data !== "string") {
+    throw new Error("next_invoice_number returned an unexpected payload");
+  }
+  return data;
+}
 
 export function useNextInvoiceNumber() {
   return useQuery({
     queryKey: ["next-invoice-number"],
-    queryFn: async () => {
-      const year = new Date().getFullYear();
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("number")
-        .like("number", `FT ${year}/%`)
-        .order("created_at", { ascending: false })
-        .limit(1);
-      if (error) throw error;
-
-      let nextNum = 1;
-      if (data && data.length > 0) {
-        const lastNumber = data[0].number;
-        const match = lastNumber.match(/\/(\d+)$/);
-        if (match) nextNum = parseInt(match[1], 10) + 1;
-      }
-      return `FT ${year}/${String(nextNum).padStart(3, '0')}`;
-    },
+    queryFn: () => fetchNextInvoiceNumber(new Date().getFullYear()),
   });
 }
 
