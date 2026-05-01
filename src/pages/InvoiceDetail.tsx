@@ -312,6 +312,16 @@ export default function InvoiceDetail() {
         if (result.spawnedSubscriptionIds.length > 0) {
           parts.push(`${result.spawnedSubscriptionIds.length} nova(s) subscrição(ões) criada(s)`);
         }
+        if (result.cascadedSubscriptionIds.length > 0) {
+          // Linha removida arrastou consigo a subscrição que tinha
+          // criado: aviso o user (foi para /lixo, recuperável).
+          const n = result.cascadedSubscriptionIds.length;
+          parts.push(
+            n === 1
+              ? "1 subscrição associada enviada para o /lixo"
+              : `${n} subscrições associadas enviadas para o /lixo`,
+          );
+        }
         toast({
           title: "Itens atualizados!",
           description: parts.length > 0
@@ -587,17 +597,27 @@ export default function InvoiceDetail() {
                     </Button>
                   )}
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Serviço (opcional)</Label>
-                  <Select value={item.serviceId} onValueChange={v => updateEditItem(index, 'serviceId', v)}>
-                    <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
-                    <SelectContent>
-                      {services.map(svc => (
-                        <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Service template picker is only useful as a quick-
+                    fill for NEW lines (sets description + default
+                    price + nudges the spawn frequency). For existing
+                    lines it would just overwrite what's already there
+                    — and we don't store a service_id on invoice_items,
+                    so we can't pre-select the matching template
+                    anyway. Hiding it avoids the confusing "Selecionar
+                    serviço" placeholder on every saved line. */}
+                {!item.id && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Serviço (opcional, preenche descrição e preço)</Label>
+                    <Select value={item.serviceId} onValueChange={v => updateEditItem(index, 'serviceId', v)}>
+                      <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
+                      <SelectContent>
+                        {services.map(svc => (
+                          <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-1">
                   <Label className="text-xs">Descrição</Label>
                   <Input value={item.description} onChange={e => updateEditItem(index, 'description', e.target.value)} />
