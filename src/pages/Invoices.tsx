@@ -17,9 +17,11 @@ export default function Invoices() {
   const [toDate, setToDate] = useState("");
 
   const filtered = invoices.filter(invoice => {
+    const lowerSearch = search.toLowerCase();
     const matchesSearch =
-      invoice.number.toLowerCase().includes(search.toLowerCase()) ||
-      (invoice.clients?.company?.toLowerCase().includes(search.toLowerCase()) ?? false);
+      invoice.number.toLowerCase().includes(lowerSearch) ||
+      (invoice.clients?.company?.toLowerCase().includes(lowerSearch) ?? false) ||
+      (invoice.clients?.name?.toLowerCase().includes(lowerSearch) ?? false);
     const matchesStatus = statusFilter === "all" || invoice.status === statusFilter;
     const matchesFrom = !fromDate || invoice.issue_date >= fromDate;
     const matchesTo = !toDate || invoice.issue_date <= toDate;

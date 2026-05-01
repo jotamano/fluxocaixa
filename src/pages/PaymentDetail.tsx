@@ -105,7 +105,7 @@ export default function PaymentDetail() {
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-5 shadow-card">
           <p className="text-sm text-muted-foreground">Cliente</p>
-          <p className="mt-2 text-lg font-semibold text-card-foreground">{client?.company || "Sem cliente"}</p>
+          <p className="mt-2 text-lg font-semibold text-card-foreground">{client?.company || client?.name || "Sem cliente"}</p>
           {client && <Link to={`/clientes/${client.id}`} className="mt-2 inline-block text-sm text-primary hover:underline">Abrir ficha do cliente</Link>}
         </div>
         <div className="rounded-xl border border-border bg-card p-5 shadow-card">

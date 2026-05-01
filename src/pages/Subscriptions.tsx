@@ -14,7 +14,7 @@ import {
   useNextInvoiceNumber,
   useSubscriptionStats,
 } from "@/hooks/use-data";
-import { frequencyLabels, formatCurrency, frequencyDays, type SubscriptionFrequency } from "@/lib/data";
+import { frequencyLabels, formatCurrency, frequencyDays, getClientLabel, type SubscriptionFrequency } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -284,7 +284,7 @@ export default function Subscriptions() {
               {sub.name} <ExternalLink className="h-3 w-3 opacity-50" />
             </Link>
             <p className="text-xs text-muted-foreground truncate">
-              {sub.clients?.company || sub.clients?.name || "Sem cliente"}
+              {getClientLabel(sub)}
             </p>
           </div>
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold border whitespace-nowrap ${

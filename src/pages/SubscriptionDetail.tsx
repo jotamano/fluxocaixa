@@ -8,7 +8,7 @@ import {
   useSubscriptionPriceHistory,
 } from "@/hooks/use-data";
 import type { SubscriptionItem } from "@/hooks/use-data";
-import { formatCurrency, frequencyLabels } from "@/lib/data";
+import { formatCurrency, frequencyLabels, getClientLabel } from "@/lib/data";
 import { StatusBadge } from "@/components/StatusBadge";
 
 const KIND_LABELS: Record<SubscriptionItem["kind"], string> = {
@@ -49,8 +49,8 @@ export default function SubscriptionDetail() {
           <div>
             <h1 className="text-2xl font-display font-bold text-foreground">{sub.name}</h1>
             <p className="text-sm text-muted-foreground">
-              <Link to={`/clientes/${sub.client_id}`} className="hover:underline">{sub.clients?.company}</Link>
-              {sub.clients?.name ? ` · ${sub.clients.name}` : ""}
+              <Link to={`/clientes/${sub.client_id}`} className="hover:underline">{getClientLabel(sub)}</Link>
+              {sub.clients?.company && sub.clients?.name ? ` · ${sub.clients.name}` : ""}
             </p>
           </div>
           <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold border ${
