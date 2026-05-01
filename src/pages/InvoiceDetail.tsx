@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import type { Subscription } from "@/hooks/use-data";
-import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions } from "@/hooks/use-data";
+import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions, useClientSubscriptionItems } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, methodLabels, frequencyLabels, type SubscriptionFrequency } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
@@ -20,6 +20,11 @@ const MONTHS_PT = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
+
+// Sentinel value used by the per-new-line frequency picker to signal
+// "don't spawn a subscription for this line". Radix Select disallows
+// the empty string as an item value, so we use a non-empty token.
+const NO_SPAWN = "__none__";
 
 interface EditItem {
   // Carry the row's DB id when it already exists. Without this the
@@ -31,10 +36,18 @@ interface EditItem {
   description: string;
   quantity: number;
   unitPrice: number;
-  // Only used on NEW lines (no id) when the invoice is part of a
-  // recurring flow: the user picks per-line frequency and we spawn
-  // one fresh subscription per new line on save.
-  newLineFrequency?: SubscriptionFrequency;
+  // Per-new-line picker for spawning subscriptions. `undefined` = use
+  // the page-level default; `NO_SPAWN` = explicitly skip.
+  newLineFrequency?: SubscriptionFrequency | typeof NO_SPAWN;
+  // Only meaningful for EXISTING lines (id set):
+  //   - undefined → don't touch the link column on save
+  //   - string    → user picked a sub_item to link to
+  //   - null      → user explicitly unlinked
+  linkChange?: string | null;
+  // The link as it currently exists in the DB; populated when the
+  // editor opens. Used to render the "Ligar a subscrição..." button
+  // text vs. "Ligado a ...".
+  currentLink?: string | null;
 }
 
 export default function InvoiceDetail() {
@@ -55,9 +68,15 @@ export default function InvoiceDetail() {
   const [editForm, setEditForm] = useState({ issue_date: '', due_date: '', notes: '', status: '' });
   const [editItemsOpen, setEditItemsOpen] = useState(false);
   const [editItems, setEditItems] = useState<EditItem[]>([]);
+  // index of the line whose link picker is open (null = closed).
+  const [linkPickerForIndex, setLinkPickerForIndex] = useState<number | null>(null);
 
   const invoice = useMemo(() => invoices.find(item => item.id === id), [invoices, id]);
   const invoicePayments = useMemo(() => payments.filter(payment => payment.invoice_id === id), [payments, id]);
+  // All sub_items belonging to this invoice's client. Powers the
+  // "Ligar a subscrição..." picker. Empty when the invoice has no
+  // client_id, which is also when we don't show the picker UI at all.
+  const { data: clientSubItems = [] } = useClientSubscriptionItems(invoice?.client_id ?? null);
 
   // Subscriptions actually associated with this invoice:
   //   1. invoice.subscription_id  — set on cron-generated invoices
@@ -164,14 +183,16 @@ export default function InvoiceDetail() {
       description: item.description,
       quantity: item.quantity,
       unitPrice: Number(item.unit_price),
+      currentLink: item.source_subscription_item_id ?? null,
     })));
+    setLinkPickerForIndex(null);
     setEditItemsOpen(true);
   };
 
-  const updateEditItem = (index: number, field: keyof EditItem, value: string | number) => {
+  const updateEditItem = (index: number, field: keyof EditItem, value: string | number | null) => {
     setEditItems(prev => prev.map((item, i) => {
       if (i !== index) return item;
-      const updated = { ...item, [field]: value };
+      const updated = { ...item, [field]: value } as EditItem;
       if (field === 'serviceId') {
         const svc = services.find(s => s.id === value);
         if (svc) {
@@ -202,14 +223,18 @@ export default function InvoiceDetail() {
     // is a historical record — we don't retroactively change the
     // subscription pricing based on changes to a paid invoice.
     const syncToSubscriptions = invoice.status !== "paid";
-    const hasNewLines = editItems.some(i => !i.id);
-    const shouldSpawn = isRecurringInvoice && hasNewLines && syncToSubscriptions;
+    // We spawn from the editor whenever there's a client to attach
+    // the new sub to AND the invoice is still editable. Per-line
+    // picker decides which lines actually become subscriptions.
+    const shouldSpawn = !!invoice.client_id
+      && editItems.some(i => !i.id)
+      && syncToSubscriptions;
 
     updateItems.mutate({
       invoiceId: invoice.id,
       syncToSubscriptions,
       spawnSubscriptionForNewLines: shouldSpawn
-        ? { clientId: invoice.client_id, defaultFrequency: defaultSpawnFrequency }
+        ? { clientId: invoice.client_id }
         : undefined,
       items: editItems.map((i, idx) => ({
         id: i.id,
@@ -217,10 +242,18 @@ export default function InvoiceDetail() {
         quantity: i.quantity,
         unit_price: i.unitPrice,
         position: idx,
-        newLineFrequency: i.newLineFrequency,
+        // NO_SPAWN sentinel maps to "leave undefined"; the mutation
+        // skips spawning for any line whose freq is falsy.
+        newLineFrequency:
+          i.newLineFrequency && i.newLineFrequency !== NO_SPAWN
+            ? i.newLineFrequency
+            : undefined,
         newLineServiceName: i.serviceId
           ? services.find(s => s.id === i.serviceId)?.name
           : undefined,
+        // Manual link override: only present on existing rows where
+        // the user opened the picker and chose something.
+        linkToSubscriptionItemId: i.id ? i.linkChange : undefined,
       })),
     }, {
       onSuccess: result => {
@@ -498,27 +531,50 @@ export default function InvoiceDetail() {
                     <Input type="number" min={0} step="0.01" value={item.unitPrice} onChange={e => updateEditItem(index, 'unitPrice', Number(e.target.value))} />
                   </div>
                 </div>
-                {/* Frequency picker only for NEW lines on a recurring
-                    invoice. Existing lines never need this — their
-                    frequency is already pinned on the linked sub. */}
-                {!item.id && isRecurringInvoice && (
+                {/* Frequency picker for NEW lines. Visible whenever
+                    the invoice has a client to attach the new sub to.
+                    Default is "Não criar subscrição" unless this
+                    invoice already has at least one linked sub, in
+                    which case we default to that flow's frequency. */}
+                {!item.id && invoice.client_id && (
                   <div className="space-y-1">
-                    <Label className="text-xs">Frequência (nova subscrição)</Label>
+                    <Label className="text-xs">Subscrição para esta linha</Label>
                     <Select
-                      value={item.newLineFrequency ?? defaultSpawnFrequency}
+                      value={
+                        item.newLineFrequency
+                          ?? (isRecurringInvoice ? defaultSpawnFrequency : NO_SPAWN)
+                      }
                       onValueChange={v => updateEditItem(index, 'newLineFrequency', v)}
                     >
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
+                        <SelectItem value={NO_SPAWN}>Não criar subscrição</SelectItem>
                         {(Object.entries(frequencyLabels) as [SubscriptionFrequency, string][]).map(([freq, label]) => (
-                          <SelectItem key={freq} value={freq}>{label}</SelectItem>
+                          <SelectItem key={freq} value={freq}>Criar subscrição {label.toLowerCase()}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      Esta linha vai criar uma nova subscrição ao guardar.
+                      {(item.newLineFrequency ?? (isRecurringInvoice ? defaultSpawnFrequency : NO_SPAWN)) === NO_SPAWN
+                        ? "Esta linha entra apenas na fatura."
+                        : "Esta linha vai também criar uma nova subscrição ao guardar."}
                     </p>
                   </div>
+                )}
+                {/* Link picker for EXISTING lines. Lets the user
+                    attach an invoice line to one of the client's
+                    existing subscription_items so future edits sync
+                    in both directions. Only shown when the invoice
+                    has a client (otherwise there are no subs to pick
+                    from). */}
+                {item.id && invoice.client_id && (
+                  <LinkSubItemPicker
+                    line={item}
+                    options={clientSubItems}
+                    open={linkPickerForIndex === index}
+                    setOpen={(open) => setLinkPickerForIndex(open ? index : null)}
+                    onChange={(value) => updateEditItem(index, 'linkChange', value)}
+                  />
                 )}
               </div>
             ))}
@@ -582,5 +638,75 @@ function SubscriptionRow({ subscription, badge }: { subscription: Subscription; 
         </span>
       </div>
     </Link>
+  );
+}
+
+interface LinkSubItemPickerProps {
+  line: EditItem;
+  options: import("@/hooks/use-data").SubscriptionItemWithSubscription[];
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  onChange: (value: string | null) => void;
+}
+
+/**
+ * Inline picker that lets the user attach an existing invoice line to
+ * one of the client's subscription_items. Renders a status row + an
+ * expand toggle; when expanded, shows a dropdown of all available
+ * sub_items, grouped by parent subscription. Selecting an item stages
+ * the link change in the parent's editItems state — it's only
+ * persisted when the user hits "Guardar itens".
+ */
+function LinkSubItemPicker({ line, options, open, setOpen, onChange }: LinkSubItemPickerProps) {
+  // Effective link = uncommitted change OR the link as it exists in DB.
+  const effective: string | null = line.linkChange !== undefined ? line.linkChange : (line.currentLink ?? null);
+  const linkedItem = effective ? options.find(o => o.id === effective) : null;
+
+  const statusText = linkedItem
+    ? `Ligado a: ${linkedItem.subscriptions?.name ?? "?"} → ${linkedItem.description}`
+    : "Não ligado a nenhuma subscrição";
+
+  return (
+    <div className="space-y-1 rounded-md border border-dashed border-border p-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground truncate">{statusText}</p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs"
+          onClick={() => setOpen(!open)}
+        >
+          {open ? "Fechar" : (linkedItem ? "Alterar" : "Ligar a subscrição...")}
+        </Button>
+      </div>
+      {open && (
+        <div className="space-y-1 pt-1">
+          {options.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Este cliente não tem subscrições.</p>
+          ) : (
+            <>
+              <Select
+                value={effective ?? "__unlink__"}
+                onValueChange={v => onChange(v === "__unlink__" ? null : v)}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__unlink__">Não ligado</SelectItem>
+                  {options.map(opt => (
+                    <SelectItem key={opt.id} value={opt.id}>
+                      {opt.subscriptions?.name ?? "?"} → {opt.description}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Ao ligar, futuras edições nesta linha (preço, descrição) sincronizam para a subscrição enquanto a fatura não estiver paga.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

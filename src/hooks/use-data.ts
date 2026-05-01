@@ -294,6 +294,13 @@ export interface UpdateInvoiceItemInput {
   newLineFrequency?: import("@/lib/data").SubscriptionFrequency;
   // Service hint, only for spawned subscriptions on new lines.
   newLineServiceName?: string;
+  // Manual link override. When the user picks "Ligar a subscrição..."
+  // on an existing line, this is the chosen subscription_item.id.
+  // Applied to invoice_items.source_subscription_item_id on save and,
+  // if syncToSubscriptions is true, the line's edits also flow into
+  // that sub_item. Setting it to `null` (vs `undefined`) means the
+  // user explicitly *unlinked* the row — we'll clear the column.
+  linkToSubscriptionItemId?: string | null;
 }
 
 export interface UpdateInvoiceItemsResult {
@@ -326,15 +333,14 @@ export function useUpdateInvoiceItems() {
       // subscription_items linked from these invoice rows. Caller is
       // responsible for the "invoice still editable" check.
       syncToSubscriptions?: boolean;
-      // When set, NEW lines (no id) will spawn one fresh subscription
-      // per line. The caller provides client_id and a default
-      // frequency; lines may override the frequency individually via
-      // `newLineFrequency`. Skipped silently when the invoice was
-      // soft-deleted between page load and save, or when client_id is
-      // missing.
+      // When set, NEW lines (no id) MAY spawn one fresh subscription
+      // per line. The actual decision is per-line: only lines whose
+      // `newLineFrequency` resolves to a real frequency are spawned.
+      // `defaultFrequency` is optional — when omitted, spawning is
+      // strictly opt-in via the per-line picker.
       spawnSubscriptionForNewLines?: {
         clientId: string;
-        defaultFrequency: import("@/lib/data").SubscriptionFrequency;
+        defaultFrequency?: import("@/lib/data").SubscriptionFrequency;
       };
     }
   >({
@@ -362,17 +368,21 @@ export function useUpdateInvoiceItems() {
 
       if (updates.length > 0) {
         const results = await Promise.all(
-          updates.map(u =>
-            supabase
-              .from("invoice_items")
-              .update({
-                description: u.description,
-                quantity: u.quantity,
-                unit_price: u.unit_price,
-                position: u.position,
-              })
-              .eq("id", u.id!),
-          ),
+          updates.map(u => {
+            const patch: TablesUpdate<"invoice_items"> = {
+              description: u.description,
+              quantity: u.quantity,
+              unit_price: u.unit_price,
+              position: u.position,
+            };
+            // `undefined` = caller didn't touch the link — leave column
+            // alone. `null` = explicit unlink. A string = explicit
+            // link. Always pass through what the caller chose.
+            if (u.linkToSubscriptionItemId !== undefined) {
+              patch.source_subscription_item_id = u.linkToSubscriptionItemId;
+            }
+            return supabase.from("invoice_items").update(patch).eq("id", u.id!);
+          }),
         );
         const firstError = results.find(r => r.error)?.error;
         if (firstError) throw firstError;
@@ -481,12 +491,17 @@ export function useUpdateInvoiceItems() {
 
       // 4. Spawn a subscription for each new line — only when caller
       //    explicitly opted in. Mirrors NewInvoice's per-line model.
+      //    Per-line `newLineFrequency` is the explicit opt-in: lines
+      //    without a frequency picked are skipped (the user told us
+      //    "this new line is just an invoice item, don't make a sub").
       if (spawnSubscriptionForNewLines && insertedRows.length > 0) {
         const { clientId, defaultFrequency } = spawnSubscriptionForNewLines;
         const today = new Date().toISOString().split("T")[0];
 
         for (const { input, row } of insertedRows) {
-          const frequency = input.newLineFrequency ?? defaultFrequency;
+          const chosen = input.newLineFrequency ?? defaultFrequency;
+          if (!chosen) continue; // explicit "Não criar subscrição"
+          const frequency = chosen;
           // Approximate next_billing_date: today + one period. The
           // exact cadence is later enforced by the cron's interval
           // arithmetic, so this only matters for the first run.
@@ -974,6 +989,33 @@ export function useSubscriptionItems(subscriptionId: string | undefined) {
         .order("position");
       if (error) throw error;
       return data as SubscriptionItem[];
+    },
+  });
+}
+
+/**
+ * All subscription_items belonging to a single client, with the parent
+ * subscription joined. Used by the invoice editor's "Ligar a
+ * subscrição..." picker, where the user can attach an existing invoice
+ * line to any of the client's sub_items so future edits sync.
+ */
+export type SubscriptionItemWithSubscription = SubscriptionItem & {
+  subscriptions: Tables<"subscriptions"> | null;
+};
+
+export function useClientSubscriptionItems(clientId: string | undefined | null) {
+  return useQuery({
+    queryKey: ["subscription_items", "by-client", clientId],
+    enabled: !!clientId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subscription_items")
+        .select("*, subscriptions!inner(*)")
+        .eq("subscriptions.client_id", clientId!)
+        .is("subscriptions.deleted_at", null)
+        .order("position");
+      if (error) throw error;
+      return (data ?? []) as SubscriptionItemWithSubscription[];
     },
   });
 }
