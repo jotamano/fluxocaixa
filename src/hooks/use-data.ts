@@ -840,18 +840,119 @@ export function useAddSubscriptionItem() {
   });
 }
 
+/**
+ * Result of a subscription_item update. `syncedInvoiceId` is non-null
+ * when the change was propagated back into the source invoice line —
+ * useful so callers can show a toast confirming the sync.
+ */
+export interface UpdateSubscriptionItemResult {
+  item: SubscriptionItem;
+  syncedInvoiceId: string | null;
+}
+
+/**
+ * Update a subscription_item and, when the item is linked to an
+ * invoice line via `source_invoice_item_id`, mirror the change back
+ * into that invoice line — but only if the source invoice is still
+ * editable (not paid and without any payments). This is the inverse
+ * of the invoice→subscription sync added in PR #23.
+ *
+ * Cron-generated invoices are NOT touched: the cron writes new
+ * invoice_items without `source_invoice_item_id` back-link, and only
+ * the FIRST invoice (the one created by NewInvoice that spawned the
+ * subscription) carries that link.
+ */
 export function useUpdateSubscriptionItem() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: TablesUpdate<"subscription_items"> }) => {
-      const { data, error } = await supabase.from("subscription_items").update(updates).eq("id", id).select().single();
+  return useMutation<UpdateSubscriptionItemResult, Error, { id: string; updates: TablesUpdate<"subscription_items"> }>({
+    mutationFn: async ({ id, updates }) => {
+      // 1. Apply the update and capture the new row.
+      const { data: updatedItem, error } = await supabase
+        .from("subscription_items")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
       if (error) throw error;
-      return data;
+
+      // 2. Reverse sync. Bail early when the row has no link.
+      const sourceInvoiceItemId = updatedItem.source_invoice_item_id;
+      if (!sourceInvoiceItemId) {
+        return { item: updatedItem as SubscriptionItem, syncedInvoiceId: null };
+      }
+
+      // 3. Look up the linked invoice_item to find its parent invoice.
+      const { data: linkedInvoiceItem, error: linkErr } = await supabase
+        .from("invoice_items")
+        .select("id, invoice_id, description, unit_price, quantity")
+        .eq("id", sourceInvoiceItemId)
+        .maybeSingle();
+      if (linkErr) throw linkErr;
+      if (!linkedInvoiceItem) {
+        return { item: updatedItem as SubscriptionItem, syncedInvoiceId: null };
+      }
+
+      // 4. Decide whether the parent invoice is still editable.
+      //    Mirror logic to the invoice→sub sync: skip when paid OR
+      //    when any payment is attached (covers partially_paid where
+      //    money already changed hands).
+      const [{ data: parentInvoice, error: invErr }, { data: paymentRows, error: payErr }] = await Promise.all([
+        supabase
+          .from("invoices")
+          .select("id, status, deleted_at")
+          .eq("id", linkedInvoiceItem.invoice_id)
+          .maybeSingle(),
+        supabase
+          .from("payments")
+          .select("id")
+          .eq("invoice_id", linkedInvoiceItem.invoice_id)
+          .is("deleted_at", null)
+          .limit(1),
+      ]);
+      if (invErr) throw invErr;
+      if (payErr) throw payErr;
+
+      const editable =
+        parentInvoice
+        && parentInvoice.deleted_at == null
+        && parentInvoice.status !== "paid"
+        && (paymentRows ?? []).length === 0;
+
+      if (!editable) {
+        return { item: updatedItem as SubscriptionItem, syncedInvoiceId: null };
+      }
+
+      // 5. Build the patch. Only fields that actually changed are
+      //    mirrored; quantity stays as-is on the invoice line because
+      //    subscription_items don't have a quantity concept.
+      const patch: TablesUpdate<"invoice_items"> = {};
+      if (typeof updates.description === "string" && updates.description !== linkedInvoiceItem.description) {
+        patch.description = updates.description;
+      }
+      if (updates.amount !== undefined && Number(updates.amount) !== Number(linkedInvoiceItem.unit_price)) {
+        patch.unit_price = Number(updates.amount);
+      }
+      if (Object.keys(patch).length === 0) {
+        return { item: updatedItem as SubscriptionItem, syncedInvoiceId: null };
+      }
+
+      const { error: applyErr } = await supabase
+        .from("invoice_items")
+        .update(patch)
+        .eq("id", linkedInvoiceItem.id);
+      if (applyErr) throw applyErr;
+
+      // 6. The invoice total changed → re-evaluate status (e.g. it may
+      //    flip between pending/overdue/partially_paid).
+      await recalcInvoiceStatus(linkedInvoiceItem.invoice_id);
+
+      return { item: updatedItem as SubscriptionItem, syncedInvoiceId: linkedInvoiceItem.invoice_id };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["subscription_items"] });
       qc.invalidateQueries({ queryKey: ["subscription_price_history"] });
       qc.invalidateQueries({ queryKey: ["subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
     },
   });
 }
