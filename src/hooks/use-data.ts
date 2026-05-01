@@ -800,6 +800,18 @@ export function useUpdateSubscription() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: TablesUpdate<"subscriptions"> }) => {
+      // Read the previous subscription so we can detect which fields
+      // actually changed and cascade only those. The popup editor in
+      // /subscricoes always sends the whole form so a naive diff on
+      // updates alone would mis-fire (e.g. "name" is technically
+      // present but identical to oldSub.name).
+      const { data: oldSub, error: oldErr } = await supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("id", id)
+        .single();
+      if (oldErr) throw oldErr;
+
       const { data, error } = await supabase
         .from("subscriptions")
         .update(updates)
@@ -807,9 +819,99 @@ export function useUpdateSubscription() {
         .select("*, clients(*)")
         .single();
       if (error) throw error;
+
+      // Cascade name/amount edits down to the recurring sub_item and
+      // out to every still-editable linked invoice. We only auto-edit
+      // when the sub has the canonical shape (1 recurring + optional
+      // setup) the popup is designed for; multi-line subscriptions
+      // require manual line-level edits via SubscriptionDetail to
+      // avoid clobbering the user's custom breakdown.
+      const amountChanged =
+        updates.amount !== undefined && Number(updates.amount) !== Number(oldSub.amount);
+      const nameChanged =
+        typeof updates.name === "string" && updates.name !== oldSub.name;
+
+      if (amountChanged || nameChanged) {
+        const { data: subItems, error: siErr } = await supabase
+          .from("subscription_items")
+          .select("*")
+          .eq("subscription_id", id);
+        if (siErr) throw siErr;
+
+        const recurringItems = (subItems ?? []).filter(si => si.kind === "recurring");
+
+        // Recurring line: cascade amount + (rename only if seed-untouched).
+        if (recurringItems.length === 1) {
+          const recurringItem = recurringItems[0];
+          const itemUpdates: TablesUpdate<"subscription_items"> = {};
+          if (amountChanged) itemUpdates.amount = Number(updates.amount);
+          // Skip the rename if the user already customized the line
+          // description in SubscriptionDetail — explicit edits there
+          // win over the popup's lighter "name" field.
+          if (nameChanged && recurringItem.description === oldSub.name) {
+            itemUpdates.description = updates.name as string;
+          }
+
+          if (Object.keys(itemUpdates).length > 0) {
+            const { data: updatedItem, error: itemErr } = await supabase
+              .from("subscription_items")
+              .update(itemUpdates)
+              .eq("id", recurringItem.id)
+              .select()
+              .single();
+            if (itemErr) throw itemErr;
+
+            await syncSubItemToInvoices({
+              subItemId: updatedItem.id,
+              fallbackInvoiceItemId:
+                updatedItem.source_invoice_item_id ?? recurringItem.source_invoice_item_id ?? null,
+              oldDescription: recurringItem.description,
+              newDescription: updatedItem.description,
+              oldAmount: Number(recurringItem.amount),
+              newAmount: Number(updatedItem.amount),
+            });
+          }
+        }
+
+        // Setup line: rename "Setup {oldName}" → "Setup {newName}" so
+        // the linked invoice_item flips with prefix-replace too.
+        if (nameChanged) {
+          const oldSetupDesc = `Setup ${oldSub.name}`;
+          const newSetupDesc = `Setup ${updates.name}`;
+          const setupItems = (subItems ?? []).filter(
+            si => si.kind === "setup" && si.description === oldSetupDesc,
+          );
+
+          for (const setupItem of setupItems) {
+            const { data: updatedSetup, error: setupErr } = await supabase
+              .from("subscription_items")
+              .update({ description: newSetupDesc })
+              .eq("id", setupItem.id)
+              .select()
+              .single();
+            if (setupErr) throw setupErr;
+
+            await syncSubItemToInvoices({
+              subItemId: updatedSetup.id,
+              fallbackInvoiceItemId:
+                updatedSetup.source_invoice_item_id ?? setupItem.source_invoice_item_id ?? null,
+              oldDescription: setupItem.description,
+              newDescription: updatedSetup.description,
+              oldAmount: Number(setupItem.amount),
+              newAmount: Number(setupItem.amount),
+            });
+          }
+        }
+      }
+
       return data as Subscription;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["subscriptions"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["subscription_items"] });
+      qc.invalidateQueries({ queryKey: ["subscription_price_history"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
   });
 }
 
@@ -967,6 +1069,114 @@ export function useNextInvoiceNumber() {
 
 // ─── Helpers ───
 
+/**
+ * Propagate a subscription_item change to every linked invoice_item
+ * whose parent invoice is still editable (not soft-deleted, not paid,
+ * no active payments). Returns the set of invoice IDs that were
+ * actually patched.
+ *
+ * Description sync uses **prefix-replace** so the appended period
+ * suffix on cron / NewInvoice items survives a rename: if a linked
+ * invoice_item description starts with the OLD sub_item description,
+ * only that prefix is replaced. Invoice lines that have been hand-
+ * edited away from the prefix are left alone — explicit customization
+ * wins over the cascade.
+ *
+ * Both editors that mutate sub_items (the SubscriptionDetail page and
+ * the Subscriptions popup) funnel through this function so behaviour
+ * stays consistent across surfaces.
+ */
+async function syncSubItemToInvoices(opts: {
+  subItemId: string;
+  fallbackInvoiceItemId: string | null;
+  oldDescription: string;
+  newDescription: string;
+  oldAmount: number;
+  newAmount: number;
+}): Promise<string[]> {
+  const candidateInvoiceItemIds = new Set<string>();
+
+  const { data: byForwardLink, error: fwdErr } = await supabase
+    .from("invoice_items")
+    .select("id")
+    .eq("source_subscription_item_id", opts.subItemId);
+  if (fwdErr) throw fwdErr;
+  for (const r of byForwardLink ?? []) candidateInvoiceItemIds.add(r.id);
+
+  if (opts.fallbackInvoiceItemId) {
+    candidateInvoiceItemIds.add(opts.fallbackInvoiceItemId);
+  }
+
+  if (candidateInvoiceItemIds.size === 0) return [];
+
+  const ids = Array.from(candidateInvoiceItemIds);
+  const { data: linkedItems, error: linkErr } = await supabase
+    .from("invoice_items")
+    .select("id, invoice_id, description, unit_price, quantity")
+    .in("id", ids);
+  if (linkErr) throw linkErr;
+  if (!linkedItems || linkedItems.length === 0) return [];
+
+  const invoiceIds = Array.from(new Set(linkedItems.map(li => li.invoice_id)));
+  const [{ data: parentInvoices, error: invErr }, { data: paymentRows, error: payErr }] = await Promise.all([
+    supabase
+      .from("invoices")
+      .select("id, status, deleted_at")
+      .in("id", invoiceIds),
+    supabase
+      .from("payments")
+      .select("invoice_id")
+      .in("invoice_id", invoiceIds)
+      .is("deleted_at", null),
+  ]);
+  if (invErr) throw invErr;
+  if (payErr) throw payErr;
+
+  const invoicesById = new Map((parentInvoices ?? []).map(i => [i.id, i]));
+  const paymentsByInvoice = new Set((paymentRows ?? []).map(p => p.invoice_id as string));
+
+  const descriptionChanged = opts.newDescription !== opts.oldDescription;
+  const amountChanged = Number(opts.newAmount) !== Number(opts.oldAmount);
+  const syncedInvoiceIds: string[] = [];
+
+  for (const linkedItem of linkedItems) {
+    const parent = invoicesById.get(linkedItem.invoice_id);
+    const editable =
+      parent
+      && parent.deleted_at == null
+      && parent.status !== "paid"
+      && !paymentsByInvoice.has(parent.id);
+    if (!editable) continue;
+
+    const patch: TablesUpdate<"invoice_items"> = {};
+
+    if (amountChanged && Number(linkedItem.unit_price) !== Number(opts.newAmount)) {
+      patch.unit_price = Number(opts.newAmount);
+    }
+
+    if (descriptionChanged && linkedItem.description.startsWith(opts.oldDescription)) {
+      const suffix = linkedItem.description.slice(opts.oldDescription.length);
+      const next = opts.newDescription + suffix;
+      if (next !== linkedItem.description) {
+        patch.description = next;
+      }
+    }
+
+    if (Object.keys(patch).length === 0) continue;
+
+    const { error: applyErr } = await supabase
+      .from("invoice_items")
+      .update(patch)
+      .eq("id", linkedItem.id);
+    if (applyErr) throw applyErr;
+
+    await recalcInvoiceStatus(linkedItem.invoice_id);
+    syncedInvoiceIds.push(linkedItem.invoice_id);
+  }
+
+  return syncedInvoiceIds;
+}
+
 async function recalcInvoiceStatus(invoiceId: string) {
   const [invoiceItemsResult, invoiceResult, invoicePaymentsResult] = await Promise.all([
     supabase.from("invoice_items").select("quantity, unit_price").eq("invoice_id", invoiceId),
@@ -1103,7 +1313,19 @@ export function useUpdateSubscriptionItem() {
   const qc = useQueryClient();
   return useMutation<UpdateSubscriptionItemResult, Error, { id: string; updates: TablesUpdate<"subscription_items"> }>({
     mutationFn: async ({ id, updates }) => {
-      // 1. Apply the update and capture the new row.
+      // 1. Read the row BEFORE applying changes so we can do a
+      //    prefix-replace on linked invoice descriptions (preserves
+      //    the appended " — Mês Ano" period suffix on each
+      //    cron-issued line). Without this snapshot we'd have to do
+      //    a full overwrite and lose every per-line customization.
+      const { data: oldItem, error: oldErr } = await supabase
+        .from("subscription_items")
+        .select("*")
+        .eq("id", id)
+        .single();
+      if (oldErr) throw oldErr;
+
+      // 2. Apply the update and capture the new row.
       const { data: updatedItem, error } = await supabase
         .from("subscription_items")
         .update(updates)
@@ -1112,93 +1334,20 @@ export function useUpdateSubscriptionItem() {
         .single();
       if (error) throw error;
 
-      // 2. Find every invoice_item that points back to this sub_item.
-      //    The bidirectional column is the canonical link; the legacy
-      //    sub_items.source_invoice_item_id is also covered as a
-      //    fallback for rows the migration backfill couldn't repair
-      //    (very old data, edge cases).
-      const candidateInvoiceItemIds = new Set<string>();
+      // 3. Cascade to every linked invoice_item via the shared
+      //    helper. The helper handles both directions of the
+      //    link (forward via source_subscription_item_id and the
+      //    legacy fallback via sub_item.source_invoice_item_id).
+      const syncedInvoiceIds = await syncSubItemToInvoices({
+        subItemId: updatedItem.id,
+        fallbackInvoiceItemId:
+          updatedItem.source_invoice_item_id ?? oldItem.source_invoice_item_id ?? null,
+        oldDescription: oldItem.description,
+        newDescription: updatedItem.description,
+        oldAmount: Number(oldItem.amount),
+        newAmount: Number(updatedItem.amount),
+      });
 
-      const { data: byForwardLink, error: fwdErr } = await supabase
-        .from("invoice_items")
-        .select("id")
-        .eq("source_subscription_item_id", id);
-      if (fwdErr) throw fwdErr;
-      for (const r of byForwardLink ?? []) candidateInvoiceItemIds.add(r.id);
-
-      if (updatedItem.source_invoice_item_id) {
-        candidateInvoiceItemIds.add(updatedItem.source_invoice_item_id);
-      }
-
-      if (candidateInvoiceItemIds.size === 0) {
-        return { item: updatedItem as SubscriptionItem, syncedInvoiceId: null };
-      }
-
-      // 3. Pull the candidate invoice_items + their parent invoices in
-      //    one shot.
-      const ids = Array.from(candidateInvoiceItemIds);
-      const { data: linkedItems, error: linkErr } = await supabase
-        .from("invoice_items")
-        .select("id, invoice_id, description, unit_price, quantity")
-        .in("id", ids);
-      if (linkErr) throw linkErr;
-      if (!linkedItems || linkedItems.length === 0) {
-        return { item: updatedItem as SubscriptionItem, syncedInvoiceId: null };
-      }
-
-      const invoiceIds = Array.from(new Set(linkedItems.map(li => li.invoice_id)));
-      const [{ data: parentInvoices, error: invErr }, { data: paymentRows, error: payErr }] = await Promise.all([
-        supabase
-          .from("invoices")
-          .select("id, number, status, deleted_at")
-          .in("id", invoiceIds),
-        supabase
-          .from("payments")
-          .select("invoice_id")
-          .in("invoice_id", invoiceIds)
-          .is("deleted_at", null),
-      ]);
-      if (invErr) throw invErr;
-      if (payErr) throw payErr;
-
-      const invoicesById = new Map((parentInvoices ?? []).map(i => [i.id, i]));
-      const paymentsByInvoice = new Set((paymentRows ?? []).map(p => p.invoice_id as string));
-
-      // 4. For every linked item whose parent is still editable,
-      //    decide what to patch and apply.
-      const syncedInvoiceIds: string[] = [];
-
-      for (const linkedItem of linkedItems) {
-        const parent = invoicesById.get(linkedItem.invoice_id);
-        const editable =
-          parent
-          && parent.deleted_at == null
-          && parent.status !== "paid"
-          && !paymentsByInvoice.has(parent.id);
-        if (!editable) continue;
-
-        const patch: TablesUpdate<"invoice_items"> = {};
-        if (typeof updates.description === "string" && updates.description !== linkedItem.description) {
-          patch.description = updates.description;
-        }
-        if (updates.amount !== undefined && Number(updates.amount) !== Number(linkedItem.unit_price)) {
-          patch.unit_price = Number(updates.amount);
-        }
-        if (Object.keys(patch).length === 0) continue;
-
-        const { error: applyErr } = await supabase
-          .from("invoice_items")
-          .update(patch)
-          .eq("id", linkedItem.id);
-        if (applyErr) throw applyErr;
-
-        await recalcInvoiceStatus(linkedItem.invoice_id);
-        syncedInvoiceIds.push(linkedItem.invoice_id);
-      }
-
-      // Keep the existing API contract for callers (single id) but
-      // pick the first synced invoice. Callers that want the full set
-      // can read the broader list once we expose it.
       return {
         item: updatedItem as SubscriptionItem,
         syncedInvoiceId: syncedInvoiceIds[0] ?? null,

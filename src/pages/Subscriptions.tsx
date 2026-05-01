@@ -156,7 +156,23 @@ export default function Subscriptions() {
             next_billing_date: form.nextBillingDate,
           },
         },
-        { onSuccess: () => handleDialogChange(false) },
+        {
+          onSuccess: () => {
+            handleDialogChange(false);
+            // Confirm the cascade visually so the user knows the
+            // change reached sub_items + linked invoices, not just
+            // the subscription header. Without this toast the
+            // sub-page editor and the popup editor would feel
+            // inconsistent (the page editor already toasts "A
+            // fatura de origem foi também atualizada").
+            toast({
+              title: "Subscrição atualizada",
+              description: "Valor/nome propagados para as faturas em aberto.",
+            });
+          },
+          onError: (err) =>
+            toast({ title: "Erro", description: err.message, variant: "destructive" }),
+        },
       );
     } else {
       addSub.mutate(
