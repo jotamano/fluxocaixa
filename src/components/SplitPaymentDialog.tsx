@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAddPayment, usePayments, type Invoice } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal } from "@/lib/data";
+import { formatCurrency, getInvoiceItemsTotal, getClientLabel } from "@/lib/data";
 import { toast } from "sonner";
 
 type PaymentMethod = "transfer" | "mbway" | "cash" | "card";
@@ -161,7 +161,7 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-card-foreground truncate">
-                          {inv.number} — {inv.clients?.company || "—"}
+                          {inv.number} — {getClientLabel(inv, "—")}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Vence: {new Date(inv.due_date).toLocaleDateString("pt-PT")}

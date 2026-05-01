@@ -90,3 +90,22 @@ export function formatCurrency(value: number): string {
 export function getInvoiceItemsTotal(items: { quantity: number; unit_price: number }[]): number {
   return items.reduce((sum, item) => sum + item.quantity * Number(item.unit_price), 0);
 }
+
+/**
+ * Display label for an entity carrying a joined `clients` row. Falls
+ * back from `company` (the most descriptive label) to `name` (the
+ * contact person) before giving up with "Sem cliente". Prefer this
+ * helper over inline `clients?.company || "Sem cliente"` so empty-
+ * company clients still render usefully (e.g. freelancers without a
+ * registered company).
+ */
+export function getClientLabel(
+  entity: { clients?: { company?: string | null; name?: string | null } | null } | null | undefined,
+  fallback = "Sem cliente",
+): string {
+  const company = entity?.clients?.company?.trim();
+  if (company) return company;
+  const name = entity?.clients?.name?.trim();
+  if (name) return name;
+  return fallback;
+}

@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, LayoutList, LayoutGrid, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSubscriptions, useInvoices } from "@/hooks/use-data";
-import { frequencyLabels, formatCurrency, getInvoiceItemsTotal } from "@/lib/data";
+import { frequencyLabels, formatCurrency, getInvoiceItemsTotal, getClientLabel } from "@/lib/data";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { cn } from "@/lib/utils";
@@ -113,7 +113,7 @@ export default function CalendarPage() {
       const days = getSubscriptionDatesForMonth(sub, currentYear, currentMonth);
       days.forEach(day => {
         if (!map.has(day)) map.set(day, []);
-        map.get(day)!.push({ sub, client: sub.clients?.company || "—" });
+        map.get(day)!.push({ sub, client: getClientLabel(sub, "—") });
       });
     });
     return map;
@@ -348,7 +348,7 @@ export default function CalendarPage() {
                               key={`i-${inv.id}`}
                               to={`/faturas/${inv.id}`}
                               onClick={(e) => e.stopPropagation()}
-                              title={`Fatura ${inv.number} · ${inv.clients?.company ?? ""}`}
+                              title={`Fatura ${inv.number} · ${getClientLabel(inv, "")}`}
                               className={cn(
                                 "truncate rounded px-1.5 py-0.5 text-[10px] leading-tight font-medium hover:opacity-80 transition-opacity",
                                 isSelected
@@ -480,7 +480,7 @@ export default function CalendarPage() {
                           <p className="text-sm font-semibold text-card-foreground">{inv.number}</p>
                           <StatusBadge status={inv.status} />
                         </div>
-                        <p className="text-xs text-muted-foreground">{inv.clients?.company}</p>
+                        <p className="text-xs text-muted-foreground">{getClientLabel(inv)}</p>
                         <p className="text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceItemsTotal(inv.invoice_items))}</p>
                       </Link>
                       <Button
@@ -552,7 +552,6 @@ export default function CalendarPage() {
         onOpenChange={(open) => { if (!open) setPaymentInvoice(null); }}
         invoices={paymentInvoice ? [paymentInvoice] : []}
         initialInvoiceId={paymentInvoice?.id ?? ""}
-        initialAmount={paymentInvoice ? String(getInvoiceItemsTotal(paymentInvoice.invoice_items)) : ""}
         title="Marcar fatura como paga"
       />
     </div>
@@ -589,7 +588,7 @@ function InvoiceListRow({ inv, onMarkPaid }: { inv: Invoice; onMarkPaid: () => v
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="text-sm font-semibold truncate text-card-foreground">{inv.number}</p>
-            <p className="text-xs text-muted-foreground truncate">{inv.clients?.company || "Sem cliente"}</p>
+            <p className="text-xs text-muted-foreground truncate">{getClientLabel(inv)}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <StatusBadge status={inv.status} />
