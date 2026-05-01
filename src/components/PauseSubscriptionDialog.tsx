@@ -66,7 +66,10 @@ export function PauseSubscriptionDialog({ subscriptionId, onClose }: Props) {
         );
       } else if (action === "delete_drafts" && drafts.length > 0) {
         for (const d of drafts) {
-          await deleteInvoice.mutateAsync(d.id);
+          // Drafts shouldn't have payments, but pass cascadePayments
+          // explicitly so this code path stays correct if someone ever
+          // adds payment registration for drafts.
+          await deleteInvoice.mutateAsync({ id: d.id, cascadePayments: true });
         }
       }
 

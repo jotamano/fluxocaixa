@@ -103,6 +103,7 @@ export type Database = {
           client_id: string
           created_at: string
           deleted_at: string | null
+          deleted_via_subscription_id: string | null
           due_date: string
           id: string
           issue_date: string
@@ -115,6 +116,7 @@ export type Database = {
           client_id: string
           created_at?: string
           deleted_at?: string | null
+          deleted_via_subscription_id?: string | null
           due_date?: string
           id?: string
           issue_date?: string
@@ -127,6 +129,7 @@ export type Database = {
           client_id?: string
           created_at?: string
           deleted_at?: string | null
+          deleted_via_subscription_id?: string | null
           due_date?: string
           id?: string
           issue_date?: string
@@ -159,6 +162,7 @@ export type Database = {
           created_at: string
           date: string
           deleted_at: string | null
+          deleted_via_invoice_id: string | null
           id: string
           invoice_id: string | null
           method: Database["public"]["Enums"]["payment_method"]
@@ -170,6 +174,7 @@ export type Database = {
           created_at?: string
           date?: string
           deleted_at?: string | null
+          deleted_via_invoice_id?: string | null
           id?: string
           invoice_id?: string | null
           method?: Database["public"]["Enums"]["payment_method"]
@@ -181,6 +186,7 @@ export type Database = {
           created_at?: string
           date?: string
           deleted_at?: string | null
+          deleted_via_invoice_id?: string | null
           id?: string
           invoice_id?: string | null
           method?: Database["public"]["Enums"]["payment_method"]

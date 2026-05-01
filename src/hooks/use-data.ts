@@ -624,27 +624,210 @@ export function useUpdateInvoiceItems() {
 // is) nor payments — payments stay attached so the financial record on
 // the client side remains coherent. To break the link explicitly the
 // user can edit the payment.
+export interface DeleteInvoiceArgs {
+  id: string;
+  // Whether to soft-delete the invoice's non-deleted payments alongside
+  // the invoice. Default true — keeping payments visible after the
+  // parent invoice is gone almost always confuses the user.
+  cascadePayments?: boolean;
+  // Optional: also soft-delete the source subscription (and its other
+  // unpaid invoices, recursively). Off by default; the InvoiceDetail
+  // confirm dialog exposes this as an explicit checkbox when
+  // invoice.subscription_id is set.
+  cascadeSubscription?: boolean;
+}
+
+export interface DeleteInvoiceResult {
+  cascadedPaymentIds: string[];
+  cascadedSubscriptionId: string | null;
+  cascadedInvoiceIds: string[]; // includes id; plus any sibling invoices when cascadeSubscription
+}
+
 export function useDeleteInvoice() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
+  return useMutation<DeleteInvoiceResult, Error, DeleteInvoiceArgs>({
+    mutationFn: async ({ id, cascadePayments = true, cascadeSubscription = false }) => {
+      const now = new Date().toISOString();
+
+      // Cascade subscription first: soft-deleting the sub will pull in
+      // every other unpaid invoice (and their payments) before we
+      // bother with this one's payments. Skip when off.
+      let cascadedSubscriptionId: string | null = null;
+      const cascadedInvoiceIds: string[] = [id];
+      const cascadedPaymentIds: string[] = [];
+
+      if (cascadeSubscription) {
+        const { data: invoice, error: invErr } = await supabase
+          .from("invoices")
+          .select("subscription_id")
+          .eq("id", id)
+          .single();
+        if (invErr) throw invErr;
+
+        if (invoice.subscription_id) {
+          const sub = await cascadeSoftDeleteSubscription(invoice.subscription_id, now);
+          cascadedSubscriptionId = sub.subscriptionId;
+          cascadedInvoiceIds.push(...sub.invoiceIds.filter(i => i !== id));
+          cascadedPaymentIds.push(...sub.paymentIds);
+        }
+      }
+
+      if (cascadePayments) {
+        const { data: pmts, error: pErr } = await supabase
+          .from("payments")
+          .select("id")
+          .eq("invoice_id", id)
+          .is("deleted_at", null);
+        if (pErr) throw pErr;
+        const ids = (pmts ?? []).map(p => p.id as string);
+        if (ids.length > 0) {
+          const { error: updErr } = await supabase
+            .from("payments")
+            .update({ deleted_at: now, deleted_via_invoice_id: id })
+            .in("id", ids);
+          if (updErr) throw updErr;
+          cascadedPaymentIds.push(...ids);
+        }
+      }
+
       const { error } = await supabase
         .from("invoices")
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ deleted_at: now })
         .eq("id", id);
       if (error) throw error;
+
+      return {
+        cascadedPaymentIds,
+        cascadedSubscriptionId,
+        cascadedInvoiceIds,
+      };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["invoices"] });
       qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
     },
   });
+}
+
+// Helper used by both useDeleteSubscription and useDeleteInvoice (when
+// the user checks "also delete the source subscription"). Soft-deletes
+// the subscription, every still-editable invoice it owns (effective
+// paid check — same as PR #38), and the non-deleted payments on those
+// invoices. Returns the ids it touched so the caller can dedupe.
+async function cascadeSoftDeleteSubscription(
+  subscriptionId: string,
+  now: string,
+): Promise<{ subscriptionId: string; invoiceIds: string[]; paymentIds: string[] }> {
+  // 1. Find candidate invoices (any non-deleted invoice owned by the sub).
+  const { data: invoices, error: invErr } = await supabase
+    .from("invoices")
+    .select("id")
+    .eq("subscription_id", subscriptionId)
+    .is("deleted_at", null);
+  if (invErr) throw invErr;
+
+  const candidateIds = (invoices ?? []).map(i => i.id as string);
+  const cascadedInvoiceIds: string[] = [];
+  const cascadedPaymentIds: string[] = [];
+
+  if (candidateIds.length > 0) {
+    // 2. Compute effective paid status using the same definition as
+    //    syncSubItemToInvoices and the editor lock (PR #37): total > 0
+    //    && paid >= total. Paid invoices are kept (fiscal docs).
+    const [{ data: items, error: itErr }, { data: pmts, error: pErr }] = await Promise.all([
+      supabase
+        .from("invoice_items")
+        .select("invoice_id, quantity, unit_price")
+        .in("invoice_id", candidateIds),
+      supabase
+        .from("payments")
+        .select("id, invoice_id, amount, deleted_at")
+        .in("invoice_id", candidateIds)
+        .is("deleted_at", null),
+    ]);
+    if (itErr) throw itErr;
+    if (pErr) throw pErr;
+
+    const totalByInvoice = new Map<string, number>();
+    for (const it of items ?? []) {
+      totalByInvoice.set(
+        it.invoice_id as string,
+        (totalByInvoice.get(it.invoice_id as string) ?? 0)
+          + Number(it.quantity) * Number(it.unit_price),
+      );
+    }
+    const paidByInvoice = new Map<string, number>();
+    const paymentsByInvoice = new Map<string, string[]>();
+    for (const p of pmts ?? []) {
+      const inv = p.invoice_id as string;
+      paidByInvoice.set(inv, (paidByInvoice.get(inv) ?? 0) + Number(p.amount));
+      const arr = paymentsByInvoice.get(inv) ?? [];
+      arr.push(p.id as string);
+      paymentsByInvoice.set(inv, arr);
+    }
+
+    const unpaidInvoiceIds = candidateIds.filter(id => {
+      const total = totalByInvoice.get(id) ?? 0;
+      const paid = paidByInvoice.get(id) ?? 0;
+      return !(total > 0 && paid >= total);
+    });
+
+    // 3. Cascade payments on those unpaid invoices first.
+    const paymentIds = unpaidInvoiceIds
+      .flatMap(id => paymentsByInvoice.get(id) ?? []);
+    if (paymentIds.length > 0) {
+      const { error: pUpdErr } = await supabase
+        .from("payments")
+        .update({ deleted_at: now })
+        .in("id", paymentIds);
+      if (pUpdErr) throw pUpdErr;
+      cascadedPaymentIds.push(...paymentIds);
+    }
+
+    // 4. Then the invoices themselves, tagged so restore can find them.
+    if (unpaidInvoiceIds.length > 0) {
+      const { error: invUpdErr } = await supabase
+        .from("invoices")
+        .update({ deleted_at: now, deleted_via_subscription_id: subscriptionId })
+        .in("id", unpaidInvoiceIds);
+      if (invUpdErr) throw invUpdErr;
+      cascadedInvoiceIds.push(...unpaidInvoiceIds);
+    }
+  }
+
+  // 5. Finally the subscription header.
+  const { error: subErr } = await supabase
+    .from("subscriptions")
+    .update({ deleted_at: now })
+    .eq("id", subscriptionId);
+  if (subErr) throw subErr;
+
+  return { subscriptionId, invoiceIds: cascadedInvoiceIds, paymentIds: cascadedPaymentIds };
 }
 
 export function useRestoreInvoice() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
+      // Restore payments that were soft-deleted as part of this
+      // invoice's deletion. They get their deleted_via_invoice_id
+      // cleared so a future restore round won't double-process them.
+      const { data: cascaded, error: pSelErr } = await supabase
+        .from("payments")
+        .select("id")
+        .eq("deleted_via_invoice_id", id)
+        .not("deleted_at", "is", null);
+      if (pSelErr) throw pSelErr;
+      const pIds = (cascaded ?? []).map(p => p.id as string);
+      if (pIds.length > 0) {
+        const { error: pUpdErr } = await supabase
+          .from("payments")
+          .update({ deleted_at: null, deleted_via_invoice_id: null })
+          .in("id", pIds);
+        if (pUpdErr) throw pUpdErr;
+      }
+
       const { error } = await supabase
         .from("invoices")
         .update({ deleted_at: null })
@@ -660,11 +843,16 @@ export function useRestoreInvoice() {
 
 // Hard-delete: matches the previous useDeleteInvoice behaviour exactly
 // (clear FK on payments, drop items, drop the invoice). Used only from
-// /lixo.
+// /lixo. Cascaded payments (those tagged with deleted_via_invoice_id)
+// are hard-deleted too — purging the parent without removing them
+// would leave dangling rows in /lixo > Pagamentos that the user can
+// neither restore meaningfully (parent is gone) nor easily distinguish
+// from manually-deleted payments.
 export function usePurgeInvoice() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
+      await supabase.from("payments").delete().eq("deleted_via_invoice_id", id);
       await supabase.from("invoice_items").delete().eq("invoice_id", id);
       await supabase.from("payments").update({ invoice_id: null }).eq("invoice_id", id);
       const { error } = await supabase.from("invoices").delete().eq("id", id);
@@ -970,17 +1158,25 @@ export function useUpdateSubscription() {
   });
 }
 
+export interface DeleteSubscriptionResult {
+  subscriptionId: string;
+  cascadedInvoiceIds: string[]; // unpaid invoices that were soft-deleted
+  cascadedPaymentIds: string[]; // payments on those invoices that were soft-deleted
+}
+
 export function useDeleteSubscription() {
   const qc = useQueryClient();
-  return useMutation({
+  return useMutation<DeleteSubscriptionResult, Error, string>({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("subscriptions")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
+      const now = new Date().toISOString();
+      const { invoiceIds, paymentIds } = await cascadeSoftDeleteSubscription(id, now);
+      return { subscriptionId: id, cascadedInvoiceIds: invoiceIds, cascadedPaymentIds: paymentIds };
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["subscriptions"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+    },
   });
 }
 
@@ -988,13 +1184,55 @@ export function useRestoreSubscription() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
+      // Symmetric to useRestoreInvoice: restore the invoices that were
+      // pulled in by this subscription's deletion AND the payments
+      // tagged via those invoices. Restoring just the sub leaves the
+      // user hunting through /lixo, which defeats the purpose of the
+      // cascade.
+      const { data: cascadedInvoices, error: iSelErr } = await supabase
+        .from("invoices")
+        .select("id")
+        .eq("deleted_via_subscription_id", id)
+        .not("deleted_at", "is", null);
+      if (iSelErr) throw iSelErr;
+      const invIds = (cascadedInvoices ?? []).map(i => i.id as string);
+
+      if (invIds.length > 0) {
+        // Restore payments tagged with any of those invoice ids first
+        // (cleaner ordering: payments depend on invoices conceptually).
+        const { data: cascadedPmts, error: pSelErr } = await supabase
+          .from("payments")
+          .select("id")
+          .in("deleted_via_invoice_id", invIds)
+          .not("deleted_at", "is", null);
+        if (pSelErr) throw pSelErr;
+        const pIds = (cascadedPmts ?? []).map(p => p.id as string);
+        if (pIds.length > 0) {
+          const { error: pUpdErr } = await supabase
+            .from("payments")
+            .update({ deleted_at: null, deleted_via_invoice_id: null })
+            .in("id", pIds);
+          if (pUpdErr) throw pUpdErr;
+        }
+
+        const { error: iUpdErr } = await supabase
+          .from("invoices")
+          .update({ deleted_at: null, deleted_via_subscription_id: null })
+          .in("id", invIds);
+        if (iUpdErr) throw iUpdErr;
+      }
+
       const { error } = await supabase
         .from("subscriptions")
         .update({ deleted_at: null })
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["subscriptions"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+    },
   });
 }
 
@@ -1002,10 +1240,116 @@ export function usePurgeSubscription() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
+      // Hard-purge the subscription: drop any cascaded invoices (and
+      // their cascaded payments) that were tied to this sub. Without
+      // this they'd be left as orphans in /lixo with a dangling
+      // deleted_via_subscription_id pointing at nothing.
+      const { data: cascadedInvoices, error: iSelErr } = await supabase
+        .from("invoices")
+        .select("id")
+        .eq("deleted_via_subscription_id", id);
+      if (iSelErr) throw iSelErr;
+      const invIds = (cascadedInvoices ?? []).map(i => i.id as string);
+
+      if (invIds.length > 0) {
+        await supabase.from("payments").delete().in("deleted_via_invoice_id", invIds);
+        await supabase.from("invoice_items").delete().in("invoice_id", invIds);
+        await supabase.from("payments").update({ invoice_id: null }).in("invoice_id", invIds);
+        await supabase.from("invoices").delete().in("id", invIds);
+      }
+
       const { error } = await supabase.from("subscriptions").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["subscriptions"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+    },
+  });
+}
+
+// Read-only helper for the invoice delete confirm dialog: returns
+// counts so the warning can show real numbers.
+export function useInvoiceCascadePreview(invoiceId: string | null) {
+  return useQuery({
+    queryKey: ["invoice_cascade_preview", invoiceId],
+    enabled: !!invoiceId,
+    queryFn: async () => {
+      const [{ data: invoice, error: invErr }, { data: pmts, error: pErr }] = await Promise.all([
+        supabase.from("invoices").select("subscription_id").eq("id", invoiceId!).single(),
+        supabase.from("payments").select("id").eq("invoice_id", invoiceId!).is("deleted_at", null),
+      ]);
+      if (invErr) throw invErr;
+      if (pErr) throw pErr;
+
+      return {
+        payments: (pmts ?? []).length,
+        subscriptionId: invoice.subscription_id as string | null,
+      };
+    },
+  });
+}
+
+// Read-only helper for the delete confirm dialog: returns the counts
+// the user is about to cascade so the warning can show real numbers.
+export function useSubscriptionCascadePreview(subscriptionId: string | null) {
+  return useQuery({
+    queryKey: ["subscription_cascade_preview", subscriptionId],
+    enabled: !!subscriptionId,
+    queryFn: async () => {
+      const { data: invoices, error: invErr } = await supabase
+        .from("invoices")
+        .select("id")
+        .eq("subscription_id", subscriptionId!)
+        .is("deleted_at", null);
+      if (invErr) throw invErr;
+
+      const ids = (invoices ?? []).map(i => i.id as string);
+      if (ids.length === 0) {
+        return { unpaidInvoices: 0, paidInvoices: 0, payments: 0 };
+      }
+
+      const [{ data: items, error: itErr }, { data: pmts, error: pErr }] = await Promise.all([
+        supabase.from("invoice_items").select("invoice_id, quantity, unit_price").in("invoice_id", ids),
+        supabase.from("payments").select("invoice_id, amount").in("invoice_id", ids).is("deleted_at", null),
+      ]);
+      if (itErr) throw itErr;
+      if (pErr) throw pErr;
+
+      const totalByInvoice = new Map<string, number>();
+      for (const it of items ?? []) {
+        totalByInvoice.set(
+          it.invoice_id as string,
+          (totalByInvoice.get(it.invoice_id as string) ?? 0)
+            + Number(it.quantity) * Number(it.unit_price),
+        );
+      }
+      const paidByInvoice = new Map<string, number>();
+      const paymentsCountByInvoice = new Map<string, number>();
+      for (const p of pmts ?? []) {
+        const inv = p.invoice_id as string;
+        paidByInvoice.set(inv, (paidByInvoice.get(inv) ?? 0) + Number(p.amount));
+        paymentsCountByInvoice.set(inv, (paymentsCountByInvoice.get(inv) ?? 0) + 1);
+      }
+
+      let unpaidInvoices = 0;
+      let paidInvoices = 0;
+      let payments = 0;
+      for (const id of ids) {
+        const total = totalByInvoice.get(id) ?? 0;
+        const paid = paidByInvoice.get(id) ?? 0;
+        const isPaid = total > 0 && paid >= total;
+        if (isPaid) {
+          paidInvoices++;
+        } else {
+          unpaidInvoices++;
+          payments += paymentsCountByInvoice.get(id) ?? 0;
+        }
+      }
+
+      return { unpaidInvoices, paidInvoices, payments };
+    },
   });
 }
 

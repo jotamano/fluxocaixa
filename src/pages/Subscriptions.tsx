@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { DeleteSubscriptionDialog } from "@/components/DeleteSubscriptionDialog";
 import { PauseSubscriptionDialog } from "@/components/PauseSubscriptionDialog";
 import { useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -265,7 +265,21 @@ export default function Subscriptions() {
   const handleDelete = () => {
     if (!deleteId) return;
     deleteSub.mutate(deleteId, {
-      onSuccess: () => { setConfirmOpen(false); setDeleteId(null); toast({ title: "Subscrição eliminada" }); },
+      onSuccess: ({ cascadedInvoiceIds, cascadedPaymentIds }) => {
+        setConfirmOpen(false);
+        setDeleteId(null);
+        // Mirror InvoiceDetail's delete toast: report the actual
+        // cascade so the user knows what landed in /lixo.
+        const parts: string[] = [];
+        if (cascadedInvoiceIds.length > 0) parts.push(`${cascadedInvoiceIds.length} fatura(s) em aberto`);
+        if (cascadedPaymentIds.length > 0) parts.push(`${cascadedPaymentIds.length} pagamento(s)`);
+        toast({
+          title: "Subscrição eliminada",
+          description: parts.length > 0
+            ? `Também eliminados: ${parts.join(", ")}.`
+            : undefined,
+        });
+      },
       onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
     });
   };
@@ -514,7 +528,12 @@ export default function Subscriptions() {
         onClose={() => setPauseId(null)}
       />
 
-      <ConfirmDialog open={confirmOpen} onOpenChange={setConfirmOpen} title="Eliminar subscrição" description="Tens a certeza que queres eliminar esta subscrição? Esta ação é irreversível." onConfirm={handleDelete} isPending={deleteSub.isPending} />
+      <DeleteSubscriptionDialog
+        subscriptionId={confirmOpen ? deleteId : null}
+        isPending={deleteSub.isPending}
+        onCancel={() => { setConfirmOpen(false); setDeleteId(null); }}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }
