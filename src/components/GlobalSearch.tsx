@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { Search, FileText, Users, RefreshCw, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useClients, useInvoices, useSubscriptions } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal } from "@/lib/data";
+import { formatCurrency, getInvoiceItemsTotal, getClientLabel } from "@/lib/data";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -32,19 +32,37 @@ export function GlobalSearch() {
 
     clients.forEach(c => {
       if (c.name.toLowerCase().includes(q) || c.company.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)) {
-        r.push({ type: "client", title: c.company, subtitle: c.name, link: `/clientes/${c.id}` });
+        const title = c.company?.trim() || c.name?.trim() || "Sem cliente";
+        const subtitle = c.company?.trim() && c.name?.trim() && c.company !== c.name ? c.name : c.email;
+        r.push({ type: "client", title, subtitle, link: `/clientes/${c.id}` });
       }
     });
 
     invoices.forEach(inv => {
-      if (inv.number.toLowerCase().includes(q) || inv.clients?.company?.toLowerCase().includes(q)) {
-        r.push({ type: "invoice", title: inv.number, subtitle: `${inv.clients?.company || "Sem cliente"} — ${formatCurrency(getInvoiceItemsTotal(inv.invoice_items))}`, link: `/faturas/${inv.id}` });
+      const matchesClient =
+        inv.clients?.company?.toLowerCase().includes(q) ||
+        inv.clients?.name?.toLowerCase().includes(q);
+      if (inv.number.toLowerCase().includes(q) || matchesClient) {
+        r.push({
+          type: "invoice",
+          title: inv.number,
+          subtitle: `${getClientLabel(inv)} — ${formatCurrency(getInvoiceItemsTotal(inv.invoice_items))}`,
+          link: `/faturas/${inv.id}`,
+        });
       }
     });
 
     subscriptions.forEach(sub => {
-      if (sub.name.toLowerCase().includes(q) || (sub as any).clients?.company?.toLowerCase().includes(q)) {
-        r.push({ type: "subscription", title: sub.name, subtitle: `${(sub as any).clients?.company || "Sem cliente"} — ${formatCurrency(Number(sub.amount))}`, link: `/subscricoes?edit=${sub.id}` });
+      const matchesClient =
+        sub.clients?.company?.toLowerCase().includes(q) ||
+        sub.clients?.name?.toLowerCase().includes(q);
+      if (sub.name.toLowerCase().includes(q) || matchesClient) {
+        r.push({
+          type: "subscription",
+          title: sub.name,
+          subtitle: `${getClientLabel(sub)} — ${formatCurrency(Number(sub.amount))}`,
+          link: `/subscricoes?edit=${sub.id}`,
+        });
       }
     });
 

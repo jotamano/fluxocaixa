@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Euro, Users, RefreshCw, TrendingUp, AlertTriangle, Bell } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
-import { formatCurrency, getInvoiceItemsTotal, frequencyDays, type SubscriptionFrequency } from "@/lib/data";
+import { formatCurrency, getInvoiceItemsTotal, frequencyDays, getClientLabel, type SubscriptionFrequency } from "@/lib/data";
 import { useInvoices, useClients, useSubscriptions, usePayments } from "@/hooks/use-data";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -138,7 +138,7 @@ export default function Dashboard() {
             {overdueInvoices.length > 0 && (
               <p className="text-sm text-foreground">
                 <AlertTriangle className="h-3.5 w-3.5 inline text-destructive mr-1" />
-                <span className="font-semibold">{overdueInvoices.length} fatura(s) vencida(s)</span> — {overdueInvoices.map(i => `${i.number} (${i.clients?.company || '—'})`).join(", ")}
+                <span className="font-semibold">{overdueInvoices.length} fatura(s) vencida(s)</span> — {overdueInvoices.map(i => `${i.number} (${getClientLabel(i, '—')})`).join(", ")}
               </p>
             )}
             {pendingInvoices.length > 0 && (
@@ -203,7 +203,7 @@ export default function Dashboard() {
               <Link key={invoice.id} to={`/faturas/${invoice.id}`} className="flex items-center justify-between px-6 py-4 hover:bg-muted/30 transition-colors">
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-card-foreground">{invoice.number}</p>
-                  <p className="text-xs text-muted-foreground">{invoice.clients?.company}</p>
+                  <p className="text-xs text-muted-foreground">{getClientLabel(invoice)}</p>
                 </div>
                 <div className="flex items-center gap-4">
                   <StatusBadge status={invoice.status} />
@@ -226,7 +226,7 @@ export default function Dashboard() {
               <div key={sub.id} className="flex items-center justify-between px-6 py-4">
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-card-foreground">{sub.name}</p>
-                  <p className="text-xs text-muted-foreground">{sub.clients?.company}</p>
+                  <p className="text-xs text-muted-foreground">{getClientLabel(sub)}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-semibold text-card-foreground">{formatCurrency(Number(sub.amount))}/mês</p>
