@@ -830,10 +830,20 @@ export function useSetSubscriptionStatus() {
   });
 }
 
+export interface UpdateSubscriptionResult {
+  subscription: Subscription;
+  // Invoice IDs whose linked items were actually patched as a result
+  // of this edit. Empty when the sub had no linked invoices, when
+  // every linked invoice was paid, or when nothing on the recurring
+  // line actually changed. Used by the popup editor's toast so it
+  // can report a real number instead of a hardcoded confirmation.
+  syncedInvoiceIds: string[];
+}
+
 export function useUpdateSubscription() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: TablesUpdate<"subscriptions"> }) => {
+  return useMutation<UpdateSubscriptionResult, Error, { id: string; updates: TablesUpdate<"subscriptions"> }>({
+    mutationFn: async ({ id, updates }) => {
       // Read the previous subscription so we can detect which fields
       // actually changed and cascade only those. The popup editor in
       // /subscricoes always sends the whole form so a naive diff on
@@ -865,6 +875,8 @@ export function useUpdateSubscription() {
       const nameChanged =
         typeof updates.name === "string" && updates.name !== oldSub.name;
 
+      const allSyncedInvoiceIds: string[] = [];
+
       if (amountChanged || nameChanged) {
         const { data: subItems, error: siErr } = await supabase
           .from("subscription_items")
@@ -895,7 +907,7 @@ export function useUpdateSubscription() {
               .single();
             if (itemErr) throw itemErr;
 
-            await syncSubItemToInvoices({
+            const syncedIds = await syncSubItemToInvoices({
               subItemId: updatedItem.id,
               fallbackInvoiceItemId:
                 updatedItem.source_invoice_item_id ?? recurringItem.source_invoice_item_id ?? null,
@@ -904,6 +916,7 @@ export function useUpdateSubscription() {
               oldAmount: Number(recurringItem.amount),
               newAmount: Number(updatedItem.amount),
             });
+            allSyncedInvoiceIds.push(...syncedIds);
           }
         }
 
@@ -925,7 +938,7 @@ export function useUpdateSubscription() {
               .single();
             if (setupErr) throw setupErr;
 
-            await syncSubItemToInvoices({
+            const syncedIds = await syncSubItemToInvoices({
               subItemId: updatedSetup.id,
               fallbackInvoiceItemId:
                 updatedSetup.source_invoice_item_id ?? setupItem.source_invoice_item_id ?? null,
@@ -934,11 +947,19 @@ export function useUpdateSubscription() {
               oldAmount: Number(setupItem.amount),
               newAmount: Number(setupItem.amount),
             });
+            allSyncedInvoiceIds.push(...syncedIds);
           }
         }
       }
 
-      return data as Subscription;
+      // Same invoice can show up via both recurring and setup paths;
+      // dedupe so the toast count reflects unique invoices touched.
+      const uniqueSyncedInvoiceIds = Array.from(new Set(allSyncedInvoiceIds));
+
+      return {
+        subscription: data as Subscription,
+        syncedInvoiceIds: uniqueSyncedInvoiceIds,
+      };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["subscriptions"] });
@@ -1152,22 +1173,56 @@ async function syncSubItemToInvoices(opts: {
   if (!linkedItems || linkedItems.length === 0) return [];
 
   const invoiceIds = Array.from(new Set(linkedItems.map(li => li.invoice_id)));
-  const [{ data: parentInvoices, error: invErr }, { data: paymentRows, error: payErr }] = await Promise.all([
+  // Drive the "is this invoice paid?" check off the same data the
+  // manual editor uses (PR #37): compare cumulative paid amount
+  // against item-derived total. Relying on `invoices.status` alone
+  // would let stale rows through (e.g. payment registered but the
+  // status update never landed) and skipping any invoice with a
+  // payment row would over-block partially-paid invoices that the
+  // user explicitly asked to keep editable.
+  const [
+    { data: parentInvoices, error: invErr },
+    { data: allItems, error: itemsErr },
+    { data: allPayments, error: payErr },
+  ] = await Promise.all([
     supabase
       .from("invoices")
-      .select("id, status, deleted_at")
+      .select("id, deleted_at")
       .in("id", invoiceIds),
     supabase
+      .from("invoice_items")
+      .select("invoice_id, quantity, unit_price")
+      .in("invoice_id", invoiceIds),
+    supabase
       .from("payments")
-      .select("invoice_id")
+      .select("invoice_id, amount")
       .in("invoice_id", invoiceIds)
       .is("deleted_at", null),
   ]);
   if (invErr) throw invErr;
+  if (itemsErr) throw itemsErr;
   if (payErr) throw payErr;
 
   const invoicesById = new Map((parentInvoices ?? []).map(i => [i.id, i]));
-  const paymentsByInvoice = new Set((paymentRows ?? []).map(p => p.invoice_id as string));
+  const totalByInvoice = new Map<string, number>();
+  for (const it of allItems ?? []) {
+    totalByInvoice.set(
+      it.invoice_id,
+      (totalByInvoice.get(it.invoice_id) ?? 0) + Number(it.quantity) * Number(it.unit_price),
+    );
+  }
+  const paidByInvoice = new Map<string, number>();
+  for (const p of allPayments ?? []) {
+    paidByInvoice.set(
+      p.invoice_id as string,
+      (paidByInvoice.get(p.invoice_id as string) ?? 0) + Number(p.amount),
+    );
+  }
+  const isInvoiceFullyPaid = (invoiceId: string) => {
+    const total = totalByInvoice.get(invoiceId) ?? 0;
+    const paid = paidByInvoice.get(invoiceId) ?? 0;
+    return total > 0 && paid >= total;
+  };
 
   const descriptionChanged = opts.newDescription !== opts.oldDescription;
   const amountChanged = Number(opts.newAmount) !== Number(opts.oldAmount);
@@ -1178,8 +1233,7 @@ async function syncSubItemToInvoices(opts: {
     const editable =
       parent
       && parent.deleted_at == null
-      && parent.status !== "paid"
-      && !paymentsByInvoice.has(parent.id);
+      && !isInvoiceFullyPaid(parent.id);
     if (!editable) continue;
 
     const patch: TablesUpdate<"invoice_items"> = {};

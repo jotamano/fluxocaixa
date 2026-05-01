@@ -155,17 +155,25 @@ export default function Subscriptions() {
           },
         },
         {
-          onSuccess: () => {
+          onSuccess: ({ syncedInvoiceIds }) => {
             handleDialogChange(false);
-            // Confirm the cascade visually so the user knows the
-            // change reached sub_items + linked invoices, not just
-            // the subscription header. Without this toast the
-            // sub-page editor and the popup editor would feel
-            // inconsistent (the page editor already toasts "A
-            // fatura de origem foi também atualizada").
+            // Tell the user truthfully what happened. The sync helper
+            // skips paid invoices (fiscal documents — see PR #37) and
+            // touches every other linked invoice. Future cron-generated
+            // invoices automatically pick up the new amount because
+            // generate_subscription_invoices() reads it from
+            // subscription_items at emission time, so we mention that
+            // too — this used to confuse users who thought the toast
+            // implied it was retroactively touching paid invoices.
+            const count = syncedInvoiceIds.length;
+            const description = count === 0
+              ? "As próximas faturas geradas automaticamente vão usar o novo valor. Faturas existentes pagas não são alteradas."
+              : count === 1
+              ? "1 fatura em aberto foi sincronizada. Próximas faturas automáticas usam o novo valor."
+              : `${count} faturas em aberto foram sincronizadas. Próximas faturas automáticas usam o novo valor.`;
             toast({
               title: "Subscrição atualizada",
-              description: "Valor/nome propagados para as faturas em aberto.",
+              description,
             });
           },
           onError: (err) =>
