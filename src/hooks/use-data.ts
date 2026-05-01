@@ -287,10 +287,40 @@ export function useAddInvoice() {
   });
 }
 
+/**
+ * Returns true when the invoice with `invoiceId` is fully settled
+ * (outstanding ≤ 0 and total > 0). Re-uses the same definition as
+ * the UI's `effectiveStatus` so the lock applied in the editor
+ * matches what the hook layer enforces — no TOCTOU surprises if
+ * the user has a stale tab.
+ */
+async function isInvoicePaid(invoiceId: string): Promise<boolean> {
+  const [itemsRes, paymentsRes] = await Promise.all([
+    supabase.from("invoice_items").select("quantity, unit_price").eq("invoice_id", invoiceId),
+    supabase.from("payments").select("amount").eq("invoice_id", invoiceId).is("deleted_at", null),
+  ]);
+  if (itemsRes.error) throw itemsRes.error;
+  if (paymentsRes.error) throw paymentsRes.error;
+  const total = (itemsRes.data ?? []).reduce(
+    (sum, it) => sum + Number(it.quantity) * Number(it.unit_price),
+    0,
+  );
+  const paid = (paymentsRes.data ?? []).reduce((sum, p) => sum + Number(p.amount), 0);
+  return total > 0 && paid >= total;
+}
+
+const PAID_INVOICE_LOCK_MESSAGE =
+  "Esta fatura está paga e não pode ser editada (documento fiscal). Para alterações, duplica e emite uma nova.";
+
 export function useUpdateInvoice() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: TablesUpdate<"invoices"> }) => {
+      // Defense in depth: a stale tab might still have the edit
+      // dialog open after the invoice gets fully paid in another
+      // window. Reject the write rather than silently mutating a
+      // settled fiscal document.
+      if (await isInvoicePaid(id)) throw new Error(PAID_INVOICE_LOCK_MESSAGE);
       const { data, error } = await supabase.from("invoices").update(updates).eq("id", id).select().single();
       if (error) throw error;
       return data;
@@ -368,6 +398,10 @@ export function useUpdateInvoiceItems() {
     }
   >({
     mutationFn: async ({ invoiceId, items, syncToSubscriptions = false, spawnSubscriptionForNewLines }) => {
+      // Same defense in depth as useUpdateInvoice — paid invoices are
+      // fiscal documents and must not have their items rewritten.
+      if (await isInvoicePaid(invoiceId)) throw new Error(PAID_INVOICE_LOCK_MESSAGE);
+
       const result: UpdateInvoiceItemsResult = { syncedSubscriptionIds: [], spawnedSubscriptionIds: [] };
 
       // 1. Reconcile rows: figure out what to delete (existing IDs
