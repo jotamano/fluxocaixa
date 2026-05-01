@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Pause, Play, Pencil, Plus, Search, Trash2, Zap, ExternalLink } from "lucide-react";
+import { Pause, Play, Pencil, Plus, Search, Trash2, ExternalLink, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   useSubscriptions,
@@ -13,7 +13,6 @@ import {
   useAddInvoice,
   useNextInvoiceNumber,
   useSubscriptionStats,
-  useGenerateSubscriptionInvoices,
 } from "@/hooks/use-data";
 import { frequencyLabels, formatCurrency, frequencyDays, type SubscriptionFrequency } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -46,7 +45,6 @@ export default function Subscriptions() {
   const addSub = useAddSubscription();
   const deleteSub = useDeleteSubscription();
   const addInvoice = useAddInvoice();
-  const generate = useGenerateSubscriptionInvoices();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -274,16 +272,6 @@ export default function Subscriptions() {
     );
   };
 
-  const handleRunGeneration = () => {
-    generate.mutate(undefined, {
-      onSuccess: (count) =>
-        toast({
-          title: count > 0 ? `${count} fatura(s) geradas` : "Sem subscrições a faturar hoje",
-        }),
-      onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
-    });
-  };
-
   const renderCard = (sub: typeof subscriptions[0]) => {
     const isActive = sub.status === "active";
     const isPaused = sub.status === "paused";
@@ -377,17 +365,14 @@ export default function Subscriptions() {
           <p className="mt-1 text-muted-foreground">Receita recorrente mensal: <span className="font-semibold text-foreground">{formatCurrency(totalMRR)}</span></p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={handleRunGeneration} disabled={generate.isPending}>
-            <Zap className="h-4 w-4" /> Gerar agora
-          </Button>
           <Button className="gap-2" onClick={openCreate}><Plus className="h-4 w-4" /> Nova Subscrição</Button>
         </div>
       </div>
 
       <div className="rounded-xl border border-border bg-card p-4 shadow-card">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Zap className="h-4 w-4 text-primary" />
-          <span>Faturação automática ativa — pg_cron gera faturas diariamente às 03:30 para subscrições na data de billing.</span>
+          <Clock className="h-4 w-4 text-primary" />
+          <span>As faturas das subscrições recorrentes são geradas automaticamente todos os dias às 3 da manhã.</span>
         </div>
       </div>
 
