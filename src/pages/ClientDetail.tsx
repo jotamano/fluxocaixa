@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useClients, useInvoices, usePayments, useSubscriptions, useDeleteClient, useUpdateClient } from "@/hooks/use-data";
+import { useClients, useInvoices, usePayments, useSubscriptions, useDeleteClient, useUpdateClient, useClientCredits, useDeleteClientCredit } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, frequencyLabels, methodLabels } from "@/lib/data";
 import { generateClientStatement } from "@/lib/statement";
 import { useToast } from "@/hooks/use-toast";
@@ -29,8 +29,10 @@ export default function ClientDetail() {
   const { data: invoices = [], isLoading: invoicesLoading } = useInvoices();
   const { data: payments = [], isLoading: paymentsLoading } = usePayments();
   const { data: subscriptions = [], isLoading: subscriptionsLoading } = useSubscriptions();
+  const { data: credits = [] } = useClientCredits();
   const deleteClient = useDeleteClient();
   const updateClient = useUpdateClient();
+  const deleteCredit = useDeleteClientCredit();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', email: '', company: '', phone: '', nif: '' });
@@ -61,6 +63,9 @@ export default function ClientDetail() {
   const totalBilled = clientInvoices.reduce((sum, invoice) => sum + getInvoiceItemsTotal(invoice.invoice_items), 0);
   const totalPaid = clientPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
   const outstanding = Math.max(totalBilled - totalPaid, 0);
+  const clientCredits = credits.filter(c => c.client_id === client.id);
+  const activeCredits = clientCredits.filter(c => !c.consumed_at);
+  const creditBalance = activeCredits.reduce((sum, c) => sum + Number(c.amount), 0);
 
   const timeline: TimelineEvent[] = (() => {
     const events: TimelineEvent[] = [];
@@ -130,7 +135,7 @@ export default function ClientDetail() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className={creditBalance > 0 ? "grid gap-4 md:grid-cols-3 lg:grid-cols-5" : "grid gap-4 md:grid-cols-4"}>
         <div className="rounded-xl border border-border bg-card p-5 shadow-card">
           <p className="text-sm text-muted-foreground">Total faturado</p>
           <p className="mt-2 font-display text-3xl font-bold text-card-foreground">{formatCurrency(totalBilled)}</p>
@@ -143,6 +148,12 @@ export default function ClientDetail() {
           <p className="text-sm text-muted-foreground">Em dívida</p>
           <p className="mt-2 font-display text-3xl font-bold text-card-foreground">{formatCurrency(outstanding)}</p>
         </div>
+        {creditBalance > 0 && (
+          <div className="rounded-xl border border-accent/40 bg-accent/10 p-5 shadow-card">
+            <p className="text-sm text-muted-foreground">Saldo a favor</p>
+            <p className="mt-2 font-display text-3xl font-bold text-accent">{formatCurrency(creditBalance)}</p>
+          </div>
+        )}
         <div className="rounded-xl border border-border bg-card p-5 shadow-card">
           <p className="text-sm text-muted-foreground">Subscrições ativas</p>
           <p className="mt-2 font-display text-3xl font-bold text-card-foreground">{clientSubscriptions.filter(s => s.active).length}</p>
@@ -219,6 +230,45 @@ export default function ClientDetail() {
               </div>
             )}
           </div>
+
+          {clientCredits.length > 0 && (
+            <div className="rounded-xl border border-border bg-card p-6 shadow-card">
+              <h2 className="font-display text-lg font-semibold text-card-foreground">Saldo a favor</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Excedentes que ficaram parqueados no cliente.</p>
+              <div className="mt-4 space-y-3">
+                {clientCredits.map(credit => {
+                  const isConsumed = !!credit.consumed_at;
+                  return (
+                    <div key={credit.id} className={`rounded-lg border px-4 py-3 ${isConsumed ? "border-border bg-muted/40 opacity-60" : "border-accent/40 bg-accent/5"}`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-card-foreground">{formatCurrency(Number(credit.amount))}</p>
+                          {credit.notes && <p className="text-xs text-muted-foreground truncate">{credit.notes}</p>}
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(credit.created_at).toLocaleDateString("pt-PT")}
+                            {isConsumed && credit.consumed_at && ` · consumido ${new Date(credit.consumed_at).toLocaleDateString("pt-PT")}`}
+                          </p>
+                        </div>
+                        {!isConsumed && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive shrink-0"
+                            onClick={() => deleteCredit.mutate(credit.id, {
+                              onSuccess: () => toast({ title: "Crédito removido" }),
+                              onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+                            })}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="rounded-xl border border-border bg-card p-6 shadow-card">
             <h2 className="font-display text-lg font-semibold text-card-foreground">Subscrições</h2>

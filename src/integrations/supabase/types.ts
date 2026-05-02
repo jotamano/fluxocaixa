@@ -47,6 +47,54 @@ export type Database = {
         }
         Relationships: []
       }
+      client_credits: {
+        Row: {
+          amount: number
+          client_id: string
+          consumed_at: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          notes: string | null
+          source_payment_id: string | null
+        }
+        Insert: {
+          amount: number
+          client_id: string
+          consumed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          notes?: string | null
+          source_payment_id?: string | null
+        }
+        Update: {
+          amount?: number
+          client_id?: string
+          consumed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          notes?: string | null
+          source_payment_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_credits_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_credits_source_payment_id_fkey"
+            columns: ["source_payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_items: {
         Row: {
           category_id: string | null
