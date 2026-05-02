@@ -22,6 +22,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { DeleteSubscriptionDialog } from "@/components/DeleteSubscriptionDialog";
 import { PauseSubscriptionDialog } from "@/components/PauseSubscriptionDialog";
+import { QuickCreateClientDialog } from "@/components/QuickCreateClientDialog";
+import { QuickCreateServiceDialog } from "@/components/QuickCreateServiceDialog";
 import { useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 
@@ -63,6 +65,8 @@ export default function Subscriptions() {
     frequency: "monthly" as SubscriptionFrequency,
     nextBillingDate: new Date().toISOString().split('T')[0],
   });
+  const [quickClientOpen, setQuickClientOpen] = useState(false);
+  const [quickServiceOpen, setQuickServiceOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const lower = search.trim().toLowerCase();
@@ -426,40 +430,52 @@ export default function Subscriptions() {
           <div className="space-y-4 pt-4">
             <div className="space-y-2">
               <Label>Cliente</Label>
-              <Select value={form.clientId} onValueChange={value => setForm(prev => ({ ...prev, clientId: value }))}>
-                <SelectTrigger><SelectValue placeholder="Selecionar cliente" /></SelectTrigger>
-                <SelectContent>
-                  {clients.map(client => (
-                    <SelectItem key={client.id} value={client.id}>{client.company} — {client.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={form.clientId} onValueChange={value => setForm(prev => ({ ...prev, clientId: value }))}>
+                  <SelectTrigger className="flex-1"><SelectValue placeholder="Selecionar cliente" /></SelectTrigger>
+                  <SelectContent>
+                    {clients.map(client => (
+                      <SelectItem key={client.id} value={client.id}>{client.company} — {client.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* Inline quick-create: opens the same dialog as
+                    /clientes; on success we pre-select the new id. */}
+                <Button type="button" variant="outline" size="icon" onClick={() => setQuickClientOpen(true)} title="Novo cliente">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Serviço</Label>
-              <Select value={form.serviceId} onValueChange={value => {
-                const svc = services.find(s => s.id === value);
-                if (svc) {
-                  // Picking a service overwrites name + amount with the
-                  // service's current values. The user can still edit
-                  // either field afterwards if they want a one-off tweak.
-                  setForm(prev => ({
-                    ...prev,
-                    serviceId: value,
-                    name: svc.name,
-                    amount: String(Number(svc.default_price)),
-                  }));
-                }
-              }}>
-                <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
-                <SelectContent>
-                  {services.map(svc => (
-                    <SelectItem key={svc.id} value={svc.id}>
-                      {svc.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={form.serviceId} onValueChange={value => {
+                  const svc = services.find(s => s.id === value);
+                  if (svc) {
+                    // Picking a service overwrites name + amount with the
+                    // service's current values. The user can still edit
+                    // either field afterwards if they want a one-off tweak.
+                    setForm(prev => ({
+                      ...prev,
+                      serviceId: value,
+                      name: svc.name,
+                      amount: String(Number(svc.default_price)),
+                    }));
+                  }
+                }}>
+                  <SelectTrigger className="flex-1"><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
+                  <SelectContent>
+                    {services.map(svc => (
+                      <SelectItem key={svc.id} value={svc.id}>
+                        {svc.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="outline" size="icon" onClick={() => setQuickServiceOpen(true)} title="Novo serviço">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Nome</Label>
@@ -533,6 +549,29 @@ export default function Subscriptions() {
         isPending={deleteSub.isPending}
         onCancel={() => { setConfirmOpen(false); setDeleteId(null); }}
         onConfirm={handleDelete}
+      />
+
+      <QuickCreateClientDialog
+        open={quickClientOpen}
+        onOpenChange={setQuickClientOpen}
+        onCreated={client => setForm(prev => ({ ...prev, clientId: client.id }))}
+      />
+      <QuickCreateServiceDialog
+        open={quickServiceOpen}
+        onOpenChange={setQuickServiceOpen}
+        onCreated={svc => {
+          // Mirror the existing picker behaviour: choosing a service
+          // pre-fills name + amount from its defaults. We use the row
+          // returned by the dialog directly (instead of re-querying
+          // services.find) so we don't race the useActiveServices
+          // refetch.
+          setForm(prev => ({
+            ...prev,
+            serviceId: svc.id,
+            name: svc.name,
+            amount: String(Number(svc.default_price)),
+          }));
+        }}
       />
     </div>
   );
