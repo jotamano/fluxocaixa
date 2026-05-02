@@ -1,6 +1,7 @@
 import type { Tables } from "@/integrations/supabase/types";
 import type { Invoice } from "@/hooks/use-data";
 import { getInvoiceItemsTotal, formatCurrency, formatInvoiceItemPeriod } from "./data";
+import { BRAND_NAME, brandHeaderBlock } from "./branding";
 
 const escapeHtml = (s: string) =>
   s
@@ -46,10 +47,7 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
     <body>
       <div style="max-width:800px;margin:0 auto;padding:40px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;">
-          <div>
-            <h1 style="font-size:28px;font-weight:800;color:#1e40af;margin-bottom:4px;">GhostInvoice</h1>
-            <p style="font-size:12px;color:#6b7280;">Marketing Digital & Gestão de Redes Sociais</p>
-          </div>
+          ${brandHeaderBlock()}
           <div style="text-align:right;">
             <h2 style="font-size:22px;font-weight:700;color:#1a1a2e;">Orçamento ${invoice.number}</h2>
             <p style="font-size:12px;color:#6b7280;margin-top:4px;">
@@ -104,7 +102,7 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
         ` : ""}
 
         <div style="margin-top:50px;padding-top:20px;border-top:1px solid #e5e7eb;text-align:center;">
-          <p style="font-size:11px;color:#9ca3af;">GhostInvoice · Orçamento gerado automaticamente</p>
+          <p style="font-size:11px;color:#9ca3af;">${BRAND_NAME} · Orçamento gerado automaticamente</p>
         </div>
       </div>
     </body>
