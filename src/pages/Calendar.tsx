@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { cn } from "@/lib/utils";
 import { Link, useNavigate } from "react-router-dom";
-import type { Subscription, Invoice } from "@/hooks/use-data";
+import type { Subscription, Invoice, InvoiceItem } from "@/hooks/use-data";
 
 const DAYS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS_PT = [
@@ -481,6 +481,7 @@ export default function CalendarPage() {
                           <StatusBadge status={inv.status} />
                         </div>
                         <p className="text-xs text-muted-foreground">{getClientLabel(inv)}</p>
+                        <InvoiceItemsPreview items={inv.invoice_items} />
                         <p className="text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceItemsTotal(inv.invoice_items))}</p>
                       </Link>
                       <Button
@@ -584,7 +585,7 @@ function FilterChip({
 function InvoiceListRow({ inv, onMarkPaid }: { inv: Invoice; onMarkPaid: () => void }) {
   return (
     <div className="rounded-lg border border-border p-3 space-y-2">
-      <Link to={`/faturas/${inv.id}`} className="block hover:opacity-80 transition-opacity">
+      <Link to={`/faturas/${inv.id}`} className="block hover:opacity-80 transition-opacity space-y-1">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="text-sm font-semibold truncate text-card-foreground">{inv.number}</p>
@@ -595,10 +596,31 @@ function InvoiceListRow({ inv, onMarkPaid }: { inv: Invoice; onMarkPaid: () => v
             <span className="text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceItemsTotal(inv.invoice_items))}</span>
           </div>
         </div>
+        <InvoiceItemsPreview items={inv.invoice_items} />
       </Link>
       <Button variant="outline" size="sm" className="w-full gap-2" onClick={onMarkPaid}>
         <CheckCircle2 className="h-3.5 w-3.5" /> Marcar como paga
       </Button>
     </div>
+  );
+}
+
+// Compact list of the invoice's line items shown directly inside the
+// calendar cards so the user can tell what each invoice covers without
+// opening the detail page. Limits to 3 lines and folds the rest into a
+// "+N mais" tail to keep the card compact.
+function InvoiceItemsPreview({ items }: { items: InvoiceItem[] }) {
+  if (!items || items.length === 0) return null;
+  const visible = items.slice(0, 3);
+  const extra = items.length - visible.length;
+  return (
+    <ul className="text-xs text-muted-foreground space-y-0.5">
+      {visible.map(it => (
+        <li key={it.id} className="truncate">• {it.description}</li>
+      ))}
+      {extra > 0 && (
+        <li className="text-muted-foreground/70">+{extra} mais</li>
+      )}
+    </ul>
   );
 }
