@@ -150,8 +150,12 @@ export default function Subscriptions() {
       updateSub.mutate(
         {
           id: editingId,
+          // The client picker is locked once the subscription exists
+          // (changing the owner would invalidate every linked invoice
+          // and complicate cascade rules). We omit client_id from the
+          // payload as a defense-in-depth so a stale form state can't
+          // override the original value.
           updates: {
-            client_id: form.clientId,
             name: form.name,
             amount: Number(form.amount),
             frequency: form.frequency,
@@ -431,7 +435,11 @@ export default function Subscriptions() {
             <div className="space-y-2">
               <Label>Cliente</Label>
               <div className="flex gap-2">
-                <Select value={form.clientId} onValueChange={value => setForm(prev => ({ ...prev, clientId: value }))}>
+                <Select
+                  value={form.clientId}
+                  onValueChange={value => setForm(prev => ({ ...prev, clientId: value }))}
+                  disabled={!!editingId}
+                >
                   <SelectTrigger className="flex-1"><SelectValue placeholder="Selecionar cliente" /></SelectTrigger>
                   <SelectContent>
                     {clients.map(client => (
@@ -439,12 +447,17 @@ export default function Subscriptions() {
                     ))}
                   </SelectContent>
                 </Select>
-                {/* Inline quick-create: opens the same dialog as
-                    /clientes; on success we pre-select the new id. */}
-                <Button type="button" variant="outline" size="icon" onClick={() => setQuickClientOpen(true)} title="Novo cliente">
-                  <Plus className="h-4 w-4" />
-                </Button>
+                {!editingId && (
+                  <Button type="button" variant="outline" size="icon" onClick={() => setQuickClientOpen(true)} title="Novo cliente">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
+              {editingId && (
+                <p className="text-xs text-muted-foreground">
+                  O cliente não pode ser alterado depois da subscrição estar criada.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Serviço</Label>
