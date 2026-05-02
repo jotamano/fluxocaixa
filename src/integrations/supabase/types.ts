@@ -56,6 +56,7 @@ export type Database = {
           position: number
           quantity: number
           service_end_date: string | null
+          service_id: string | null
           service_start_date: string | null
           service_type: Database["public"]["Enums"]["service_type"]
           source_subscription_item_id: string | null
@@ -69,6 +70,7 @@ export type Database = {
           position?: number
           quantity?: number
           service_end_date?: string | null
+          service_id?: string | null
           service_start_date?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
           source_subscription_item_id?: string | null
@@ -82,6 +84,7 @@ export type Database = {
           position?: number
           quantity?: number
           service_end_date?: string | null
+          service_id?: string | null
           service_start_date?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
           source_subscription_item_id?: string | null
@@ -100,6 +103,13 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_items_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
             referencedColumns: ["id"]
           },
         ]

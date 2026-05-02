@@ -345,6 +345,10 @@ export interface UpdateInvoiceItemInput {
   // the persist step as "leave whatever is in the DB alone".
   service_start_date?: string | null;
   service_end_date?: string | null;
+  // Optional FK to the service template the line was created from. Same
+  // undefined/null/string convention as the link column. Lets the
+  // detail-page editor pre-select the matching service on reopen.
+  service_id?: string | null;
   // Only relevant when this row is a NEW line (no id) AND the caller
   // asked us to spawn a subscription for new lines (see
   // `spawnSubscriptionForNewLines` on `useUpdateInvoiceItems`). When
@@ -527,6 +531,9 @@ export function useUpdateInvoiceItems() {
             if (u.service_end_date !== undefined) {
               patch.service_end_date = u.service_end_date;
             }
+            if (u.service_id !== undefined) {
+              patch.service_id = u.service_id;
+            }
             return supabase.from("invoice_items").update(patch).eq("id", u.id!);
           }),
         );
@@ -553,6 +560,9 @@ export function useUpdateInvoiceItems() {
               : {}),
             ...(i.service_end_date !== undefined
               ? { service_end_date: i.service_end_date }
+              : {}),
+            ...(i.service_id !== undefined
+              ? { service_id: i.service_id }
               : {}),
           })
           .select()
@@ -2067,9 +2077,9 @@ export function useDuplicateInvoice() {
       if (createErr) throw createErr;
 
       if (items && items.length > 0) {
-        // Carry the optional service period across so the duplicate
-        // arrives ready to send: typical use case is "same scope of
-        // work, new month", and the user can adjust the dates after.
+        // Carry the optional service period and service template across
+        // so the duplicate arrives ready to send: typical use case is
+        // "same scope of work, new month".
         const cloned = items.map((it) => ({
           invoice_id: created.id,
           description: it.description,
@@ -2078,6 +2088,7 @@ export function useDuplicateInvoice() {
           position: it.position,
           service_start_date: it.service_start_date,
           service_end_date: it.service_end_date,
+          service_id: it.service_id,
         }));
         const { error: insErr } = await supabase.from("invoice_items").insert(cloned);
         if (insErr) throw insErr;
