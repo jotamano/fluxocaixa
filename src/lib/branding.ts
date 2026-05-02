@@ -4,7 +4,7 @@
 // external <img src=...> would be relative to about:blank).
 
 export const BRAND_NAME = "FluxoConta";
-export const BRAND_TAGLINE = "Marketing Digital & Gestão de Redes Sociais";
+export const BRAND_TAGLINE = "Orçamentos Seguros";
 export const BRAND_PRIMARY = "#1d44e8";
 
 /**
