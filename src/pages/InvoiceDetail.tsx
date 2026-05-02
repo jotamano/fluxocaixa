@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { DeleteInvoiceDialog } from "@/components/DeleteInvoiceDialog";
+import { QuickCreateServiceDialog } from "@/components/QuickCreateServiceDialog";
 import type { Subscription } from "@/hooks/use-data";
 import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions, useClientSubscriptionItems } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, getClientLabel, formatInvoiceItemPeriod, methodLabels, frequencyLabels, type SubscriptionFrequency } from "@/lib/data";
@@ -76,6 +77,9 @@ export default function InvoiceDetail() {
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   // index of the line whose link picker is open (null = closed).
   const [linkPickerForIndex, setLinkPickerForIndex] = useState<number | null>(null);
+  // Same pattern for quick-create service: which line opened the
+  // dialog so onCreated knows which line to update.
+  const [quickServiceForIndex, setQuickServiceForIndex] = useState<number | null>(null);
 
   const invoice = useMemo(() => invoices.find(item => item.id === id), [invoices, id]);
   const invoicePayments = useMemo(() => payments.filter(payment => payment.invoice_id === id), [payments, id]);
@@ -624,14 +628,22 @@ export default function InvoiceDetail() {
                       ? "Serviço (opcional)"
                       : "Serviço (opcional, preenche descrição e preço)"}
                   </Label>
-                  <Select value={item.serviceId} onValueChange={v => updateEditItem(index, 'serviceId', v)}>
-                    <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
-                    <SelectContent>
-                      {services.map(svc => (
-                        <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-2">
+                    <Select value={item.serviceId} onValueChange={v => updateEditItem(index, 'serviceId', v)}>
+                      <SelectTrigger className="flex-1"><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
+                      <SelectContent>
+                        {services.map(svc => (
+                          <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {/* Inline quick-create. Same UX as NewInvoice and
+                        the subscription editor — keeps the user inside
+                        the editor while creating a new template. */}
+                    <Button type="button" variant="outline" size="icon" onClick={() => setQuickServiceForIndex(index)} title="Novo serviço" className="shrink-0">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Descrição</Label>
@@ -739,6 +751,36 @@ export default function InvoiceDetail() {
         isPending={deleteInvoice.isPending}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={(opts) => handleDelete(opts)}
+      />
+
+      <QuickCreateServiceDialog
+        open={quickServiceForIndex !== null}
+        onOpenChange={open => { if (!open) setQuickServiceForIndex(null); }}
+        onCreated={svc => {
+          // Apply the new service to the line that opened the dialog.
+          // For a brand-new line (no DB id) we also quick-fill
+          // description + price; for an existing line we only set the
+          // service_id (avoid clobbering user-edited description/price
+          // — same rule as updateEditItem). Doing it inline here also
+          // sidesteps the useActiveServices refetch race.
+          if (quickServiceForIndex !== null) {
+            const idx = quickServiceForIndex;
+            setEditItems(prev => prev.map((it, i) => {
+              if (i !== idx) return it;
+              if (!it.id) {
+                const now = new Date();
+                return {
+                  ...it,
+                  serviceId: svc.id,
+                  unitPrice: Number(svc.default_price),
+                  description: `${svc.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`,
+                };
+              }
+              return { ...it, serviceId: svc.id };
+            }));
+          }
+          setQuickServiceForIndex(null);
+        }}
       />
     </div>
   );

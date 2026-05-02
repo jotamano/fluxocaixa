@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { QuickCreateServiceDialog } from "@/components/QuickCreateServiceDialog";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -87,6 +88,9 @@ export default function NewInvoice() {
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringFrequency, setRecurringFrequency] = useState<SubscriptionFrequency>("monthly");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Tracks which line opened the "+ Novo serviço" dialog so the
+  // dialog's onCreated knows which line to update with the new id.
+  const [quickServiceForIndex, setQuickServiceForIndex] = useState<number | null>(null);
 
   const addItem = () => setItems(prev => [...prev, getDefaultItem()]);
 
@@ -351,6 +355,7 @@ export default function NewInvoice() {
                   showFrequency={isRecurring}
                   onUpdate={updateItem}
                   onRemove={removeItem}
+                  onCreateService={i => setQuickServiceForIndex(i)}
                 />
               ))}
             </SortableContext>
@@ -438,6 +443,30 @@ export default function NewInvoice() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <QuickCreateServiceDialog
+        open={quickServiceForIndex !== null}
+        onOpenChange={open => { if (!open) setQuickServiceForIndex(null); }}
+        onCreated={svc => {
+          // Push the new service into the line that requested it. We
+          // can't go through updateItem(serviceId) because it looks up
+          // the service in the cached `services` array — and the
+          // useActiveServices query hasn't refetched yet at this
+          // point. Apply the quick-fill (description + price) inline
+          // using the row returned by the dialog.
+          if (quickServiceForIndex !== null) {
+            const idx = quickServiceForIndex;
+            const now = new Date();
+            setItems(prev => prev.map((it, i) => i === idx ? {
+              ...it,
+              serviceId: svc.id,
+              unitPrice: Number(svc.default_price),
+              description: `${svc.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`,
+            } : it));
+          }
+          setQuickServiceForIndex(null);
+        }}
+      />
     </div>
   );
 }
@@ -450,9 +479,10 @@ interface SortableInvoiceItemProps {
   showFrequency: boolean;
   onUpdate: (index: number, field: keyof FormItem, value: string | number) => void;
   onRemove: (index: number) => void;
+  onCreateService: (index: number) => void;
 }
 
-function SortableInvoiceItem({ item, index, canRemove, services, showFrequency, onUpdate, onRemove }: SortableInvoiceItemProps) {
+function SortableInvoiceItem({ item, index, canRemove, services, showFrequency, onUpdate, onRemove, onCreateService }: SortableInvoiceItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -477,16 +507,24 @@ function SortableInvoiceItem({ item, index, canRemove, services, showFrequency, 
           <div className="flex items-end gap-2">
             <div className="flex-1 space-y-1">
               <Label className="text-xs">Serviço</Label>
-              <Select value={item.serviceId} onValueChange={v => onUpdate(index, 'serviceId', v)}>
-                <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
-                <SelectContent>
-                  {services?.map(svc => (
-                    <SelectItem key={svc.id} value={svc.id}>
-                      {svc.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={item.serviceId} onValueChange={v => onUpdate(index, 'serviceId', v)}>
+                  <SelectTrigger className="flex-1"><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
+                  <SelectContent>
+                    {services?.map(svc => (
+                      <SelectItem key={svc.id} value={svc.id}>
+                        {svc.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* Quick-create: parent owns the dialog and remembers
+                    which line index opened it, so onCreated can push
+                    the new id back to the right line. */}
+                <Button type="button" variant="outline" size="icon" onClick={() => onCreateService(index)} title="Novo serviço" className="shrink-0">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             {canRemove && (
               <Button variant="ghost" size="icon" onClick={() => onRemove(index)} className="text-destructive hover:text-destructive shrink-0">
