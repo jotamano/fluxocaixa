@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState, createContext, useContext } from "react";
-import ghostLogo from "@/assets/ghostinvoice-logo.svg";
+import fluxoLogo from "@/assets/fluxoconta-logo.svg";
+import fluxoIcon from "@/assets/fluxoconta-icon.svg";
 import { useAuth } from "@/hooks/use-auth";
 
 const navItems = [
@@ -140,9 +141,8 @@ export function AppSidebar() {
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-64 bg-sidebar text-sidebar-foreground border-sidebar-border p-0">
           <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
-          <div className="flex h-16 items-center gap-2 px-6 border-b border-sidebar-border">
-            <img src={ghostLogo} alt="GhostInvoice" className="h-8 w-8" />
-            <span className="font-display text-lg font-bold text-sidebar-primary-foreground">GhostInvoice</span>
+          <div className="flex h-16 items-center px-6 border-b border-sidebar-border">
+            <img src={fluxoLogo} alt="FluxoConta" className="h-12 w-auto" />
           </div>
           <SidebarNav onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
@@ -156,8 +156,9 @@ export function AppSidebar() {
       collapsed ? "w-16" : "w-64"
     )}>
       <div className="flex h-16 items-center gap-2 px-4 border-b border-sidebar-border">
-        <img src={ghostLogo} alt="GhostInvoice" className="h-8 w-8 shrink-0" />
-        {!collapsed && <span className="font-display text-lg font-bold text-sidebar-primary-foreground">GhostInvoice</span>}
+        {collapsed
+          ? <img src={fluxoIcon} alt="FluxoConta" className="h-8 w-8 shrink-0" />
+          : <img src={fluxoLogo} alt="FluxoConta" className="h-12 w-auto shrink-0" />}
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="ml-auto flex h-6 w-6 items-center justify-center rounded text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
