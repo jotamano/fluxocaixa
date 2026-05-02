@@ -153,14 +153,17 @@ export default function InvoiceDetail() {
   const outstanding = Math.max(total - paidTotal, 0);
   const effectiveStatus = outstanding <= 0 && total > 0 ? "paid" : paidTotal > 0 && paidTotal < total ? "partially_paid" : invoice.status;
 
-  // Once an invoice is fully settled it becomes a fiscal document in
-  // PT — altering it after the fact is not allowed (the correct path
-  // is to issue a "nota de crédito" or duplicate the invoice and
-  // re-emit). We block both header and item edits in the UI; the
-  // hooks layer enforces the same rule defensively (see useUpdateInvoice
-  // / useUpdateInvoiceItems) so a stale tab can't bypass it.
-  const isLocked = effectiveStatus === "paid";
-  const lockReason = "Esta fatura está paga e não pode ser editada (documento fiscal). Para alterações, duplica e emite uma nova.";
+  // As soon as ANY payment is recorded the invoice becomes a fiscal
+  // document with attached recibos — altering it after that is not
+  // allowed (the correct path is to issue a "nota de crédito" or
+  // duplicate and re-emit). We block both header and item edits in
+  // the UI; the hooks layer enforces the same rule defensively (see
+  // useUpdateInvoice / useUpdateInvoiceItems) so a stale tab can't
+  // bypass it.
+  const isLocked = effectiveStatus === "paid" || effectiveStatus === "partially_paid";
+  const lockReason = effectiveStatus === "paid"
+    ? "Esta fatura está paga e não pode ser editada (documento fiscal). Para alterações, duplica e emite uma nova."
+    : "Esta fatura tem pagamentos registados e não pode ser editada. Para alterações, anula os pagamentos primeiro ou duplica para emitir uma nova.";
 
 
   const handleDelete = (opts: { cascadePayments: boolean; cascadeSubscription: boolean }) => {

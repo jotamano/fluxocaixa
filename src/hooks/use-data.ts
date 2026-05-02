@@ -288,13 +288,22 @@ export function useAddInvoice() {
 }
 
 /**
- * Returns true when the invoice with `invoiceId` is fully settled
- * (outstanding ≤ 0 and total > 0). Re-uses the same definition as
- * the UI's `effectiveStatus` so the lock applied in the editor
- * matches what the hook layer enforces — no TOCTOU surprises if
- * the user has a stale tab.
+ * Returns the lock state of an invoice for the editor:
+ *   - "paid" when total > 0 and paid >= total (fully settled).
+ *   - "partial" when paid > 0 and paid < total (recibos issued
+ *     but balance remains).
+ *   - "open" otherwise — fully editable.
+ *
+ * Both "paid" and "partial" are write-locked: as soon as a single
+ * payment is recorded, recibos exist and altering the invoice
+ * after the fact is not allowed in PT (correct path = nota de
+ * crédito or duplicate-and-reissue). Re-uses the same definition
+ * as the UI's `effectiveStatus` so editor and hook agree — no
+ * TOCTOU surprises with stale tabs.
  */
-async function isInvoicePaid(invoiceId: string): Promise<boolean> {
+async function getInvoiceLockState(
+  invoiceId: string,
+): Promise<"paid" | "partial" | "open"> {
   const [itemsRes, paymentsRes] = await Promise.all([
     supabase.from("invoice_items").select("quantity, unit_price").eq("invoice_id", invoiceId),
     supabase.from("payments").select("amount").eq("invoice_id", invoiceId).is("deleted_at", null),
@@ -306,21 +315,32 @@ async function isInvoicePaid(invoiceId: string): Promise<boolean> {
     0,
   );
   const paid = (paymentsRes.data ?? []).reduce((sum, p) => sum + Number(p.amount), 0);
-  return total > 0 && paid >= total;
+  if (total > 0 && paid >= total) return "paid";
+  if (paid > 0) return "partial";
+  return "open";
 }
 
 const PAID_INVOICE_LOCK_MESSAGE =
   "Esta fatura está paga e não pode ser editada (documento fiscal). Para alterações, duplica e emite uma nova.";
+const PARTIAL_INVOICE_LOCK_MESSAGE =
+  "Esta fatura tem pagamentos registados e não pode ser editada. Para alterações, anula os pagamentos primeiro ou duplica para emitir uma nova.";
+
+async function assertInvoiceEditable(invoiceId: string) {
+  const state = await getInvoiceLockState(invoiceId);
+  if (state === "paid") throw new Error(PAID_INVOICE_LOCK_MESSAGE);
+  if (state === "partial") throw new Error(PARTIAL_INVOICE_LOCK_MESSAGE);
+}
 
 export function useUpdateInvoice() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: TablesUpdate<"invoices"> }) => {
       // Defense in depth: a stale tab might still have the edit
-      // dialog open after the invoice gets fully paid in another
-      // window. Reject the write rather than silently mutating a
-      // settled fiscal document.
-      if (await isInvoicePaid(id)) throw new Error(PAID_INVOICE_LOCK_MESSAGE);
+      // dialog open after a payment was recorded in another window.
+      // Reject the write rather than silently mutating a fiscal
+      // document. Both fully-paid AND partially-paid invoices are
+      // locked because both have at least one recibo emitted.
+      await assertInvoiceEditable(id);
       const { data, error } = await supabase.from("invoices").update(updates).eq("id", id).select().single();
       if (error) throw error;
       return data;
@@ -412,9 +432,10 @@ export function useUpdateInvoiceItems() {
     }
   >({
     mutationFn: async ({ invoiceId, items, syncToSubscriptions = false, spawnSubscriptionForNewLines }) => {
-      // Same defense in depth as useUpdateInvoice — paid invoices are
-      // fiscal documents and must not have their items rewritten.
-      if (await isInvoicePaid(invoiceId)) throw new Error(PAID_INVOICE_LOCK_MESSAGE);
+      // Same defense in depth as useUpdateInvoice — invoices with
+      // any recorded payment (full or partial) are fiscal documents
+      // and must not have their items rewritten.
+      await assertInvoiceEditable(invoiceId);
 
       const result: UpdateInvoiceItemsResult = {
         syncedSubscriptionIds: [],
