@@ -9,6 +9,7 @@ export type InvoiceItem = Tables<"invoice_items">;
 export type Subscription = Tables<"subscriptions"> & { clients?: Client };
 export type Payment = Tables<"payments">;
 export type Service = Tables<"services">;
+export type ClientCredit = Tables<"client_credits">;
 
 // ─── Services ───
 
@@ -1543,6 +1544,107 @@ export function useDeletePayment() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["payments"] });
       qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
+  });
+}
+
+// ─── Client credits ───
+//
+// Credits represent prepayments / overpayments parked on a client.
+// They're created either explicitly by the user or as a side-effect
+// of a "split payment" with a leftover amount, and consumed against
+// future invoices in PaymentDialog. Soft-delete only — see migration
+// 20260418100000.
+
+export function useClientCredits() {
+  return useQuery({
+    queryKey: ["client_credits"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("client_credits")
+        .select("*")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as ClientCredit[];
+    },
+  });
+}
+
+export function useAddClientCredit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (credit: TablesInsert<"client_credits">) => {
+      const { data, error } = await supabase
+        .from("client_credits")
+        .insert(credit)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as ClientCredit;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["client_credits"] });
+    },
+  });
+}
+
+// Consume up to `amount` from the client's available credit pool,
+// in FIFO order (oldest credit first). Each credit row is updated in
+// place — when fully drained we mark consumed_at; otherwise we just
+// reduce the remaining amount. Returns how much was actually
+// consumed (may be less than requested if the pool ran out).
+export function useConsumeClientCredit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clientId, amount }: { clientId: string; amount: number }) => {
+      if (amount <= 0) return 0;
+      const { data: credits, error: fetchErr } = await supabase
+        .from("client_credits")
+        .select("*")
+        .eq("client_id", clientId)
+        .is("deleted_at", null)
+        .is("consumed_at", null)
+        .order("created_at", { ascending: true });
+      if (fetchErr) throw fetchErr;
+
+      let remaining = amount;
+      const now = new Date().toISOString();
+      for (const credit of credits as ClientCredit[]) {
+        if (remaining <= 0) break;
+        const available = Number(credit.amount);
+        const take = Math.min(remaining, available);
+        const newAmount = available - take;
+        const updates: TablesUpdate<"client_credits"> = newAmount === 0
+          ? { amount: available, consumed_at: now }
+          : { amount: newAmount };
+        const { error: updErr } = await supabase
+          .from("client_credits")
+          .update(updates)
+          .eq("id", credit.id);
+        if (updErr) throw updErr;
+        remaining -= take;
+      }
+      return amount - remaining;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["client_credits"] });
+    },
+  });
+}
+
+export function useDeleteClientCredit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("client_credits")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["client_credits"] });
     },
   });
 }

@@ -5,11 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useAddPayment, useClients, usePayments, type Invoice } from "@/hooks/use-data";
+import { useAddPayment, useClients, usePayments, useAddClientCredit, useClientCredits, type Invoice } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, getClientLabel } from "@/lib/data";
 import { toast } from "sonner";
 
 type PaymentMethod = "transfer" | "mbway" | "cash" | "card";
+type AllocationMode = "auto" | "manual";
 
 interface SplitPaymentDialogProps {
   open: boolean;
@@ -23,22 +24,25 @@ const getToday = () => new Date().toISOString().split("T")[0];
 
 export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: SplitPaymentDialogProps) {
   const addPayment = useAddPayment();
+  const addCredit = useAddClientCredit();
   const { data: allPayments = [] } = usePayments();
   const { data: allClients = [] } = useClients();
+  const { data: allCredits = [] } = useClientCredits();
   const [totalAmount, setTotalAmount] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("transfer");
   const [date, setDate] = useState(getToday());
   const [notes, setNotes] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Default the filter to whatever the caller passed (e.g. a client
-  // row), or to "all" if invoked from the toolbar. The user can change
-  // it in the dialog.
   const [filterClientId, setFilterClientId] = useState<string>(clientId ?? ALL_CLIENTS);
+  const [mode, setMode] = useState<AllocationMode>("auto");
+  // Manual allocation overrides per invoice id (string for empty-state
+  // tolerance). Only consulted when mode === "manual".
+  const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
+  // Whether to park the leftover amount as a client credit. Only
+  // available when every selected invoice belongs to the same client.
+  const [saveLeftoverAsCredit, setSaveLeftoverAsCredit] = useState(true);
 
-  // Pull every unpaid invoice once, with per-id remaining balance. The
-  // visible list is then derived by client filter without having to
-  // re-walk the payments table.
   const unpaidInvoicesAll = useMemo(() => {
     return invoices.filter(inv => inv.status !== "paid" && inv.status !== "draft");
   }, [invoices]);
@@ -60,10 +64,6 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
     return unpaidInvoicesAll.filter(inv => inv.client_id === filterClientId);
   }, [unpaidInvoicesAll, filterClientId]);
 
-  // Group visible invoices by client so the user can see per-client
-  // totals at a glance and use the "select all" shortcut. When the
-  // filter is locked to a single client we still group (one bucket) to
-  // keep the rendering uniform.
   const grouped = useMemo(() => {
     const buckets = new Map<string, { client: { id: string; label: string }; invoices: Invoice[] }>();
     for (const inv of visibleInvoices) {
@@ -72,17 +72,12 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
       if (!buckets.has(id)) buckets.set(id, { client: { id, label }, invoices: [] });
       buckets.get(id)!.invoices.push(inv);
     }
-    // Sort each bucket's invoices by due date (oldest first); buckets
-    // by client label so the order is stable across renders.
     for (const b of buckets.values()) {
       b.invoices.sort((a, c) => new Date(a.due_date).getTime() - new Date(c.due_date).getTime());
     }
     return Array.from(buckets.values()).sort((a, b) => a.client.label.localeCompare(b.client.label));
   }, [visibleInvoices]);
 
-  // Reset whenever the dialog opens. Picking up the latest clientId
-  // prop here covers the case where the caller changed it between
-  // openings.
   useEffect(() => {
     if (!open) return;
     setTotalAmount("");
@@ -91,6 +86,9 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
     setNotes("");
     setSelectedIds(new Set());
     setFilterClientId(clientId ?? ALL_CLIENTS);
+    setMode("auto");
+    setManualAmounts({});
+    setSaveLeftoverAsCredit(true);
   }, [open, clientId]);
 
   const selectedInvoices = useMemo(
@@ -102,6 +100,23 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
     (sum, inv) => sum + (invoiceRemaining.get(inv.id) || 0),
     0,
   );
+
+  // The "credit excess" workflow only makes sense when there's a
+  // single client owner — otherwise we can't tell whose pool to top
+  // up. Used both to gate the checkbox and to drive the credit insert.
+  const uniqueSelectedClientId = useMemo(() => {
+    if (selectedInvoices.length === 0) return null;
+    const ids = new Set(selectedInvoices.map(inv => inv.client_id));
+    return ids.size === 1 ? selectedInvoices[0].client_id : null;
+  }, [selectedInvoices]);
+
+  // Existing pool for the unique client (read-only display).
+  const clientCreditPool = useMemo(() => {
+    if (!uniqueSelectedClientId) return 0;
+    return allCredits
+      .filter(c => c.client_id === uniqueSelectedClientId && !c.consumed_at)
+      .reduce((s, c) => s + Number(c.amount), 0);
+  }, [allCredits, uniqueSelectedClientId]);
 
   const toggleInvoice = (id: string) => {
     setSelectedIds(prev => {
@@ -128,12 +143,24 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
     });
   };
 
-  // Auto-distribute the entered total across the selected invoices,
-  // oldest due_date first. Allocates against each invoice's remaining
-  // balance so a partially-paid invoice gets only what's left.
+  // Distribution depends on mode:
+  //   - auto:   spread total across selected invoices, oldest first.
+  //   - manual: each invoice carries its own typed amount, capped at
+  //             that invoice's remaining balance.
   const distribution = useMemo(() => {
+    if (selectedInvoices.length === 0) return [];
+
+    if (mode === "manual") {
+      return selectedInvoices.map(inv => {
+        const raw = parseFloat(manualAmounts[inv.id] ?? "");
+        const invRemaining = invoiceRemaining.get(inv.id) || 0;
+        const allocated = Number.isFinite(raw) && raw > 0 ? Math.min(raw, invRemaining) : 0;
+        return { invoice: inv, amount: allocated };
+      }).filter(d => d.amount > 0);
+    }
+
     const amount = parseFloat(totalAmount) || 0;
-    if (amount <= 0 || selectedInvoices.length === 0) return [];
+    if (amount <= 0) return [];
 
     const sorted = [...selectedInvoices].sort(
       (a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime(),
@@ -146,14 +173,19 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
       remaining = Math.max(0, remaining - allocated);
       return { invoice: inv, amount: allocated };
     }).filter(d => d.amount > 0);
-  }, [totalAmount, selectedInvoices, invoiceRemaining]);
+  }, [mode, manualAmounts, totalAmount, selectedInvoices, invoiceRemaining]);
 
   const enteredAmount = parseFloat(totalAmount) || 0;
   const allocatedAmount = distribution.reduce((sum, d) => sum + d.amount, 0);
+  // In auto mode the leftover is total entered − allocated. In manual
+  // mode the user types each invoice value directly so "leftover" is
+  // an explicit choice: how much of the entered total they want to
+  // keep as credit. Compute it the same way for consistency.
   const leftover = Math.max(0, enteredAmount - allocatedAmount);
+  const canSaveAsCredit = leftover > 0 && uniqueSelectedClientId !== null;
 
   const handleSubmit = async () => {
-    if (distribution.length === 0) return;
+    if (distribution.length === 0 && !(canSaveAsCredit && saveLeftoverAsCredit)) return;
     setIsSubmitting(true);
 
     try {
@@ -167,10 +199,27 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
           notes: notes || null,
         });
       }
-      const leftoverNote = leftover > 0
-        ? ` (${formatCurrency(leftover)} não alocados — ajusta o valor ou seleciona mais faturas)`
-        : "";
-      toast.success(`${formatCurrency(allocatedAmount)} distribuído por ${distribution.length} fatura(s)${leftoverNote}`);
+      let creditCreated = 0;
+      if (canSaveAsCredit && saveLeftoverAsCredit) {
+        await addCredit.mutateAsync({
+          client_id: uniqueSelectedClientId!,
+          amount: leftover,
+          notes: notes ? `Excedente — ${notes}` : "Excedente de pagamento repartido",
+        });
+        creditCreated = leftover;
+      }
+      const parts: string[] = [];
+      if (distribution.length > 0) {
+        parts.push(`${formatCurrency(allocatedAmount)} em ${distribution.length} fatura(s)`);
+      }
+      if (creditCreated > 0) {
+        parts.push(`${formatCurrency(creditCreated)} guardado como crédito`);
+      }
+      const unallocated = leftover - creditCreated;
+      if (unallocated > 0) {
+        parts.push(`${formatCurrency(unallocated)} não alocado`);
+      }
+      toast.success(parts.join(" · ") || "Sem alterações");
       onOpenChange(false);
     } catch {
       toast.error("Erro ao registar pagamentos");
@@ -179,11 +228,19 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
     }
   };
 
-  const submitLabel = enteredAmount === 0
-    ? "Introduz um valor"
-    : selectedInvoices.length === 0
-      ? "Seleciona pelo menos uma fatura"
-      : `Registar ${distribution.length} pagamento(s) — ${formatCurrency(allocatedAmount)}`;
+  const submitDisabled =
+    isSubmitting ||
+    (distribution.length === 0 && !(canSaveAsCredit && saveLeftoverAsCredit && leftover > 0));
+
+  const submitLabel = (() => {
+    if (mode === "auto" && enteredAmount === 0) return "Introduz um valor";
+    if (selectedInvoices.length === 0) return "Seleciona pelo menos uma fatura";
+    const parts: string[] = [];
+    if (distribution.length > 0) parts.push(`${distribution.length} pagamento(s)`);
+    if (canSaveAsCredit && saveLeftoverAsCredit && leftover > 0) parts.push("1 crédito");
+    if (parts.length === 0) return "Nada a registar";
+    return `Registar ${parts.join(" + ")}`;
+  })();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -191,7 +248,7 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
         <DialogHeader>
           <DialogTitle className="font-display">Pagamento Repartido</DialogTitle>
           <DialogDescription>
-            Distribui um valor recebido por várias faturas em aberto. As mais antigas são abatidas primeiro.
+            Distribui um valor recebido por várias faturas em aberto. Em modo automático abate as mais antigas primeiro; em modo manual escolhes o valor por linha.
           </DialogDescription>
         </DialogHeader>
 
@@ -221,6 +278,26 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-sm">Modo de distribuição</Label>
+            <div className="inline-flex rounded-md border border-border overflow-hidden text-xs">
+              <button
+                type="button"
+                className={`px-3 py-1.5 ${mode === "auto" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted/40"}`}
+                onClick={() => setMode("auto")}
+              >
+                Automático
+              </button>
+              <button
+                type="button"
+                className={`px-3 py-1.5 ${mode === "manual" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted/40"}`}
+                onClick={() => setMode("manual")}
+              >
+                Manual
+              </button>
             </div>
           </div>
 
@@ -260,14 +337,15 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
                           .map(it => it.description)
                           .join(" · ");
                         const extraItems = (inv.invoice_items?.length ?? 0) - 2;
+                        const isSelected = selectedIds.has(inv.id);
                         return (
-                          <label
+                          <div
                             key={inv.id}
-                            className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors"
+                            className="flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
                           >
                             <Checkbox
                               className="mt-0.5"
-                              checked={selectedIds.has(inv.id)}
+                              checked={isSelected}
                               onCheckedChange={() => toggleInvoice(inv.id)}
                             />
                             <div className="flex-1 min-w-0 space-y-0.5">
@@ -283,15 +361,27 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
                                 Vence: {new Date(inv.due_date).toLocaleDateString("pt-PT")}
                               </p>
                             </div>
-                            <div className="text-right shrink-0">
+                            <div className="text-right shrink-0 space-y-1">
                               <p className="text-sm font-semibold text-card-foreground">{formatCurrency(remaining)}</p>
-                              {dist && dist.amount > 0 && (
+                              {mode === "manual" && isSelected ? (
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  className="h-7 w-24 text-right text-xs"
+                                  placeholder="0.00"
+                                  value={manualAmounts[inv.id] ?? ""}
+                                  onChange={e =>
+                                    setManualAmounts(prev => ({ ...prev, [inv.id]: e.target.value }))
+                                  }
+                                />
+                              ) : dist && dist.amount > 0 ? (
                                 <p className="text-xs text-primary font-medium">
                                   −{formatCurrency(dist.amount)}
                                 </p>
-                              )}
+                              ) : null}
                             </div>
-                          </label>
+                          </div>
                         );
                       })}
                     </div>
@@ -303,6 +393,9 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
               <p className="text-xs text-muted-foreground">
                 {selectedInvoices.length} fatura(s) selecionadas · dívida total{" "}
                 <span className="font-semibold text-foreground">{formatCurrency(totalSelectedDebt)}</span>
+                {uniqueSelectedClientId && clientCreditPool > 0 && (
+                  <> · saldo do cliente {formatCurrency(clientCreditPool)}</>
+                )}
               </p>
             )}
           </div>
@@ -331,7 +424,7 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
             <Input placeholder="Ex: Pagamento repartido" value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
 
-          {distribution.length > 0 && (
+          {(distribution.length > 0 || leftover > 0) && (
             <div className="rounded-lg border border-border bg-muted/40 p-4 space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Vais registar</p>
               {distribution.map(({ invoice, amount }) => (
@@ -347,10 +440,26 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
                 <span className="font-semibold text-card-foreground">{formatCurrency(allocatedAmount)}</span>
               </div>
               {leftover > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-amber-600">Não alocado</span>
-                  <span className="font-semibold text-amber-600">{formatCurrency(leftover)}</span>
-                </div>
+                <>
+                  {canSaveAsCredit ? (
+                    <label className="flex items-start gap-2 text-sm pt-1">
+                      <Checkbox
+                        className="mt-0.5"
+                        checked={saveLeftoverAsCredit}
+                        onCheckedChange={(checked) => setSaveLeftoverAsCredit(!!checked)}
+                      />
+                      <span className="flex-1">
+                        Registar <span className="font-semibold">{formatCurrency(leftover)}</span> como crédito do cliente
+                        <span className="block text-xs text-muted-foreground">Será descontado automaticamente em pagamentos futuros.</span>
+                      </span>
+                    </label>
+                  ) : (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-amber-600">Não alocado</span>
+                      <span className="font-semibold text-amber-600">{formatCurrency(leftover)}</span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -358,7 +467,7 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
           <Button
             onClick={handleSubmit}
             className="w-full"
-            disabled={distribution.length === 0 || isSubmitting}
+            disabled={submitDisabled}
           >
             {isSubmitting ? "A registar..." : submitLabel}
           </Button>

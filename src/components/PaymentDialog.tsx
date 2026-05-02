@@ -4,9 +4,10 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { useAddPayment, usePayments, type Invoice } from "@/hooks/use-data";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useAddPayment, usePayments, useClientCredits, useConsumeClientCredit, type Invoice } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, getClientLabel } from "@/lib/data";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type PaymentMethod = "transfer" | "mbway" | "cash" | "card";
@@ -37,7 +38,9 @@ export function PaymentDialog({
   title = "Registar Pagamento",
 }: PaymentDialogProps) {
   const addPayment = useAddPayment();
+  const consumeCredit = useConsumeClientCredit();
   const { data: allPayments = [] } = usePayments();
+  const { data: allCredits = [] } = useClientCredits();
 
   const [form, setForm] = useState({
     invoiceId: initialInvoiceId,
@@ -46,6 +49,10 @@ export function PaymentDialog({
     notes: "",
     date: getToday(),
   });
+  // When the selected invoice's client has unspent credit, the user
+  // can opt to apply some of it as part of this payment. The credit
+  // shown / consumed is capped at min(pool, outstanding − typed amount).
+  const [useCredit, setUseCredit] = useState(false);
 
   // Per-invoice outstanding balance. We compute this for every invoice
   // in the list (not only the selected one) because the dropdown
@@ -106,10 +113,19 @@ export function PaymentDialog({
       notes: "",
       date: getToday(),
     });
+    setUseCredit(false);
     // We deliberately depend only on `open` — re-deriving on every
     // payment refetch would clobber what the user typed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Available credit pool for the selected invoice's client.
+  const clientCreditPool = useMemo(() => {
+    if (!selectedInvoice) return 0;
+    return allCredits
+      .filter(c => c.client_id === selectedInvoice.client_id && !c.consumed_at)
+      .reduce((s, c) => s + Number(c.amount), 0);
+  }, [allCredits, selectedInvoice]);
 
   // Auto-fill amount with the outstanding balance whenever the user
   // picks (or switches) an invoice in the dropdown — without
@@ -130,26 +146,55 @@ export function PaymentDialog({
     });
   };
 
-  const handleSubmit = () => {
-    if (!selectedInvoice || !form.amount) return;
-
-    addPayment.mutate(
-      {
-        invoice_id: selectedInvoice.id,
-        client_id: selectedInvoice.client_id,
-        amount: parseFloat(form.amount),
-        date: form.date,
-        method: form.method,
-        notes: form.notes || null,
-      },
-      {
-        onSuccess: () => onOpenChange(false),
-      },
-    );
-  };
-
   const amountNumber = parseFloat(form.amount) || 0;
   const exceedsOutstanding = amountNumber > invoiceOutstanding && invoiceOutstanding > 0;
+  // How much of the credit pool would actually be applied if the user
+  // ticks "use credit": fill what's still missing from outstanding
+  // after the typed amount, capped by the pool. Zero out if the user
+  // already covers the outstanding manually.
+  const creditApplicable = useCredit
+    ? Math.max(0, Math.min(clientCreditPool, invoiceOutstanding - amountNumber))
+    : 0;
+
+  const handleSubmit = async () => {
+    if (!selectedInvoice) return;
+    if (!form.amount && creditApplicable <= 0) return;
+
+    try {
+      // Cash/transfer/etc. payment first (skip if user only wants to
+      // pay from credit). The credit consumption is logged as a
+      // separate payment row with method="cash" and notes flagged.
+      if (amountNumber > 0) {
+        await addPayment.mutateAsync({
+          invoice_id: selectedInvoice.id,
+          client_id: selectedInvoice.client_id,
+          amount: amountNumber,
+          date: form.date,
+          method: form.method,
+          notes: form.notes || null,
+        });
+      }
+      if (creditApplicable > 0) {
+        const consumed = await consumeCredit.mutateAsync({
+          clientId: selectedInvoice.client_id,
+          amount: creditApplicable,
+        });
+        if (consumed > 0) {
+          await addPayment.mutateAsync({
+            invoice_id: selectedInvoice.id,
+            client_id: selectedInvoice.client_id,
+            amount: consumed,
+            date: form.date,
+            method: form.method,
+            notes: form.notes ? `${form.notes} (saldo do cliente)` : "Aplicado saldo do cliente",
+          });
+        }
+      }
+      onOpenChange(false);
+    } catch {
+      // Errors surface via the mutations' default handlers / toasts.
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -250,12 +295,38 @@ export function PaymentDialog({
             <Input placeholder="Ex: Pagamento parcial" value={form.notes} onChange={e => setForm(prev => ({ ...prev, notes: e.target.value }))} />
           </div>
 
+          {selectedInvoice && clientCreditPool > 0 && invoiceOutstanding > 0 && (
+            <label className="flex items-start gap-2 rounded-lg border border-border bg-accent/10 p-3 text-sm cursor-pointer">
+              <Checkbox
+                className="mt-0.5"
+                checked={useCredit}
+                onCheckedChange={(checked) => setUseCredit(!!checked)}
+              />
+              <span className="flex-1">
+                <span className="flex items-center gap-1.5 font-medium text-card-foreground">
+                  <Wallet className="h-3.5 w-3.5" />
+                  Aplicar saldo do cliente ({formatCurrency(clientCreditPool)} disponível)
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {creditApplicable > 0
+                    ? `Vai abater ${formatCurrency(creditApplicable)} do saldo, registado como pagamento separado.`
+                    : "Aumenta o valor em falta para usar o saldo, ou deixa o valor a 0 para pagar só com saldo."}
+                </span>
+              </span>
+            </label>
+          )}
+
           <Button
             onClick={handleSubmit}
             className="w-full"
-            disabled={!form.invoiceId || !form.amount || amountNumber <= 0 || addPayment.isPending}
+            disabled={
+              !form.invoiceId ||
+              addPayment.isPending ||
+              consumeCredit.isPending ||
+              (amountNumber <= 0 && creditApplicable <= 0)
+            }
           >
-            {addPayment.isPending ? "A registar..." : "Registar pagamento"}
+            {addPayment.isPending || consumeCredit.isPending ? "A registar..." : "Registar pagamento"}
           </Button>
         </div>
       </DialogContent>
