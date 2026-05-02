@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, LayoutList, LayoutGrid, CheckCircle2 } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, LayoutList, LayoutGrid, CheckCircle2, FileText, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSubscriptions, useInvoices } from "@/hooks/use-data";
 import { frequencyLabels, formatCurrency, getInvoiceItemsTotal, getClientLabel } from "@/lib/data";
@@ -350,7 +350,7 @@ export default function CalendarPage() {
                               onClick={(e) => e.stopPropagation()}
                               title={`Fatura ${inv.number} · ${getClientLabel(inv, "")}`}
                               className={cn(
-                                "truncate rounded px-1.5 py-0.5 text-[10px] leading-tight font-medium hover:opacity-80 transition-opacity",
+                                "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-tight font-medium hover:opacity-80 transition-opacity",
                                 isSelected
                                   ? "bg-primary-foreground/20 text-primary-foreground"
                                   : inv.status === 'overdue'
@@ -358,7 +358,8 @@ export default function CalendarPage() {
                                     : "bg-warning/20 text-warning-foreground",
                               )}
                             >
-                              {inv.number}
+                              <FileText className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{inv.number}</span>
                             </Link>
                           ))}
                           {visibleSubs.map(({ sub, client }, idx) => (
@@ -368,13 +369,14 @@ export default function CalendarPage() {
                               onClick={(e) => e.stopPropagation()}
                               title={`${sub.name} · ${client}`}
                               className={cn(
-                                "truncate rounded px-1.5 py-0.5 text-[10px] leading-tight font-medium hover:opacity-80 transition-opacity",
+                                "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-tight font-medium hover:opacity-80 transition-opacity",
                                 isSelected
                                   ? "bg-primary-foreground/20 text-primary-foreground"
                                   : "bg-primary/15 text-primary",
                               )}
                             >
-                              {sub.name}
+                              <Repeat className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{sub.name}</span>
                             </Link>
                           ))}
                           {overflow > 0 && (
@@ -392,15 +394,15 @@ export default function CalendarPage() {
             </div>
             <div className="border-t border-border px-6 py-3 flex flex-wrap gap-4">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <div className="h-2 w-2 rounded-full bg-primary" />
+                <Repeat className="h-3 w-3 text-primary" />
                 Subscrição
               </div>
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <div className="h-2 w-2 rounded-full bg-warning" />
+                <FileText className="h-3 w-3 text-warning" />
                 Fatura pendente
               </div>
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <div className="h-2 w-2 rounded-full bg-destructive" />
+                <FileText className="h-3 w-3 text-destructive" />
                 Fatura vencida
               </div>
             </div>
