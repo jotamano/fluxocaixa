@@ -212,7 +212,10 @@ export default function InvoiceDetail() {
   const openEditItems = () => {
     setEditItems(invoice.invoice_items.map(item => ({
       id: item.id,
-      serviceId: "",
+      // Pre-select the service template the line was originally
+      // created from, so the user can see at a glance what it maps
+      // to (and re-apply the template if they want).
+      serviceId: item.service_id ?? "",
       description: item.description,
       quantity: item.quantity,
       unitPrice: Number(item.unit_price),
@@ -228,7 +231,13 @@ export default function InvoiceDetail() {
     setEditItems(prev => prev.map((item, i) => {
       if (i !== index) return item;
       const updated = { ...item, [field]: value } as EditItem;
-      if (field === 'serviceId') {
+      // Quick-fill description + price from the picked service ONLY
+      // for new lines (no DB id yet). Existing lines have probably
+      // been edited by the user — overwriting their description and
+      // price when they just want to change the categorisation would
+      // be destructive. The service_id alone is enough for the editor
+      // to remember the mapping next time.
+      if (field === 'serviceId' && !item.id) {
         const svc = services.find(s => s.id === value);
         if (svc) {
           const now = new Date();
@@ -289,6 +298,9 @@ export default function InvoiceDetail() {
         // `undefined` as "don't touch", so we explicitly map "" → null.
         service_start_date: i.startDate || null,
         service_end_date: i.endDate || null,
+        // Same convention for the service template link: "" → null
+        // (user cleared the picker), uuid → set, undefined never sent.
+        service_id: i.serviceId || null,
         // NO_SPAWN sentinel maps to "leave undefined"; the mutation
         // skips spawning for any line whose freq is falsy.
         newLineFrequency:
@@ -597,27 +609,30 @@ export default function InvoiceDetail() {
                     </Button>
                   )}
                 </div>
-                {/* Service template picker is only useful as a quick-
-                    fill for NEW lines (sets description + default
-                    price + nudges the spawn frequency). For existing
-                    lines it would just overwrite what's already there
-                    — and we don't store a service_id on invoice_items,
-                    so we can't pre-select the matching template
-                    anyway. Hiding it avoids the confusing "Selecionar
-                    serviço" placeholder on every saved line. */}
-                {!item.id && (
-                  <div className="space-y-1">
-                    <Label className="text-xs">Serviço (opcional, preenche descrição e preço)</Label>
-                    <Select value={item.serviceId} onValueChange={v => updateEditItem(index, 'serviceId', v)}>
-                      <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
-                      <SelectContent>
-                        {services.map(svc => (
-                          <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+                {/* Service template picker. For NEW lines the picker
+                    quick-fills description + default price (kept for
+                    parity with /faturas/nova). For EXISTING lines it
+                    only updates the categorisation — switching the
+                    service does NOT rewrite the description or price
+                    you've already typed, so it's safe to use it just
+                    to label the line. The selected template is
+                    persisted on invoice_items.service_id so the
+                    picker remembers your choice on reopen. */}
+                <div className="space-y-1">
+                  <Label className="text-xs">
+                    {item.id
+                      ? "Serviço (opcional)"
+                      : "Serviço (opcional, preenche descrição e preço)"}
+                  </Label>
+                  <Select value={item.serviceId} onValueChange={v => updateEditItem(index, 'serviceId', v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar serviço" /></SelectTrigger>
+                    <SelectContent>
+                      {services.map(svc => (
+                        <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Descrição</Label>
                   <Input value={item.description} onChange={e => updateEditItem(index, 'description', e.target.value)} />

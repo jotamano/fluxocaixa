@@ -179,6 +179,10 @@ export default function NewInvoice() {
           position: idx,
           service_start_date: i.startDate || null,
           service_end_date: i.endDate || null,
+          // Remember which service template the line was created from
+          // so the detail-page editor can pre-select it on reopen. The
+          // form picker uses "" for "none" — translate to NULL.
+          service_id: i.serviceId || null,
         })),
       });
 
