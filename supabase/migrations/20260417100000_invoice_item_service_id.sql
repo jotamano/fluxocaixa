@@ -41,7 +41,10 @@ with candidate as (
    where ii.service_id is null
 ),
 unambiguous as (
-  select invoice_item_id, min(service_id) as service_id
+  -- Postgres has no aggregate min() for uuid, so we pick any element
+  -- via array_agg; the HAVING clause guarantees only one distinct
+  -- value exists in the bucket so the choice is irrelevant.
+  select invoice_item_id, (array_agg(distinct service_id))[1] as service_id
     from candidate
    group by invoice_item_id
   having count(distinct service_id) = 1
