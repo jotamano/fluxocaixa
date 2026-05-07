@@ -3,9 +3,11 @@ import { Users, Plus, Mail, Phone, Building, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useClients, useAddClient, useInvoices, useSubscriptions } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal } from "@/lib/data";
+import { DEFAULT_IVA_PERCENTAGE, formatCurrency, getInvoiceItemsTotal } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 
 export default function Clients() {
@@ -16,7 +18,10 @@ export default function Clients() {
   const addClient = useAddClient();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', company: '', phone: '', nif: '' });
+  const [form, setForm] = useState({
+    name: '', email: '', company: '', phone: '', nif: '',
+    has_iva: true, iva_percentage: DEFAULT_IVA_PERCENTAGE,
+  });
 
   const filtered = clients.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -24,12 +29,26 @@ export default function Clients() {
   );
 
   const handleAdd = () => {
-    addClient.mutate(form, {
-      onSuccess: () => {
-        setForm({ name: '', email: '', company: '', phone: '', nif: '' });
-        setDialogOpen(false);
+    addClient.mutate(
+      {
+        name: form.name,
+        email: form.email,
+        company: form.company,
+        phone: form.phone,
+        nif: form.nif,
+        has_iva: form.has_iva,
+        iva_percentage: form.has_iva ? Number(form.iva_percentage) || 0 : 0,
       },
-    });
+      {
+        onSuccess: () => {
+          setForm({
+            name: '', email: '', company: '', phone: '', nif: '',
+            has_iva: true, iva_percentage: DEFAULT_IVA_PERCENTAGE,
+          });
+          setDialogOpen(false);
+        },
+      },
+    );
   };
 
   return (
@@ -48,22 +67,47 @@ export default function Clients() {
               <DialogTitle className="font-display">Adicionar Cliente</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-4">
-              {[
+              {([
                 { key: 'name', label: 'Nome', placeholder: 'Nome completo' },
                 { key: 'email', label: 'Email', placeholder: 'email@exemplo.pt' },
                 { key: 'company', label: 'Empresa', placeholder: 'Nome da empresa' },
                 { key: 'phone', label: 'Telefone', placeholder: '+351 ...' },
                 { key: 'nif', label: 'NIF', placeholder: '509...' },
-              ].map(field => (
+              ] as const).map(field => (
                 <div key={field.key} className="space-y-2">
                   <Label>{field.label}</Label>
                   <Input
                     placeholder={field.placeholder}
-                    value={form[field.key as keyof typeof form]}
+                    value={form[field.key]}
                     onChange={e => setForm(prev => ({ ...prev, [field.key]: e.target.value }))}
                   />
                 </div>
               ))}
+              <div className="rounded-lg border border-border p-3 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label className="text-sm">Tem IVA</Label>
+                    <p className="text-xs text-muted-foreground">Aplica IVA por defeito a faturas e subscrições</p>
+                  </div>
+                  <Switch
+                    checked={form.has_iva}
+                    onCheckedChange={v => setForm(prev => ({ ...prev, has_iva: v }))}
+                  />
+                </div>
+                {form.has_iva && (
+                  <div className="space-y-2">
+                    <Label className="text-sm">Percentagem de IVA (%)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      value={form.iva_percentage}
+                      onChange={e => setForm(prev => ({ ...prev, iva_percentage: Number(e.target.value) }))}
+                    />
+                  </div>
+                )}
+              </div>
               <Button onClick={handleAdd} className="w-full" disabled={addClient.isPending}>
                 {addClient.isPending ? "A adicionar..." : "Adicionar"}
               </Button>
@@ -95,7 +139,15 @@ export default function Clients() {
                   {client.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                 </div>
                 <div className="flex-1 space-y-1">
-                  <h3 className="font-display font-semibold text-card-foreground">{client.name}</h3>
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-display font-semibold text-card-foreground">{client.name}</h3>
+                    <Badge
+                      variant={client.has_iva ? "secondary" : "outline"}
+                      className="shrink-0 text-[10px] font-medium"
+                    >
+                      {client.has_iva ? `IVA ${Number(client.iva_percentage)}%` : "Sem IVA"}
+                    </Badge>
+                  </div>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Building className="h-3 w-3" /> {client.company}
                   </div>

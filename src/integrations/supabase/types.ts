@@ -20,7 +20,9 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           email: string
+          has_iva: boolean
           id: string
+          iva_percentage: number
           name: string
           nif: string
           phone: string
@@ -30,7 +32,9 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           email: string
+          has_iva?: boolean
           id?: string
+          iva_percentage?: number
           name: string
           nif?: string
           phone?: string
@@ -40,7 +44,9 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           email?: string
+          has_iva?: boolean
           id?: string
+          iva_percentage?: number
           name?: string
           nif?: string
           phone?: string
@@ -121,8 +127,10 @@ export type Database = {
           deleted_at: string | null
           deleted_via_subscription_id: string | null
           due_date: string
+          has_iva: boolean
           id: string
           issue_date: string
+          iva_percentage: number
           notes: string | null
           number: string
           status: Database["public"]["Enums"]["invoice_status"]
@@ -134,8 +142,10 @@ export type Database = {
           deleted_at?: string | null
           deleted_via_subscription_id?: string | null
           due_date?: string
+          has_iva?: boolean
           id?: string
           issue_date?: string
+          iva_percentage?: number
           notes?: string | null
           number: string
           status?: Database["public"]["Enums"]["invoice_status"]
@@ -147,8 +157,10 @@ export type Database = {
           deleted_at?: string | null
           deleted_via_subscription_id?: string | null
           due_date?: string
+          has_iva?: boolean
           id?: string
           issue_date?: string
+          iva_percentage?: number
           notes?: string | null
           number?: string
           status?: Database["public"]["Enums"]["invoice_status"]
@@ -368,7 +380,9 @@ export type Database = {
           deleted_at: string | null
           first_invoice_generated_at: string | null
           frequency: Database["public"]["Enums"]["subscription_frequency"]
+          has_iva: boolean
           id: string
+          iva_percentage: number
           name: string
           next_billing_date: string
           paused_until: string | null
@@ -386,7 +400,9 @@ export type Database = {
           deleted_at?: string | null
           first_invoice_generated_at?: string | null
           frequency?: Database["public"]["Enums"]["subscription_frequency"]
+          has_iva?: boolean
           id?: string
+          iva_percentage?: number
           name: string
           next_billing_date?: string
           paused_until?: string | null
@@ -404,7 +420,9 @@ export type Database = {
           deleted_at?: string | null
           first_invoice_generated_at?: string | null
           frequency?: Database["public"]["Enums"]["subscription_frequency"]
+          has_iva?: boolean
           id?: string
+          iva_percentage?: number
           name?: string
           next_billing_date?: string
           paused_until?: string | null

@@ -1,5 +1,12 @@
 import type { Client, Invoice, Payment } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, methodLabels } from "./data";
+import {
+  formatCurrency,
+  getInvoiceItemsTotal,
+  getInvoiceIvaAmount,
+  getInvoiceTotalWithIva,
+  getEffectiveIvaPercentage,
+  methodLabels,
+} from "./data";
 import { BRAND_NAME, brandHeaderBlock } from "./branding";
 
 export function generateClientStatement(
@@ -15,12 +22,17 @@ export function generateClientStatement(
     .filter(p => p.client_id === client.id)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  const totalBilled = clientInvoices.reduce((s, i) => s + getInvoiceItemsTotal(i.invoice_items), 0);
+  const subtotalBilled = clientInvoices.reduce((s, i) => s + getInvoiceItemsTotal(i.invoice_items), 0);
+  const ivaBilled = clientInvoices.reduce((s, i) => s + getInvoiceIvaAmount(i.invoice_items, i), 0);
+  const totalBilled = clientInvoices.reduce((s, i) => s + getInvoiceTotalWithIva(i.invoice_items, i), 0);
   const totalPaid = clientPayments.reduce((s, p) => s + Number(p.amount), 0);
   const outstanding = Math.max(totalBilled - totalPaid, 0);
 
   const invoiceRows = clientInvoices.map(inv => {
-    const total = getInvoiceItemsTotal(inv.invoice_items);
+    const subtotal = getInvoiceItemsTotal(inv.invoice_items);
+    const total = getInvoiceTotalWithIva(inv.invoice_items, inv);
+    const ivaPct = getEffectiveIvaPercentage(inv);
+    const ivaCell = ivaPct > 0 ? `${ivaPct}%` : "—";
     const invPayments = clientPayments.filter(p => p.invoice_id === inv.id);
     const paid = invPayments.reduce((s, p) => s + Number(p.amount), 0);
     const remaining = Math.max(total - paid, 0);
@@ -29,6 +41,8 @@ export function generateClientStatement(
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;">${inv.number}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:center;">${new Date(inv.issue_date).toLocaleDateString("pt-PT")}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:center;">${new Date(inv.due_date).toLocaleDateString("pt-PT")}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;">${formatCurrency(subtotal)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:center;color:#6b7280;">${ivaCell}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;">${formatCurrency(total)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;">${formatCurrency(paid)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;text-align:right;font-weight:600;">${formatCurrency(remaining)}</td>
@@ -78,18 +92,26 @@ export function generateClientStatement(
           ${client.nif ? `<p style="font-size:13px;color:#4b5563;">NIF: ${client.nif}</p>` : ""}
         </div>
 
-        <div style="display:flex;gap:16px;margin-bottom:30px;">
-          <div style="flex:1;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;text-align:center;">
+        <div style="display:flex;gap:16px;margin-bottom:30px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:140px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;text-align:center;">
+            <p style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Subtotal</p>
+            <p style="font-size:20px;font-weight:700;color:#1a1a2e;margin-top:4px;">${formatCurrency(subtotalBilled)}</p>
+          </div>
+          <div style="flex:1;min-width:140px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;text-align:center;">
+            <p style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">IVA</p>
+            <p style="font-size:20px;font-weight:700;color:#1a1a2e;margin-top:4px;">${formatCurrency(ivaBilled)}</p>
+          </div>
+          <div style="flex:1;min-width:140px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;text-align:center;">
             <p style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Total Orçamentado</p>
-            <p style="font-size:22px;font-weight:700;color:#1a1a2e;margin-top:4px;">${formatCurrency(totalBilled)}</p>
+            <p style="font-size:20px;font-weight:700;color:#1a1a2e;margin-top:4px;">${formatCurrency(totalBilled)}</p>
           </div>
-          <div style="flex:1;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;text-align:center;">
+          <div style="flex:1;min-width:140px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;text-align:center;">
             <p style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Total Pago</p>
-            <p style="font-size:22px;font-weight:700;color:#16a34a;margin-top:4px;">${formatCurrency(totalPaid)}</p>
+            <p style="font-size:20px;font-weight:700;color:#16a34a;margin-top:4px;">${formatCurrency(totalPaid)}</p>
           </div>
-          <div style="flex:1;background:${outstanding > 0 ? "#fef2f2;border:1px solid #fecaca" : "#f0fdf4;border:1px solid #bbf7d0"};border-radius:8px;padding:16px;text-align:center;">
+          <div style="flex:1;min-width:140px;background:${outstanding > 0 ? "#fef2f2;border:1px solid #fecaca" : "#f0fdf4;border:1px solid #bbf7d0"};border-radius:8px;padding:16px;text-align:center;">
             <p style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Saldo em Aberto</p>
-            <p style="font-size:22px;font-weight:700;color:${outstanding > 0 ? "#dc2626" : "#16a34a"};margin-top:4px;">${formatCurrency(outstanding)}</p>
+            <p style="font-size:20px;font-weight:700;color:${outstanding > 0 ? "#dc2626" : "#16a34a"};margin-top:4px;">${formatCurrency(outstanding)}</p>
           </div>
         </div>
 
@@ -100,12 +122,14 @@ export function generateClientStatement(
               <th style="padding:8px 12px;text-align:left;font-size:12px;font-weight:600;">Nº</th>
               <th style="padding:8px 12px;text-align:center;font-size:12px;font-weight:600;">Emissão</th>
               <th style="padding:8px 12px;text-align:center;font-size:12px;font-weight:600;">Vencimento</th>
-              <th style="padding:8px 12px;text-align:right;font-size:12px;font-weight:600;">Valor</th>
+              <th style="padding:8px 12px;text-align:right;font-size:12px;font-weight:600;">Subtotal</th>
+              <th style="padding:8px 12px;text-align:center;font-size:12px;font-weight:600;">IVA</th>
+              <th style="padding:8px 12px;text-align:right;font-size:12px;font-weight:600;">Total</th>
               <th style="padding:8px 12px;text-align:right;font-size:12px;font-weight:600;">Pago</th>
               <th style="padding:8px 12px;text-align:right;font-size:12px;font-weight:600;">Em Aberto</th>
             </tr>
           </thead>
-          <tbody>${invoiceRows || '<tr><td colspan="6" style="padding:12px;text-align:center;color:#6b7280;font-size:13px;">Sem orçamentos</td></tr>'}</tbody>
+          <tbody>${invoiceRows || '<tr><td colspan="8" style="padding:12px;text-align:center;color:#6b7280;font-size:13px;">Sem orçamentos</td></tr>'}</tbody>
         </table>
 
         <h3 style="font-size:15px;font-weight:700;margin-bottom:12px;color:#1a1a2e;">Historial de Pagamentos</h3>

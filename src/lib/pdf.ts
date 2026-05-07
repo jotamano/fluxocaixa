@@ -1,6 +1,13 @@
 import type { Tables } from "@/integrations/supabase/types";
 import type { Invoice } from "@/hooks/use-data";
-import { getInvoiceItemsTotal, formatCurrency, formatInvoiceItemPeriod } from "./data";
+import {
+  getInvoiceItemsTotal,
+  getInvoiceIvaAmount,
+  getInvoiceTotalWithIva,
+  getEffectiveIvaPercentage,
+  formatCurrency,
+  formatInvoiceItemPeriod,
+} from "./data";
 import { BRAND_NAME, brandHeaderBlock } from "./branding";
 
 const escapeHtml = (s: string) =>
@@ -14,8 +21,9 @@ type Client = Tables<"clients">;
 
 export function generateInvoicePDF(invoice: Invoice, client: Client) {
   const total = getInvoiceItemsTotal(invoice.invoice_items);
-  const iva = total * 0.23;
-  const totalComIva = total + iva;
+  const ivaPct = getEffectiveIvaPercentage(invoice);
+  const iva = getInvoiceIvaAmount(invoice.invoice_items, invoice);
+  const totalComIva = getInvoiceTotalWithIva(invoice.invoice_items, invoice);
 
   const itemsRows = invoice.invoice_items.map(item => {
     const period = formatInvoiceItemPeriod(item.service_start_date, item.service_end_date);
@@ -79,14 +87,15 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
 
         <div style="display:flex;justify-content:flex-end;">
           <div style="width:260px;">
-            <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;">
+            <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;${ivaPct > 0 ? '' : 'border-bottom:1px solid #e5e7eb;'}">
               <span style="color:#6b7280;">Subtotal</span>
               <span>${formatCurrency(total)}</span>
             </div>
+            ${ivaPct > 0 ? `
             <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;border-bottom:1px solid #e5e7eb;">
-              <span style="color:#6b7280;">IVA (23%)</span>
+              <span style="color:#6b7280;">IVA (${ivaPct}%)</span>
               <span>${formatCurrency(iva)}</span>
-            </div>
+            </div>` : ""}
             <div style="display:flex;justify-content:space-between;padding:12px 0;font-size:18px;font-weight:700;">
               <span>Total</span>
               <span style="color:#1e40af;">${formatCurrency(totalComIva)}</span>

@@ -92,6 +92,55 @@ export function getInvoiceItemsTotal(items: { quantity: number; unit_price: numb
 }
 
 /**
+ * Default IVA percentage used for newly created clients. Matches the
+ * legacy hard-coded rate so existing PDFs keep rendering the same value
+ * after the per-client IVA setting was introduced.
+ */
+export const DEFAULT_IVA_PERCENTAGE = 23;
+
+type IvaSource = { has_iva?: boolean | null; iva_percentage?: number | null };
+
+/**
+ * Resolve the effective IVA rate for an invoice/subscription. Returns 0
+ * when IVA is disabled (`has_iva = false`) so callers can multiply the
+ * subtotal directly without branching. Treats nulls as "not configured"
+ * and falls back to 0 — safer than assuming 23% when the column is
+ * unexpectedly empty.
+ */
+export function getEffectiveIvaPercentage(source: IvaSource | null | undefined): number {
+  if (!source || source.has_iva === false) return 0;
+  const pct = Number(source.iva_percentage ?? 0);
+  return Number.isFinite(pct) && pct > 0 ? pct : 0;
+}
+
+/**
+ * Round to two decimal places using away-from-zero rounding to keep
+ * computed IVA totals consistent with what the PDF/statement display
+ * after `formatCurrency` formats them.
+ */
+function round2(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export function getInvoiceIvaAmount(
+  items: { quantity: number; unit_price: number }[],
+  source: IvaSource | null | undefined,
+): number {
+  const pct = getEffectiveIvaPercentage(source);
+  if (pct <= 0) return 0;
+  return round2(getInvoiceItemsTotal(items) * (pct / 100));
+}
+
+export function getInvoiceTotalWithIva(
+  items: { quantity: number; unit_price: number }[],
+  source: IvaSource | null | undefined,
+): number {
+  const subtotal = getInvoiceItemsTotal(items);
+  const iva = getInvoiceIvaAmount(items, source);
+  return round2(subtotal + iva);
+}
+
+/**
  * Display label for an entity carrying a joined `clients` row. Falls
  * back from `company` (the most descriptive label) to `name` (the
  * contact person) before giving up with "Sem cliente". Prefer this

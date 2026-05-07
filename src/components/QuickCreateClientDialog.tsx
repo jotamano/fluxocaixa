@@ -3,8 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useAddClient } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
+import { DEFAULT_IVA_PERCENTAGE } from "@/lib/data";
 import type { Tables } from "@/integrations/supabase/types";
 
 // Inline client creation surface used next to client pickers (subscription
@@ -44,6 +46,13 @@ export function QuickCreateClientDialog({ open, onOpenChange, onCreated, default
     company: "",
     phone: "",
     nif: "",
+    has_iva: true,
+    iva_percentage: DEFAULT_IVA_PERCENTAGE,
+  });
+
+  const resetForm = () => setForm({
+    name: "", email: "", company: "", phone: "", nif: "",
+    has_iva: true, iva_percentage: DEFAULT_IVA_PERCENTAGE,
   });
 
   const handleAdd = () => {
@@ -51,15 +60,26 @@ export function QuickCreateClientDialog({ open, onOpenChange, onCreated, default
       toast({ title: "Nome obrigatório", variant: "destructive" });
       return;
     }
-    addClient.mutate(form, {
-      onSuccess: created => {
-        setForm({ name: "", email: "", company: "", phone: "", nif: "" });
-        onOpenChange(false);
-        onCreated(created as Tables<"clients">);
-        toast({ title: "Cliente criado!" });
+    addClient.mutate(
+      {
+        name: form.name,
+        email: form.email,
+        company: form.company,
+        phone: form.phone,
+        nif: form.nif,
+        has_iva: form.has_iva,
+        iva_percentage: form.has_iva ? Number(form.iva_percentage) || 0 : 0,
       },
-      onError: err => toast({ title: "Erro", description: err.message, variant: "destructive" }),
-    });
+      {
+        onSuccess: created => {
+          resetForm();
+          onOpenChange(false);
+          onCreated(created as Tables<"clients">);
+          toast({ title: "Cliente criado!" });
+        },
+        onError: err => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+      },
+    );
   };
 
   return (
@@ -79,6 +99,31 @@ export function QuickCreateClientDialog({ open, onOpenChange, onCreated, default
               />
             </div>
           ))}
+          <div className="rounded-lg border border-border p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label className="text-sm">Tem IVA</Label>
+                <p className="text-xs text-muted-foreground">Aplica IVA por defeito a faturas e subscrições</p>
+              </div>
+              <Switch
+                checked={form.has_iva}
+                onCheckedChange={v => setForm(prev => ({ ...prev, has_iva: v }))}
+              />
+            </div>
+            {form.has_iva && (
+              <div className="space-y-2">
+                <Label className="text-sm">Percentagem de IVA (%)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  value={form.iva_percentage}
+                  onChange={e => setForm(prev => ({ ...prev, iva_percentage: Number(e.target.value) }))}
+                />
+              </div>
+            )}
+          </div>
           <Button onClick={handleAdd} className="w-full" disabled={addClient.isPending}>
             {addClient.isPending ? "A adicionar..." : "Adicionar"}
           </Button>

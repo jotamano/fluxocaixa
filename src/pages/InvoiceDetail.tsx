@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
@@ -14,7 +15,7 @@ import { DeleteInvoiceDialog } from "@/components/DeleteInvoiceDialog";
 import { QuickCreateServiceDialog } from "@/components/QuickCreateServiceDialog";
 import type { Subscription } from "@/hooks/use-data";
 import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions, useClientSubscriptionItems } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, getClientLabel, formatInvoiceItemPeriod, methodLabels, frequencyLabels, type SubscriptionFrequency } from "@/lib/data";
+import { formatCurrency, getInvoiceItemsTotal, getClientLabel, formatInvoiceItemPeriod, methodLabels, frequencyLabels, type SubscriptionFrequency, DEFAULT_IVA_PERCENTAGE, getEffectiveIvaPercentage, getInvoiceIvaAmount, getInvoiceTotalWithIva } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
 
@@ -72,7 +73,14 @@ export default function InvoiceDetail() {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ issue_date: '', due_date: '', notes: '', status: '' });
+  const [editForm, setEditForm] = useState({
+    issue_date: '',
+    due_date: '',
+    notes: '',
+    status: '',
+    has_iva: true,
+    iva_percentage: DEFAULT_IVA_PERCENTAGE,
+  });
   const [editItemsOpen, setEditItemsOpen] = useState(false);
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   // index of the line whose link picker is open (null = closed).
@@ -148,7 +156,10 @@ export default function InvoiceDetail() {
     );
   }
 
-  const total = getInvoiceItemsTotal(invoice.invoice_items);
+  const subtotal = getInvoiceItemsTotal(invoice.invoice_items);
+  const ivaPct = getEffectiveIvaPercentage(invoice);
+  const ivaAmount = getInvoiceIvaAmount(invoice.invoice_items, invoice);
+  const total = getInvoiceTotalWithIva(invoice.invoice_items, invoice);
   const paidTotal = invoicePayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
   const outstanding = Math.max(total - paidTotal, 0);
   const effectiveStatus = outstanding <= 0 && total > 0 ? "paid" : paidTotal > 0 && paidTotal < total ? "partially_paid" : invoice.status;
@@ -197,6 +208,8 @@ export default function InvoiceDetail() {
       due_date: invoice.due_date,
       notes: invoice.notes || '',
       status: invoice.status,
+      has_iva: invoice.has_iva ?? true,
+      iva_percentage: Number(invoice.iva_percentage ?? DEFAULT_IVA_PERCENTAGE),
     });
     setEditOpen(true);
   };
@@ -209,6 +222,8 @@ export default function InvoiceDetail() {
         due_date: editForm.due_date,
         notes: editForm.notes || null,
         status: editForm.status as any,
+        has_iva: editForm.has_iva,
+        iva_percentage: editForm.has_iva ? Number(editForm.iva_percentage) || 0 : 0,
       },
     }, {
       onSuccess: () => { setEditOpen(false); toast({ title: "Fatura atualizada!" }); },
@@ -423,6 +438,11 @@ export default function InvoiceDetail() {
         <div className="rounded-xl border border-border bg-card p-5 shadow-card">
           <p className="text-sm text-muted-foreground">Total</p>
           <p className="mt-2 font-display text-3xl font-bold text-card-foreground">{formatCurrency(total)}</p>
+          {ivaPct > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {formatCurrency(subtotal)} + IVA {ivaPct}% ({formatCurrency(ivaAmount)})
+            </p>
+          )}
         </div>
         <div className="rounded-xl border border-border bg-card p-5 shadow-card">
           <p className="text-sm text-muted-foreground">Recebido</p>
@@ -591,6 +611,31 @@ export default function InvoiceDetail() {
             <div className="space-y-2">
               <Label>Notas</Label>
               <Textarea value={editForm.notes} onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} placeholder="Observações..." />
+            </div>
+            <div className="rounded-lg border border-border p-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label className="text-sm">Aplicar IVA</Label>
+                  <p className="text-xs text-muted-foreground">Só altera esta fatura. Não afeta o cliente.</p>
+                </div>
+                <Switch
+                  checked={editForm.has_iva}
+                  onCheckedChange={v => setEditForm(p => ({ ...p, has_iva: v }))}
+                />
+              </div>
+              {editForm.has_iva && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Percentagem de IVA (%)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={editForm.iva_percentage}
+                    onChange={e => setEditForm(p => ({ ...p, iva_percentage: Number(e.target.value) }))}
+                  />
+                </div>
+              )}
             </div>
             <Button className="w-full" onClick={handleEditSave} disabled={updateInvoice.isPending}>
               {updateInvoice.isPending ? "A guardar..." : "Guardar alterações"}

@@ -14,6 +14,7 @@ import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber, useActiveServices, useAddSubscription } from "@/hooks/use-data";
 import {
+  DEFAULT_IVA_PERCENTAGE,
   formatCurrency,
   type SubscriptionFrequency,
   frequencyLabels,
@@ -82,9 +83,30 @@ export default function NewInvoice() {
       setClientId(initialClientId);
     }
   }, [initialClientId, clientId, clients]);
+
+  // Sync IVA defaults from the selected client until the user touches
+  // them. Mirrors the pattern used by the recurring frequency below:
+  // changing the client should refresh sensible defaults, but we never
+  // want to overwrite an explicit choice the user already made.
+  useEffect(() => {
+    if (hasIvaTouched) return;
+    const selected = clients.find(c => c.id === clientId);
+    if (!selected) return;
+    setHasIva(selected.has_iva ?? true);
+    setIvaPercentage(Number(selected.iva_percentage ?? DEFAULT_IVA_PERCENTAGE));
+  }, [clientId, clients, hasIvaTouched]);
   const [notes, setNotes] = useState("");
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
-  const [newClient, setNewClient] = useState({ name: '', email: '', company: '', phone: '', nif: '' });
+  const [newClient, setNewClient] = useState({
+    name: '', email: '', company: '', phone: '', nif: '',
+    has_iva: true, iva_percentage: DEFAULT_IVA_PERCENTAGE,
+  });
+  // IVA snapshot for this invoice. Defaults from the selected client
+  // (`hasIvaTouched` flips once the user manually changes either field
+  // so further client switches don't clobber their override).
+  const [hasIva, setHasIva] = useState(true);
+  const [ivaPercentage, setIvaPercentage] = useState<number>(DEFAULT_IVA_PERCENTAGE);
+  const [hasIvaTouched, setHasIvaTouched] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringFrequency, setRecurringFrequency] = useState<SubscriptionFrequency>("monthly");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -128,18 +150,35 @@ export default function NewInvoice() {
     });
   };
 
-  const total = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const effectiveIvaPct = hasIva ? Number(ivaPercentage) || 0 : 0;
+  const ivaAmount = effectiveIvaPct > 0 ? subtotal * (effectiveIvaPct / 100) : 0;
+  const total = subtotal + ivaAmount;
 
   const handleAddClient = () => {
-    addClient.mutate(newClient, {
-      onSuccess: (data) => {
-        setClientId(data.id);
-        setNewClient({ name: '', email: '', company: '', phone: '', nif: '' });
-        setClientDialogOpen(false);
-        toast({ title: "Cliente criado!" });
+    addClient.mutate(
+      {
+        name: newClient.name,
+        email: newClient.email,
+        company: newClient.company,
+        phone: newClient.phone,
+        nif: newClient.nif,
+        has_iva: newClient.has_iva,
+        iva_percentage: newClient.has_iva ? Number(newClient.iva_percentage) || 0 : 0,
       },
-      onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
-    });
+      {
+        onSuccess: (data) => {
+          setClientId(data.id);
+          setNewClient({
+            name: '', email: '', company: '', phone: '', nif: '',
+            has_iva: true, iva_percentage: DEFAULT_IVA_PERCENTAGE,
+          });
+          setClientDialogOpen(false);
+          toast({ title: "Cliente criado!" });
+        },
+        onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+      },
+    );
   };
 
   const handleSubmit = async () => {
@@ -171,6 +210,8 @@ export default function NewInvoice() {
           issue_date: new Date().toISOString().split('T')[0],
           due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
           notes: notes || null,
+          has_iva: hasIva,
+          iva_percentage: effectiveIvaPct,
         },
         // Persist start/end as proper columns instead of stuffing them
         // into the description. The detail-page editor reads/writes the
@@ -249,6 +290,8 @@ export default function NewInvoice() {
               next_billing_date: nextBillingStr,
               start_date: lineStart,
               source_invoice_id: createdInvoice.id,
+              has_iva: hasIva,
+              iva_percentage: effectiveIvaPct,
               lines: invoiceItem
                 ? [
                     {
@@ -399,10 +442,51 @@ export default function NewInvoice() {
           </div>
         )}
 
+        {/* IVA toggle + percentage */}
+        <div className="rounded-lg border border-border px-4 py-3 bg-muted/40 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-card-foreground">Aplicar IVA</p>
+              <p className="text-xs text-muted-foreground">
+                Por defeito copia a configuração do cliente. Editar aqui só altera esta fatura.
+              </p>
+            </div>
+            <Switch
+              checked={hasIva}
+              onCheckedChange={v => { setHasIva(v); setHasIvaTouched(true); }}
+            />
+          </div>
+          {hasIva && (
+            <div className="space-y-1">
+              <Label className="text-xs">Percentagem de IVA (%)</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                value={ivaPercentage}
+                onChange={e => { setIvaPercentage(Number(e.target.value)); setHasIvaTouched(true); }}
+              />
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center justify-between border-t border-border pt-6">
-          <div>
-            <p className="text-sm text-muted-foreground">Total</p>
-            <p className="text-3xl font-bold font-display text-card-foreground">{formatCurrency(total)}</p>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-6 text-sm">
+              <span className="text-muted-foreground">Subtotal</span>
+              <span className="font-medium text-card-foreground">{formatCurrency(subtotal)}</span>
+            </div>
+            {effectiveIvaPct > 0 && (
+              <div className="flex items-center justify-between gap-6 text-sm">
+                <span className="text-muted-foreground">IVA ({effectiveIvaPct}%)</span>
+                <span className="font-medium text-card-foreground">{formatCurrency(ivaAmount)}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-6 pt-1">
+              <span className="text-sm text-muted-foreground">Total</span>
+              <span className="text-3xl font-bold font-display text-card-foreground">{formatCurrency(total)}</span>
+            </div>
           </div>
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => window.history.back()}>Cancelar</Button>
@@ -421,22 +505,47 @@ export default function NewInvoice() {
             <DialogDescription>Só o nome é obrigatório — os outros campos podem ser preenchidos mais tarde na página do cliente.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-4">
-            {[
+            {([
               { key: 'name', label: 'Nome *', placeholder: 'Nome completo' },
               { key: 'email', label: 'Email', placeholder: 'email@exemplo.pt' },
               { key: 'company', label: 'Empresa', placeholder: 'Nome da empresa' },
               { key: 'phone', label: 'Telefone', placeholder: '+351 ...' },
               { key: 'nif', label: 'NIF', placeholder: '509...' },
-            ].map(field => (
+            ] as const).map(field => (
               <div key={field.key} className="space-y-2">
                 <Label>{field.label}</Label>
                 <Input
                   placeholder={field.placeholder}
-                  value={newClient[field.key as keyof typeof newClient]}
+                  value={newClient[field.key]}
                   onChange={e => setNewClient(prev => ({ ...prev, [field.key]: e.target.value }))}
                 />
               </div>
             ))}
+            <div className="rounded-lg border border-border p-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label className="text-sm">Tem IVA</Label>
+                  <p className="text-xs text-muted-foreground">Aplica IVA por defeito a faturas e subscrições</p>
+                </div>
+                <Switch
+                  checked={newClient.has_iva}
+                  onCheckedChange={v => setNewClient(prev => ({ ...prev, has_iva: v }))}
+                />
+              </div>
+              {newClient.has_iva && (
+                <div className="space-y-2">
+                  <Label className="text-sm">Percentagem de IVA (%)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={newClient.iva_percentage}
+                    onChange={e => setNewClient(prev => ({ ...prev, iva_percentage: Number(e.target.value) }))}
+                  />
+                </div>
+              )}
+            </div>
             <Button onClick={handleAddClient} className="w-full" disabled={addClient.isPending || !newClient.name.trim()}>
               {addClient.isPending ? "A criar..." : "Criar Cliente"}
             </Button>

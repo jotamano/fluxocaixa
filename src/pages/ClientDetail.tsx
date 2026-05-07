@@ -5,10 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useClients, useInvoices, usePayments, useSubscriptions, useDeleteClient, useUpdateClient } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, frequencyLabels, methodLabels } from "@/lib/data";
+import { DEFAULT_IVA_PERCENTAGE, formatCurrency, getInvoiceItemsTotal, getInvoiceTotalWithIva, frequencyLabels, methodLabels } from "@/lib/data";
 import { generateClientStatement } from "@/lib/statement";
 import { useToast } from "@/hooks/use-toast";
 
@@ -33,7 +35,10 @@ export default function ClientDetail() {
   const updateClient = useUpdateClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', email: '', company: '', phone: '', nif: '' });
+  const [editForm, setEditForm] = useState({
+    name: '', email: '', company: '', phone: '', nif: '',
+    has_iva: true, iva_percentage: DEFAULT_IVA_PERCENTAGE,
+  });
 
   if (clientsLoading || invoicesLoading || paymentsLoading || subscriptionsLoading) {
     return <div className="py-10 text-sm text-muted-foreground">A carregar cliente...</div>;
@@ -58,7 +63,7 @@ export default function ClientDetail() {
   const clientPayments = payments.filter(payment => payment.client_id === client.id);
   const clientSubscriptions = subscriptions.filter(subscription => subscription.client_id === client.id);
 
-  const totalBilled = clientInvoices.reduce((sum, invoice) => sum + getInvoiceItemsTotal(invoice.invoice_items), 0);
+  const totalBilled = clientInvoices.reduce((sum, invoice) => sum + getInvoiceTotalWithIva(invoice.invoice_items, invoice), 0);
   const totalPaid = clientPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
   const outstanding = Math.max(totalBilled - totalPaid, 0);
 
@@ -82,15 +87,37 @@ export default function ClientDetail() {
   };
 
   const openEdit = () => {
-    setEditForm({ name: client.name, email: client.email, company: client.company, phone: client.phone || '', nif: client.nif || '' });
+    setEditForm({
+      name: client.name,
+      email: client.email,
+      company: client.company,
+      phone: client.phone || '',
+      nif: client.nif || '',
+      has_iva: client.has_iva ?? true,
+      iva_percentage: Number(client.iva_percentage ?? DEFAULT_IVA_PERCENTAGE),
+    });
     setEditOpen(true);
   };
 
   const handleEditSave = () => {
-    updateClient.mutate({ id: client.id, updates: editForm }, {
-      onSuccess: () => { setEditOpen(false); toast({ title: "Cliente atualizado!" }); },
-      onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
-    });
+    updateClient.mutate(
+      {
+        id: client.id,
+        updates: {
+          name: editForm.name,
+          email: editForm.email,
+          company: editForm.company,
+          phone: editForm.phone,
+          nif: editForm.nif,
+          has_iva: editForm.has_iva,
+          iva_percentage: editForm.has_iva ? Number(editForm.iva_percentage) || 0 : 0,
+        },
+      },
+      {
+        onSuccess: () => { setEditOpen(false); toast({ title: "Cliente atualizado!" }); },
+        onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+      },
+    );
   };
 
   return (
@@ -125,6 +152,11 @@ export default function ClientDetail() {
               <div className="flex items-center gap-2"><Mail className="h-4 w-4" /> {client.email}</div>
               <div className="flex items-center gap-2"><Phone className="h-4 w-4" /> {client.phone || "Sem telefone"}</div>
               <div className="flex items-center gap-2"><Building2 className="h-4 w-4" /> NIF: {client.nif || "Sem NIF"}</div>
+              <div className="flex items-center gap-2">
+                <Badge variant={client.has_iva ? "secondary" : "outline"} className="text-[10px] font-medium">
+                  {client.has_iva ? `IVA ${Number(client.iva_percentage)}%` : "Sem IVA"}
+                </Badge>
+              </div>
             </div>
           </div>
         </div>
@@ -167,7 +199,7 @@ export default function ClientDetail() {
                     </div>
                     <div className="flex items-center gap-4">
                       <StatusBadge status={invoice.status} />
-                      <span className="text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceItemsTotal(invoice.invoice_items))}</span>
+                      <span className="text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceTotalWithIva(invoice.invoice_items, invoice))}</span>
                     </div>
                   </Link>
                 ))
@@ -250,22 +282,47 @@ export default function ClientDetail() {
             <DialogTitle className="font-display">Editar Cliente</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-4">
-            {[
+            {([
               { key: 'name', label: 'Nome', placeholder: 'Nome completo' },
               { key: 'email', label: 'Email', placeholder: 'email@exemplo.pt' },
               { key: 'company', label: 'Empresa', placeholder: 'Nome da empresa' },
               { key: 'phone', label: 'Telefone', placeholder: '+351 ...' },
               { key: 'nif', label: 'NIF', placeholder: '509...' },
-            ].map(field => (
+            ] as const).map(field => (
               <div key={field.key} className="space-y-2">
                 <Label>{field.label}</Label>
                 <Input
                   placeholder={field.placeholder}
-                  value={editForm[field.key as keyof typeof editForm]}
+                  value={editForm[field.key]}
                   onChange={e => setEditForm(prev => ({ ...prev, [field.key]: e.target.value }))}
                 />
               </div>
             ))}
+            <div className="rounded-lg border border-border p-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label className="text-sm">Tem IVA</Label>
+                  <p className="text-xs text-muted-foreground">Aplica IVA por defeito a faturas e subscrições</p>
+                </div>
+                <Switch
+                  checked={editForm.has_iva}
+                  onCheckedChange={v => setEditForm(prev => ({ ...prev, has_iva: v }))}
+                />
+              </div>
+              {editForm.has_iva && (
+                <div className="space-y-2">
+                  <Label className="text-sm">Percentagem de IVA (%)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={editForm.iva_percentage}
+                    onChange={e => setEditForm(prev => ({ ...prev, iva_percentage: Number(e.target.value) }))}
+                  />
+                </div>
+              )}
+            </div>
             <Button onClick={handleEditSave} className="w-full" disabled={updateClient.isPending || !editForm.name || !editForm.email || !editForm.company}>
               {updateClient.isPending ? "A guardar..." : "Guardar alterações"}
             </Button>

@@ -14,7 +14,7 @@ import {
   useNextInvoiceNumber,
   useSubscriptionStats,
 } from "@/hooks/use-data";
-import { frequencyLabels, formatCurrency, frequencyDays, getClientLabel, type SubscriptionFrequency } from "@/lib/data";
+import { frequencyLabels, formatCurrency, frequencyDays, getClientLabel, type SubscriptionFrequency, DEFAULT_IVA_PERCENTAGE } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,7 +64,13 @@ export default function Subscriptions() {
     setupFee: "",
     frequency: "monthly" as SubscriptionFrequency,
     nextBillingDate: new Date().toISOString().split('T')[0],
+    has_iva: true,
+    iva_percentage: DEFAULT_IVA_PERCENTAGE,
   });
+  // Track whether the user manually changed IVA settings; until they
+  // do, we keep auto-syncing the IVA fields with the picked client so
+  // the defaults always reflect the client's preferences.
+  const [hasIvaTouched, setHasIvaTouched] = useState(false);
   const [quickClientOpen, setQuickClientOpen] = useState(false);
   const [quickServiceOpen, setQuickServiceOpen] = useState(false);
 
@@ -109,7 +115,12 @@ export default function Subscriptions() {
       setupFee: "",
       frequency: subscription.frequency,
       nextBillingDate: subscription.next_billing_date,
+      has_iva: subscription.has_iva ?? true,
+      iva_percentage: Number(subscription.iva_percentage ?? DEFAULT_IVA_PERCENTAGE),
     });
+    // Editing → IVA fields come from the subscription itself; don't
+    // overwrite them with the client's defaults.
+    setHasIvaTouched(true);
     setGenerateInvoice(false);
     setDialogOpen(true);
   };
@@ -124,10 +135,26 @@ export default function Subscriptions() {
       setupFee: "",
       frequency: "monthly",
       nextBillingDate: new Date().toISOString().split('T')[0],
+      has_iva: true,
+      iva_percentage: DEFAULT_IVA_PERCENTAGE,
     });
+    setHasIvaTouched(false);
     setGenerateInvoice(true);
     setDialogOpen(true);
   };
+
+  // While creating a brand-new subscription, mirror the picked client's
+  // IVA settings into the form until the user explicitly edits them.
+  useEffect(() => {
+    if (editingId || hasIvaTouched) return;
+    const selected = clients.find(c => c.id === form.clientId);
+    if (!selected) return;
+    setForm(prev => ({
+      ...prev,
+      has_iva: selected.has_iva ?? true,
+      iva_percentage: Number(selected.iva_percentage ?? DEFAULT_IVA_PERCENTAGE),
+    }));
+  }, [form.clientId, clients, hasIvaTouched, editingId]);
 
   useEffect(() => {
     const editId = searchParams.get("edit");
@@ -160,6 +187,8 @@ export default function Subscriptions() {
             amount: Number(form.amount),
             frequency: form.frequency,
             next_billing_date: form.nextBillingDate,
+            has_iva: form.has_iva,
+            iva_percentage: form.has_iva ? Number(form.iva_percentage) || 0 : 0,
           },
         },
         {
@@ -198,6 +227,8 @@ export default function Subscriptions() {
           next_billing_date: form.nextBillingDate,
           start_date: new Date().toISOString().split('T')[0],
           setup_fee: form.setupFee ? Number(form.setupFee) : null,
+          has_iva: form.has_iva,
+          iva_percentage: form.has_iva ? Number(form.iva_percentage) || 0 : 0,
         },
         {
           onSuccess: (createdSub) => {
@@ -535,6 +566,35 @@ export default function Subscriptions() {
             <div className="space-y-2">
               <Label>Próxima faturação</Label>
               <Input type="date" value={form.nextBillingDate} onChange={e => setForm(prev => ({ ...prev, nextBillingDate: e.target.value }))} />
+            </div>
+            <div className="rounded-lg border border-border p-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label className="text-sm">Aplicar IVA</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {editingId
+                      ? "Só altera esta subscrição."
+                      : "Por defeito copia a configuração do cliente."}
+                  </p>
+                </div>
+                <Switch
+                  checked={form.has_iva}
+                  onCheckedChange={v => { setForm(prev => ({ ...prev, has_iva: v })); setHasIvaTouched(true); }}
+                />
+              </div>
+              {form.has_iva && (
+                <div className="space-y-2">
+                  <Label className="text-sm">Percentagem de IVA (%)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={form.iva_percentage}
+                    onChange={e => { setForm(prev => ({ ...prev, iva_percentage: Number(e.target.value) })); setHasIvaTouched(true); }}
+                  />
+                </div>
+              )}
             </div>
             {!editingId && (
               <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3 bg-muted/40">
