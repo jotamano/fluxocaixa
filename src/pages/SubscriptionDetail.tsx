@@ -8,8 +8,9 @@ import {
   useSubscriptionPriceHistory,
 } from "@/hooks/use-data";
 import type { SubscriptionItem } from "@/hooks/use-data";
-import { formatCurrency, frequencyLabels, getClientLabel } from "@/lib/data";
+import { formatCurrency, frequencyLabels, getClientLabel, getEffectiveIvaPercentage, getInvoiceTotalWithIva } from "@/lib/data";
 import { StatusBadge } from "@/components/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 
 const KIND_LABELS: Record<SubscriptionItem["kind"], string> = {
   recurring: "Recorrente",
@@ -32,6 +33,8 @@ export default function SubscriptionDetail() {
 
   const total = items.reduce((sum, it) => sum + (it.kind === "recurring" || it.kind === "addon" ? Number(it.amount) : 0), 0);
   const setupTotal = items.filter(it => it.kind === "setup").reduce((sum, it) => sum + Number(it.amount), 0);
+  const ivaPct = getEffectiveIvaPercentage(sub);
+  const totalWithIva = ivaPct > 0 ? total * (1 + ivaPct / 100) : total;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -53,16 +56,26 @@ export default function SubscriptionDetail() {
               {sub.clients?.company && sub.clients?.name ? ` · ${sub.clients.name}` : ""}
             </p>
           </div>
-          <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold border ${
-            sub.status === "active" ? 'bg-success/10 text-success border-success/20'
-            : sub.status === "paused" ? 'bg-warning/10 text-warning border-warning/20'
-            : 'bg-muted text-muted-foreground border-border'
-          }`}>
-            {sub.status === "active" ? "Ativa" : sub.status === "paused" ? "Pausada" : "Cancelada"}
-          </span>
+          <div className="flex items-center gap-2">
+            <Badge variant={ivaPct > 0 ? "secondary" : "outline"} className="text-[10px]">
+              {ivaPct > 0 ? `IVA ${ivaPct}%` : "Sem IVA"}
+            </Badge>
+            <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold border ${
+              sub.status === "active" ? 'bg-success/10 text-success border-success/20'
+              : sub.status === "paused" ? 'bg-warning/10 text-warning border-warning/20'
+              : 'bg-muted text-muted-foreground border-border'
+            }`}>
+              {sub.status === "active" ? "Ativa" : sub.status === "paused" ? "Pausada" : "Cancelada"}
+            </span>
+          </div>
         </div>
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
-          <Stat label="Mensalidade" value={formatCurrency(total)} suffix={`/${frequencyLabels[sub.frequency].toLowerCase()}`} />
+          <Stat
+            label="Mensalidade"
+            value={formatCurrency(total)}
+            suffix={`/${frequencyLabels[sub.frequency].toLowerCase()}`}
+            hint={ivaPct > 0 ? `${formatCurrency(totalWithIva)} c/ IVA` : undefined}
+          />
           <Stat label="Setup pendente" value={formatCurrency(setupTotal)} />
           <Stat label="Próxima faturação" value={new Date(sub.next_billing_date).toLocaleDateString('pt-PT')} />
         </div>
@@ -102,7 +115,7 @@ export default function SubscriptionDetail() {
         ) : (
           <div className="space-y-2">
             {invoices.map((inv) => {
-              const totalInv = (inv.invoice_items ?? []).reduce((s, it) => s + it.quantity * Number(it.unit_price), 0);
+              const totalInv = getInvoiceTotalWithIva(inv.invoice_items ?? [], inv);
               return (
                 <Link key={inv.id} to={`/faturas/${inv.id}`} className="flex items-center justify-between rounded-lg border border-border px-4 py-3 hover:bg-muted/40 transition-colors">
                   <div className="space-y-0.5">
@@ -146,11 +159,12 @@ export default function SubscriptionDetail() {
   );
 }
 
-function Stat({ label, value, suffix }: { label: string; value: string; suffix?: string }) {
+function Stat({ label, value, suffix, hint }: { label: string; value: string; suffix?: string; hint?: string }) {
   return (
     <div className="rounded-lg border border-border bg-background p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-lg font-semibold text-foreground">{value}{suffix && <span className="text-xs text-muted-foreground ml-1">{suffix}</span>}</p>
+      {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
