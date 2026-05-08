@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          id: number
+          occurred_at: string
+          actor_user_id: string | null
+          actor_email: string | null
+          action: string
+          table_name: string
+          row_id: string | null
+          before_data: Json | null
+          after_data: Json | null
+        }
+        Insert: {
+          id?: number
+          occurred_at?: string
+          actor_user_id?: string | null
+          actor_email?: string | null
+          action: string
+          table_name: string
+          row_id?: string | null
+          before_data?: Json | null
+          after_data?: Json | null
+        }
+        Update: {
+          id?: number
+          occurred_at?: string
+          actor_user_id?: string | null
+          actor_email?: string | null
+          action?: string
+          table_name?: string
+          row_id?: string | null
+          before_data?: Json | null
+          after_data?: Json | null
+        }
+        Relationships: []
+      }
       clients: {
         Row: {
           company: string
@@ -461,6 +497,28 @@ export type Database = {
       next_invoice_number: {
         Args: { target_year: number }
         Returns: string
+      }
+      list_members: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          email: string
+          created_at: string
+          last_sign_in_at: string | null
+          email_confirmed_at: string | null
+        }[]
+      }
+      invite_member: {
+        Args: { p_email: string; p_password: string }
+        Returns: string
+      }
+      delete_member: {
+        Args: { p_user_id: string }
+        Returns: void
+      }
+      purge_old_trash: {
+        Args: Record<string, never>
+        Returns: number
       }
     }
     Enums: {

@@ -19,6 +19,8 @@ import ClientDetail from "@/pages/ClientDetail";
 import InvoiceDetail from "@/pages/InvoiceDetail";
 import PaymentDetail from "@/pages/PaymentDetail";
 import Trash from "@/pages/Trash";
+import Members from "@/pages/Members";
+import Audit from "@/pages/Audit";
 import Login from "@/pages/Login";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -48,6 +50,8 @@ const App = () => (
                 <Route path="/subscricoes/:id" element={<SubscriptionDetail />} />
                 <Route path="/calendario" element={<CalendarPage />} />
                 <Route path="/lixo" element={<Trash />} />
+                <Route path="/membros" element={<Members />} />
+                <Route path="/auditoria" element={<Audit />} />
               </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
