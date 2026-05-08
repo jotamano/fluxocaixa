@@ -21,6 +21,7 @@ import PaymentDetail from "@/pages/PaymentDetail";
 import Trash from "@/pages/Trash";
 import Members from "@/pages/Members";
 import Audit from "@/pages/Audit";
+import Settings from "@/pages/Settings";
 import Docs from "@/pages/Docs";
 import Login from "@/pages/Login";
 import NotFound from "./pages/NotFound.tsx";
@@ -53,6 +54,7 @@ const App = () => (
                 <Route path="/lixo" element={<Trash />} />
                 <Route path="/membros" element={<Members />} />
                 <Route path="/auditoria" element={<Audit />} />
+                <Route path="/configuracoes" element={<Settings />} />
                 <Route path="/docs" element={<Docs />} />
                 <Route path="/docs/:slug" element={<Docs />} />
               </Route>
