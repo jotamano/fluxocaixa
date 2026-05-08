@@ -42,7 +42,9 @@ Tabela `public.audit_log`:
 
 Quando a alteração é feita por uma função `security definer` (ex.: o
 cron `generate_subscription_invoices`), o JWT está vazio — nesse caso
-`actor_email = 'sistema'` para deixar claro que foi automático.
+`actor_user_id` e `actor_email` ficam **`NULL`** na tabela. A página
+`/auditoria` mostra esses eventos como `sistema` (é apenas um label
+de UI, não vai ver a string `'sistema'` na BD).
 
 ## Como ler a página
 
@@ -85,9 +87,18 @@ Filtro: actor email = `x@empresa.pt`. A lista mostra todas as acções
 do membro, ordenadas por data.
 
 ### "Houve algo automático esta noite?"
-Filtro: actor email = `sistema`. Vais ver os `INSERT` em `invoices` e
-`invoice_items` do cron de subscrições + os `DELETE` em qualquer tabela
-do cron de purga aos 90 dias.
+Para encontrar eventos automáticos, deixa o filtro de membro vazio e
+procura entradas marcadas como `sistema` na lista (o label aparece
+quando o `actor_email` é `NULL`). Vais ver os `INSERT` em `invoices`
+e `invoice_items` do cron de subscrições + os `DELETE` em qualquer
+tabela do cron de purga aos 90 dias.
+
+Em SQL directo:
+```sql
+select * from public.audit_log
+where actor_email is null
+order by occurred_at desc;
+```
 
 ## O que sobrevive aos 90 dias?
 

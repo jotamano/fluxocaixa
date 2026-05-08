@@ -240,9 +240,10 @@ os membros). A `audit_log` só permite `INSERT` via trigger.
    `shared_preload_libraries`. Se mudaste recentemente, precisa de
    `docker compose restart db`.
 
-### Auditoria com `actor_email = sistema`
+### Auditoria com `actor_email` vazio (UI: "sistema")
 É normal: significa que a alteração veio de um cron ou trigger
-`security definer`. Não é um bug.
+`security definer` (sem JWT). Na BD `actor_email` fica `NULL`; a
+página `/auditoria` rotula como `sistema`. Não é um bug.
 
 ### Faturas não estão a ser geradas pela subscrição
 1. A subscrição está `active`?
