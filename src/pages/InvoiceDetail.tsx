@@ -574,7 +574,7 @@ export default function InvoiceDetail() {
               <p className="mt-1 text-xs text-muted-foreground">
                 {invoice.status === "paid"
                   ? "Fatura paga — abre cada subscrição para a editar (mudanças aqui não se propagam)."
-                  : "Editar preço ou descrição nos itens da fatura sincroniza com a subscrição respectiva."}
+                  : "Editar preço, descrição ou datas dos itens da fatura sincroniza com a subscrição respectiva."}
               </p>
               <div className="mt-4 space-y-2">
                 {sourceSubscription && (
@@ -589,10 +589,15 @@ export default function InvoiceDetail() {
               </div>
             </div>
           )}
-
-          <EditHistoryPanel invoiceId={invoice.id} />
         </div>
       </div>
+
+      {/* Histórico de edições: cresce indefinidamente com cada save, por isso
+          é renderizado como linha completa em baixo do grid em vez de na
+          coluna direita. Mantém a coluna lateral focada nos meta-dados da
+          fatura e impede que o painel "estique" a página quando há muitas
+          edições. */}
+      <EditHistoryPanel invoiceId={invoice.id} />
 
       {/* Edit invoice dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
