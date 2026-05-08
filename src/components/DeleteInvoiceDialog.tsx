@@ -36,7 +36,12 @@ export function DeleteInvoiceDialog({ invoiceId, invoiceNumber, isPending, onCan
     if (open) setAlsoDeleteSub(false);
   }, [open]);
 
-  const hasSubscription = !!preview?.subscriptionId;
+  // Subscription association comes from either side (cron-parent or
+  // spawned children). The cascade handles both, so the checkbox must
+  // be available whenever EITHER exists.
+  const hasSubscription = preview?.hasSubscription ?? false;
+  const spawnedCount = preview?.spawnedSubscriptionIds?.length ?? 0;
+  const isCronChild = !!preview?.subscriptionId;
   const paymentCount = preview?.payments ?? 0;
 
   return (
@@ -71,7 +76,13 @@ export function DeleteInvoiceDialog({ invoiceId, invoiceNumber, isPending, onCan
               className="mt-0.5"
             />
             <div className="text-sm">
-              <div className="font-medium">Também eliminar a subscrição associada</div>
+              <div className="font-medium">
+                {spawnedCount > 0 && !isCronChild
+                  ? spawnedCount === 1
+                    ? "Também eliminar a subscrição criada por esta fatura"
+                    : `Também eliminar as ${spawnedCount} subscrições criadas por esta fatura`
+                  : "Também eliminar a subscrição associada"}
+              </div>
               <p className="text-muted-foreground text-xs mt-0.5">
                 Vai também eliminar todas as outras faturas em aberto dessa subscrição (faturas pagas mantêm-se).
               </p>

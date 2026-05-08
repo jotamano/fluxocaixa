@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useClients, useInvoices, usePayments, useDeletePayment, useUpdatePayment } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, methodLabels, type PaymentMethod } from "@/lib/data";
+import { formatCurrency, getInvoiceTotalWithIva, getEffectiveIvaPercentage, methodLabels, type PaymentMethod } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 
 export default function PaymentDetail() {
@@ -45,7 +45,8 @@ export default function PaymentDetail() {
 
   const client = clients.find(item => item.id === payment.client_id);
   const invoice = invoices.find(item => item.id === payment.invoice_id);
-  const invoiceTotal = invoice ? getInvoiceItemsTotal(invoice.invoice_items) : 0;
+  const invoiceTotal = invoice ? getInvoiceTotalWithIva(invoice.invoice_items, invoice) : 0;
+  const invoiceIvaPct = invoice ? getEffectiveIvaPercentage(invoice) : 0;
 
   const handleDelete = () => {
     deletePayment.mutate(payment, {
@@ -116,6 +117,9 @@ export default function PaymentDetail() {
         <div className="rounded-xl border border-border bg-card p-5 shadow-card">
           <p className="text-sm text-muted-foreground">Valor da fatura</p>
           <p className="mt-2 text-lg font-semibold text-card-foreground">{invoice ? formatCurrency(invoiceTotal) : "—"}</p>
+          {invoice && invoiceIvaPct > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">Inclui IVA {invoiceIvaPct}%</p>
+          )}
         </div>
       </div>
 

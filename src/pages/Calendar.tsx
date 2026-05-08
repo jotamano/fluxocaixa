@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, LayoutList, LayoutGrid, CheckCircle2, FileText, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSubscriptions, useInvoices } from "@/hooks/use-data";
-import { frequencyLabels, formatCurrency, getInvoiceItemsTotal, getClientLabel } from "@/lib/data";
+import { frequencyLabels, formatCurrency, getInvoiceTotalWithIva, getAmountWithIva, getEffectiveIvaPercentage, getClientLabel } from "@/lib/data";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { cn } from "@/lib/utils";
@@ -170,7 +170,7 @@ export default function CalendarPage() {
   const subBillingTotal = useMemo(() => {
     let total = 0;
     subscriptionsByDay.forEach(subs => {
-      subs.forEach(({ sub }) => { total += Number(sub.amount); });
+      subs.forEach(({ sub }) => { total += getAmountWithIva(Number(sub.amount), sub); });
     });
     return total;
   }, [subscriptionsByDay]);
@@ -178,7 +178,7 @@ export default function CalendarPage() {
   const invoiceBillingTotal = useMemo(() => {
     let total = 0;
     invoicesByDay.forEach(invs => {
-      invs.forEach(inv => { total += getInvoiceItemsTotal(inv.invoice_items); });
+      invs.forEach(inv => { total += getInvoiceTotalWithIva(inv.invoice_items, inv); });
     });
     return total;
   }, [invoicesByDay]);
@@ -448,7 +448,7 @@ export default function CalendarPage() {
                                 <p className="text-sm font-semibold truncate text-card-foreground">{sub.name}</p>
                                 <p className="text-xs text-muted-foreground truncate">{client} · {frequencyLabels[sub.frequency]}</p>
                               </div>
-                              <span className="text-sm font-semibold shrink-0 text-card-foreground">{formatCurrency(Number(sub.amount))}</span>
+                              <span className="text-sm font-semibold shrink-0 text-card-foreground">{formatCurrency(getAmountWithIva(Number(sub.amount), sub))}</span>
                             </div>
                           </button>
                         ))}
@@ -484,7 +484,12 @@ export default function CalendarPage() {
                         </div>
                         <p className="text-xs text-muted-foreground">{getClientLabel(inv)}</p>
                         <InvoiceItemsPreview items={inv.invoice_items} />
-                        <p className="text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceItemsTotal(inv.invoice_items))}</p>
+                        <p className="text-sm font-semibold text-card-foreground">
+                          {formatCurrency(getInvoiceTotalWithIva(inv.invoice_items, inv))}
+                          {getEffectiveIvaPercentage(inv) > 0 && (
+                            <span className="ml-1 text-xs font-normal text-muted-foreground">({getEffectiveIvaPercentage(inv)}% IVA)</span>
+                          )}
+                        </p>
                       </Link>
                       <Button
                         variant="outline"
@@ -517,7 +522,12 @@ export default function CalendarPage() {
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Valor</span>
-                        <span className="font-semibold text-card-foreground">{formatCurrency(Number(sub.amount))}</span>
+                        <span className="font-semibold text-card-foreground">
+                          {formatCurrency(getAmountWithIva(Number(sub.amount), sub))}
+                          {getEffectiveIvaPercentage(sub) > 0 && (
+                            <span className="ml-1 text-xs font-normal text-muted-foreground">({getEffectiveIvaPercentage(sub)}% IVA)</span>
+                          )}
+                        </span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Frequência</span>
@@ -585,6 +595,7 @@ function FilterChip({
 }
 
 function InvoiceListRow({ inv, onMarkPaid }: { inv: Invoice; onMarkPaid: () => void }) {
+  const ivaPct = getEffectiveIvaPercentage(inv);
   return (
     <div className="rounded-lg border border-border p-3 space-y-2">
       <Link to={`/faturas/${inv.id}`} className="block hover:opacity-80 transition-opacity space-y-1">
@@ -595,7 +606,12 @@ function InvoiceListRow({ inv, onMarkPaid }: { inv: Invoice; onMarkPaid: () => v
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <StatusBadge status={inv.status} />
-            <span className="text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceItemsTotal(inv.invoice_items))}</span>
+            <span className="text-sm font-semibold text-card-foreground">
+              {formatCurrency(getInvoiceTotalWithIva(inv.invoice_items, inv))}
+              {ivaPct > 0 && (
+                <span className="ml-1 text-xs font-normal text-muted-foreground">({ivaPct}% IVA)</span>
+              )}
+            </span>
           </div>
         </div>
         <InvoiceItemsPreview items={inv.invoice_items} />

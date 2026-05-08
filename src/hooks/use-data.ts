@@ -785,15 +785,27 @@ export function useDeleteInvoice() {
       const cascadedPaymentIds: string[] = [];
 
       if (cascadeSubscription) {
-        const { data: invoice, error: invErr } = await supabase
-          .from("invoices")
-          .select("subscription_id")
-          .eq("id", id)
-          .single();
+        // Subs to cascade come from BOTH directions:
+        //   (a) the sub that generated this invoice (cron child) →
+        //       invoices.subscription_id
+        //   (b) subs that this invoice itself spawned →
+        //       subscriptions.source_invoice_id = id
+        const [{ data: invoice, error: invErr }, { data: spawned, error: spErr }] = await Promise.all([
+          supabase.from("invoices").select("subscription_id").eq("id", id).single(),
+          supabase.from("subscriptions").select("id").eq("source_invoice_id", id).is("deleted_at", null),
+        ]);
         if (invErr) throw invErr;
+        if (spErr) throw spErr;
 
-        if (invoice.subscription_id) {
-          const sub = await cascadeSoftDeleteSubscription(invoice.subscription_id, now);
+        const subIds = new Set<string>();
+        if (invoice.subscription_id) subIds.add(invoice.subscription_id as string);
+        for (const s of spawned ?? []) subIds.add(s.id as string);
+
+        for (const subId of subIds) {
+          // Pass id so the helper doesn't try to re-soft-delete the
+          // invoice we're about to soft-delete ourselves below (would
+          // double-tag deleted_via_subscription_id and confuse restore).
+          const sub = await cascadeSoftDeleteSubscription(subId, now, id);
           cascadedSubscriptionId = sub.subscriptionId;
           cascadedInvoiceIds.push(...sub.invoiceIds.filter(i => i !== id));
           cascadedPaymentIds.push(...sub.paymentIds);
@@ -843,19 +855,51 @@ export function useDeleteInvoice() {
 // the subscription, every still-editable invoice it owns (effective
 // paid check — same as PR #38), and the non-deleted payments on those
 // invoices. Returns the ids it touched so the caller can dedupe.
+//
+// "Owns" includes both directions:
+//   (a) cron-generated children — invoices.subscription_id = sub.id
+//   (b) the spawning invoice that originally created this sub —
+//       subscriptions.source_invoice_id = invoice.id
+// We previously only handled (a), which silently dropped the
+// spawning invoice on the floor and left it as an orphan referencing a
+// deleted sub.
 async function cascadeSoftDeleteSubscription(
   subscriptionId: string,
   now: string,
+  excludeInvoiceId?: string,
 ): Promise<{ subscriptionId: string; invoiceIds: string[]; paymentIds: string[] }> {
-  // 1. Find candidate invoices (any non-deleted invoice owned by the sub).
-  const { data: invoices, error: invErr } = await supabase
-    .from("invoices")
-    .select("id")
-    .eq("subscription_id", subscriptionId)
-    .is("deleted_at", null);
+  // 1. Find candidate invoices: cron-generated children + spawning parent.
+  const [{ data: childInvoices, error: invErr }, { data: subRow, error: subRowErr }] = await Promise.all([
+    supabase
+      .from("invoices")
+      .select("id")
+      .eq("subscription_id", subscriptionId)
+      .is("deleted_at", null),
+    supabase
+      .from("subscriptions")
+      .select("source_invoice_id")
+      .eq("id", subscriptionId)
+      .single(),
+  ]);
   if (invErr) throw invErr;
+  if (subRowErr) throw subRowErr;
 
-  const candidateIds = (invoices ?? []).map(i => i.id as string);
+  const candidateSet = new Set<string>((childInvoices ?? []).map(i => i.id as string));
+  if (subRow?.source_invoice_id) {
+    // Verify the spawning invoice is still alive before adding it.
+    const { data: parentInv, error: parentErr } = await supabase
+      .from("invoices")
+      .select("id, deleted_at")
+      .eq("id", subRow.source_invoice_id)
+      .maybeSingle();
+    if (parentErr) throw parentErr;
+    if (parentInv && !parentInv.deleted_at) candidateSet.add(parentInv.id as string);
+  }
+  // Drop the caller-excluded invoice (the one being deleted by
+  // useDeleteInvoice — its own cascade path will soft-delete it after
+  // we return).
+  if (excludeInvoiceId) candidateSet.delete(excludeInvoiceId);
+  const candidateIds = Array.from(candidateSet);
   const cascadedInvoiceIds: string[] = [];
   const cascadedPaymentIds: string[] = [];
 
@@ -914,6 +958,9 @@ async function cascadeSoftDeleteSubscription(
     }
 
     // 4. Then the invoices themselves, tagged so restore can find them.
+    //    The spawning invoice (subRow.source_invoice_id) gets the same
+    //    deleted_via_subscription_id stamp as cron-generated children,
+    //    so useRestoreSubscription brings them all back symmetrically.
     if (unpaidInvoiceIds.length > 0) {
       const { error: invUpdErr } = await supabase
         .from("invoices")
@@ -1399,21 +1446,34 @@ export function usePurgeSubscription() {
 
 // Read-only helper for the invoice delete confirm dialog: returns
 // counts so the warning can show real numbers.
+//
+// `hasSubscription` is true when the invoice has ANY subscription
+// link — either as a cron-generated child (invoices.subscription_id)
+// or as the spawning parent of one or more subs
+// (subscriptions.source_invoice_id = id). The dialog uses this to
+// decide whether to show the "também eliminar a subscrição associada"
+// checkbox.
 export function useInvoiceCascadePreview(invoiceId: string | null) {
   return useQuery({
     queryKey: ["invoice_cascade_preview", invoiceId],
     enabled: !!invoiceId,
     queryFn: async () => {
-      const [{ data: invoice, error: invErr }, { data: pmts, error: pErr }] = await Promise.all([
+      const [{ data: invoice, error: invErr }, { data: pmts, error: pErr }, { data: spawned, error: spErr }] = await Promise.all([
         supabase.from("invoices").select("subscription_id").eq("id", invoiceId!).single(),
         supabase.from("payments").select("id").eq("invoice_id", invoiceId!).is("deleted_at", null),
+        supabase.from("subscriptions").select("id").eq("source_invoice_id", invoiceId!).is("deleted_at", null),
       ]);
       if (invErr) throw invErr;
       if (pErr) throw pErr;
+      if (spErr) throw spErr;
 
+      const parentSubscriptionId = (invoice.subscription_id as string | null) ?? null;
+      const spawnedSubscriptionIds = (spawned ?? []).map(s => s.id as string);
       return {
         payments: (pmts ?? []).length,
-        subscriptionId: invoice.subscription_id as string | null,
+        subscriptionId: parentSubscriptionId,
+        spawnedSubscriptionIds,
+        hasSubscription: !!parentSubscriptionId || spawnedSubscriptionIds.length > 0,
       };
     },
   });
@@ -1421,19 +1481,42 @@ export function useInvoiceCascadePreview(invoiceId: string | null) {
 
 // Read-only helper for the delete confirm dialog: returns the counts
 // the user is about to cascade so the warning can show real numbers.
+//
+// Mirrors cascadeSoftDeleteSubscription's logic: includes both
+// cron-generated children (invoices.subscription_id) AND the spawning
+// invoice (subscriptions.source_invoice_id) in the preview, so the
+// dialog can't promise something the cascade won't do.
 export function useSubscriptionCascadePreview(subscriptionId: string | null) {
   return useQuery({
     queryKey: ["subscription_cascade_preview", subscriptionId],
     enabled: !!subscriptionId,
     queryFn: async () => {
-      const { data: invoices, error: invErr } = await supabase
-        .from("invoices")
-        .select("id")
-        .eq("subscription_id", subscriptionId!)
-        .is("deleted_at", null);
+      const [{ data: invoices, error: invErr }, { data: subRow, error: subErr }] = await Promise.all([
+        supabase
+          .from("invoices")
+          .select("id")
+          .eq("subscription_id", subscriptionId!)
+          .is("deleted_at", null),
+        supabase
+          .from("subscriptions")
+          .select("source_invoice_id")
+          .eq("id", subscriptionId!)
+          .single(),
+      ]);
       if (invErr) throw invErr;
+      if (subErr) throw subErr;
 
-      const ids = (invoices ?? []).map(i => i.id as string);
+      const idSet = new Set<string>((invoices ?? []).map(i => i.id as string));
+      if (subRow?.source_invoice_id) {
+        const { data: parentInv, error: parentErr } = await supabase
+          .from("invoices")
+          .select("id, deleted_at")
+          .eq("id", subRow.source_invoice_id)
+          .maybeSingle();
+        if (parentErr) throw parentErr;
+        if (parentInv && !parentInv.deleted_at) idSet.add(parentInv.id as string);
+      }
+      const ids = Array.from(idSet);
       if (ids.length === 0) {
         return { unpaidInvoices: 0, paidInvoices: 0, payments: 0 };
       }
