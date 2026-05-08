@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useClients, useInvoices, usePayments } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, methodLabels } from "@/lib/data";
+import { formatCurrency, getInvoiceTotalWithIva, methodLabels } from "@/lib/data";
 import { StatCard } from "@/components/StatCard";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { SplitPaymentDialog } from "@/components/SplitPaymentDialog";
@@ -23,7 +23,7 @@ export default function Payments() {
 
   const clientDebts = clients.map(client => {
     const clientInvoices = invoices.filter(i => i.client_id === client.id);
-    const totalBilled = clientInvoices.reduce((sum, i) => sum + getInvoiceItemsTotal(i.invoice_items), 0);
+    const totalBilled = clientInvoices.reduce((sum, i) => sum + getInvoiceTotalWithIva(i.invoice_items, i), 0);
     const totalPaid = payments.filter(p => p.client_id === client.id).reduce((sum, p) => sum + Number(p.amount), 0);
     const debt = totalBilled - totalPaid;
     const overdueInvoices = clientInvoices.filter(i => i.status === 'overdue');

@@ -17,7 +17,7 @@ import {
   usePurgeInvoice,
   usePurgeSubscription,
 } from "@/hooks/use-data";
-import { formatCurrency, frequencyLabels, getInvoiceItemsTotal } from "@/lib/data";
+import { formatCurrency, frequencyLabels, getInvoiceTotalWithIva, getAmountWithIva } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -178,7 +178,7 @@ export default function Trash() {
             items={invoices.map(inv => ({
               id: inv.id,
               title: inv.number,
-              subtitle: `${inv.clients?.name ?? "—"} · ${formatCurrency(getInvoiceItemsTotal(inv.invoice_items))}`,
+              subtitle: `${inv.clients?.name ?? "—"} · ${formatCurrency(getInvoiceTotalWithIva(inv.invoice_items, inv))}`,
               deletedAt: inv.deleted_at,
             }))}
             onRestore={item => handleRestore("invoice", item.id, item.title)}
@@ -192,7 +192,7 @@ export default function Trash() {
             items={subscriptions.map(s => ({
               id: s.id,
               title: s.name,
-              subtitle: `${s.clients?.name ?? "—"} · ${formatCurrency(s.amount ?? 0)} / ${frequencyLabels[s.frequency]}`,
+              subtitle: `${s.clients?.name ?? "—"} · ${formatCurrency(getAmountWithIva(Number(s.amount ?? 0), s))} / ${frequencyLabels[s.frequency]}`,
               deletedAt: s.deleted_at,
             }))}
             onRestore={item => handleRestore("subscription", item.id, item.title)}

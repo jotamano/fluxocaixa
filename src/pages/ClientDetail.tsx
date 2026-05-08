@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useClients, useInvoices, usePayments, useSubscriptions, useDeleteClient, useUpdateClient } from "@/hooks/use-data";
-import { DEFAULT_IVA_PERCENTAGE, formatCurrency, getInvoiceItemsTotal, getInvoiceTotalWithIva, frequencyLabels, methodLabels } from "@/lib/data";
+import { DEFAULT_IVA_PERCENTAGE, formatCurrency, getInvoiceTotalWithIva, getAmountWithIva, frequencyLabels, methodLabels } from "@/lib/data";
 import { generateClientStatement } from "@/lib/statement";
 import { useToast } from "@/hooks/use-toast";
 
@@ -71,7 +71,7 @@ export default function ClientDetail() {
     const events: TimelineEvent[] = [];
     events.push({ date: new Date(client.created_at), type: 'client_created', title: 'Cliente registado', subtitle: client.company, icon: UserPlus, color: 'text-primary' });
     clientInvoices.forEach(inv => {
-      events.push({ date: new Date(inv.created_at), type: 'invoice_created', title: `Fatura ${inv.number} criada`, subtitle: formatCurrency(getInvoiceItemsTotal(inv.invoice_items)), icon: FileText, color: 'text-warning' });
+      events.push({ date: new Date(inv.created_at), type: 'invoice_created', title: `Fatura ${inv.number} criada`, subtitle: formatCurrency(getInvoiceTotalWithIva(inv.invoice_items, inv)), icon: FileText, color: 'text-warning' });
     });
     clientPayments.forEach(pay => {
       events.push({ date: new Date(pay.created_at), type: 'payment_received', title: `Pagamento recebido`, subtitle: `${formatCurrency(Number(pay.amount))} — ${methodLabels[pay.method]}`, icon: CreditCard, color: 'text-success' });
@@ -265,7 +265,7 @@ export default function ClientDetail() {
                         <p className="text-sm font-medium text-card-foreground">{sub.name}</p>
                         <p className="text-xs text-muted-foreground">{frequencyLabels[sub.frequency]}</p>
                       </div>
-                      <span className="text-sm font-semibold text-card-foreground">{formatCurrency(Number(sub.amount))}</span>
+                      <span className="text-sm font-semibold text-card-foreground">{formatCurrency(getAmountWithIva(Number(sub.amount), sub))}</span>
                     </div>
                   </div>
                 ))}

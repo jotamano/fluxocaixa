@@ -14,7 +14,7 @@ import {
   useNextInvoiceNumber,
   useSubscriptionStats,
 } from "@/hooks/use-data";
-import { frequencyLabels, formatCurrency, frequencyDays, getClientLabel, type SubscriptionFrequency, DEFAULT_IVA_PERCENTAGE } from "@/lib/data";
+import { frequencyLabels, formatCurrency, frequencyDays, getClientLabel, getAmountWithIva, getEffectiveIvaPercentage, type SubscriptionFrequency, DEFAULT_IVA_PERCENTAGE } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -288,6 +288,13 @@ export default function Subscriptions() {
                   issue_date: now.toISOString().split('T')[0],
                   due_date: dueDate.toISOString().split('T')[0],
                   notes: `Fatura gerada automaticamente da subscrição: ${form.name}`,
+                  // Snapshot IVA from the form (which mirrors the
+                  // subscription we just created) so the invoice
+                  // matches its parent. Without this the column
+                  // default (23%) takes over and a sub set to e.g.
+                  // 0% would still mint an invoice with 23% IVA.
+                  has_iva: form.has_iva,
+                  iva_percentage: form.has_iva ? Number(form.iva_percentage) || 0 : 0,
                 },
                 items,
               }, {
@@ -359,7 +366,12 @@ export default function Subscriptions() {
         <div className="mt-4 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Valor</span>
-            <span className="font-semibold text-card-foreground">{formatCurrency(Number(sub.amount))}/{frequencyLabels[sub.frequency].toLowerCase()}</span>
+            <span className="text-right">
+              <span className="font-semibold text-card-foreground">{formatCurrency(getAmountWithIva(Number(sub.amount), sub))}/{frequencyLabels[sub.frequency].toLowerCase()}</span>
+              {getEffectiveIvaPercentage(sub) > 0 && (
+                <span className="block text-xs text-muted-foreground">{formatCurrency(Number(sub.amount))} + IVA {getEffectiveIvaPercentage(sub)}%</span>
+              )}
+            </span>
           </div>
           {isActive && (
             <div className="flex justify-between text-sm">
