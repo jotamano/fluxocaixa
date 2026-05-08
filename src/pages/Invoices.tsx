@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useInvoices } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceTotalWithIva, getClientLabel, type InvoiceStatus } from "@/lib/data";
+import { formatCurrency, getInvoiceTotalWithIva, getClientLabel, getEffectiveIvaPercentage, type InvoiceStatus } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -76,6 +76,7 @@ export default function Invoices() {
               <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Vencimento</th>
               <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Estado</th>
               <th className="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Valor</th>
+              <th className="px-6 py-3 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">IVA</th>
               <th className="px-6 py-3 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">PDF</th>
             </tr>
           </thead>
@@ -97,6 +98,12 @@ export default function Invoices() {
                 <td className="px-6 py-4 text-sm text-muted-foreground">{new Date(invoice.due_date).toLocaleDateString('pt-PT')}</td>
                 <td className="px-6 py-4"><StatusBadge status={invoice.status} /></td>
                 <td className="px-6 py-4 text-right text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceTotalWithIva(invoice.invoice_items, invoice))}</td>
+                <td className="px-6 py-4 text-center text-xs text-muted-foreground tabular-nums">
+                  {(() => {
+                    const pct = getEffectiveIvaPercentage(invoice);
+                    return pct > 0 ? `${pct}%` : "—";
+                  })()}
+                </td>
                 <td className="px-6 py-4 text-center">
                   <Button
                     variant="ghost"

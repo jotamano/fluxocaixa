@@ -13,8 +13,9 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { DeleteInvoiceDialog } from "@/components/DeleteInvoiceDialog";
 import { QuickCreateServiceDialog } from "@/components/QuickCreateServiceDialog";
+import { EditHistoryPanel } from "@/components/EditHistoryPanel";
 import type { Subscription } from "@/hooks/use-data";
-import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions, useClientSubscriptionItems } from "@/hooks/use-data";
+import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions, useClientSubscriptionItems, useSyncIva } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, getClientLabel, formatInvoiceItemPeriod, methodLabels, frequencyLabels, type SubscriptionFrequency, DEFAULT_IVA_PERCENTAGE, getEffectiveIvaPercentage, getInvoiceIvaAmount, getInvoiceTotalWithIva } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
@@ -70,6 +71,7 @@ export default function InvoiceDetail() {
   const updateInvoice = useUpdateInvoice();
   const updateItems = useUpdateInvoiceItems();
   const duplicateInvoice = useDuplicateInvoice();
+  const syncIva = useSyncIva();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -215,6 +217,10 @@ export default function InvoiceDetail() {
   };
 
   const handleEditSave = () => {
+    // Non-IVA fields go through the regular update; the IVA pair is
+    // routed via sync_iva so a single user action propagates to the
+    // client and every still-editable invoice/subscription. Paid
+    // invoices are blocked at multiple layers (UI, hook, RPC).
     updateInvoice.mutate({
       id: invoice.id,
       updates: {
@@ -222,11 +228,19 @@ export default function InvoiceDetail() {
         due_date: editForm.due_date,
         notes: editForm.notes || null,
         status: editForm.status as any,
-        has_iva: editForm.has_iva,
-        iva_percentage: editForm.has_iva ? Number(editForm.iva_percentage) || 0 : 0,
       },
     }, {
-      onSuccess: () => { setEditOpen(false); toast({ title: "Fatura atualizada!" }); },
+      onSuccess: () => {
+        syncIva.mutate({
+          source: "invoice",
+          sourceId: invoice.id,
+          hasIva: editForm.has_iva,
+          ivaPercentage: Number(editForm.iva_percentage) || 0,
+        }, {
+          onSuccess: () => { setEditOpen(false); toast({ title: "Fatura atualizada!", description: "IVA propagado para o cliente e faturas em aberto." }); },
+          onError: (err) => toast({ title: "Erro a sincronizar IVA", description: err.message, variant: "destructive" }),
+        });
+      },
       onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
     });
   };
@@ -575,6 +589,8 @@ export default function InvoiceDetail() {
               </div>
             </div>
           )}
+
+          <EditHistoryPanel invoiceId={invoice.id} />
         </div>
       </div>
 

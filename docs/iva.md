@@ -44,15 +44,38 @@ ser consistente com o que o `formatCurrency` mostra em pt-PT.
 
 1. **Criar cliente:** toggle ligado, 23% por defeito.
 2. **Criar fatura/subscrição:** copia `has_iva` e `iva_percentage` do
-   cliente selecionado. O utilizador pode alterar para esta fatura/
-   subscrição em particular sem afetar o cliente.
-3. **Editar cliente:** **não** propaga para faturas/subscrições já
-   existentes (estas são snapshots do momento da emissão / criação).
-   Só apanha as próximas.
+   cliente selecionado. O utilizador pode alterar **na altura da
+   criação** sem afetar o cliente.
+3. **Editar IVA — sincronização cruzada (PR #58):** mexer no IVA em
+   *qualquer* dos três sítios (cliente, subscrição, fatura) propaga
+   automaticamente para todos os outros, via a função Postgres
+   `sync_iva()`. Concretamente, depois de gravar:
+   - **Cliente** é sempre atualizado.
+   - Todas as **subscrições não eliminadas** do cliente passam a ter
+     o mesmo IVA.
+   - Todas as **faturas em aberto** do cliente também — onde "em
+     aberto" significa estado ≠ `paid`/`partially_paid` **e** sem
+     pagamentos registados.
+   - **Faturas pagas (ou parcialmente pagas) ficam intactas.** São
+     documentos fiscais, não se mexe. Para alterações reais usa
+     duplicar + nova emissão (ou nota de crédito).
 4. **Cron diário (`generate_subscription_invoices`):** usa o
    `iva_percentage` da subscrição na altura da emissão. Se a subscrição
    tinha 23% e mudaste para 6%, a próxima fatura sai a 6% (e as faturas
-   antigas ficam intactas).
+   antigas ficam intactas, salvo se ainda estiverem em aberto — nesse
+   caso a sincronização cruzada já as terá atualizado).
+
+### Como funciona a sincronização
+
+A propagação acontece **a seguir** ao save normal (ordem: 1) escreve
+campos não-IVA na entidade que o utilizador editou, 2) chama
+`sync_iva()`). Se a 2ª chamada falhar aparece um toast vermelho
+"Erro a sincronizar IVA" e o utilizador pode reabrir o diálogo e
+voltar a guardar — a operação é idempotente.
+
+A função Postgres só faz `UPDATE` em linhas onde o valor é
+**diferente do actual**, por isso não dá triggers desnecessários no
+audit_log.
 
 ## Onde aparece "+ IVA" vs total final
 
