@@ -593,16 +593,31 @@ export function useUpdateInvoiceItems() {
       }
 
       // 3. Sync edits to existing rows back into linked sub_items.
-      //    Use the canonical link stored on invoice_items
-      //    (source_subscription_item_id), populated for both NewInvoice
-      //    and cron flows post 20260413130000.
+      //    Primary path uses the canonical link
+      //    (invoice_items.source_subscription_item_id), populated for
+      //    NewInvoice and cron flows post 20260413130000. Fallback for
+      //    older/un-backfilled rows uses invoices.subscription_id to
+      //    still bump the cycle anchor when the per-line link is
+      //    missing (the common shape: cron-issued invoice from a
+      //    single-line monthly sub).
       if (syncToSubscriptions && updates.length > 0) {
         const updatedIds = updates.map(u => u.id!);
-        const { data: invItemsAfter, error: readErr } = await supabase
-          .from("invoice_items")
-          .select("id, source_subscription_item_id")
-          .in("id", updatedIds);
+        const [
+          { data: invItemsAfter, error: readErr },
+          { data: invRow, error: invRowErr },
+        ] = await Promise.all([
+          supabase
+            .from("invoice_items")
+            .select("id, source_subscription_item_id, position")
+            .in("id", updatedIds),
+          supabase
+            .from("invoices")
+            .select("subscription_id")
+            .eq("id", invoiceId)
+            .single(),
+        ]);
         if (readErr) throw readErr;
+        if (invRowErr) throw invRowErr;
 
         const updateById = new Map(updates.map(u => [u.id!, u]));
         const affectedSubIds = new Set<string>();
@@ -619,6 +634,9 @@ export function useUpdateInvoiceItems() {
         const linkedSubItemIds = (invItemsAfter ?? [])
           .map(r => r.source_subscription_item_id)
           .filter((x): x is string => !!x);
+
+        const subIdByItemId = new Map<string, string>();
+        const kindByItemId = new Map<string, string>();
         if (linkedSubItemIds.length > 0) {
           const { data: subItemRows, error: siErr } = await supabase
             .from("subscription_items")
@@ -626,12 +644,10 @@ export function useUpdateInvoiceItems() {
             .in("id", linkedSubItemIds);
           if (siErr) throw siErr;
 
-          const subIdByItemId = new Map(
-            (subItemRows ?? []).map(si => [si.id, si.subscription_id]),
-          );
-          const kindByItemId = new Map(
-            (subItemRows ?? []).map(si => [si.id, si.kind]),
-          );
+          for (const si of subItemRows ?? []) {
+            subIdByItemId.set(si.id, si.subscription_id as string);
+            kindByItemId.set(si.id, si.kind as string);
+          }
 
           for (const ir of invItemsAfter ?? []) {
             const subItemId = ir.source_subscription_item_id;
@@ -661,6 +677,42 @@ export function useUpdateInvoiceItems() {
                 latestEndBySubId.set(subId, src.service_end_date);
               }
             }
+          }
+        }
+
+        // Fallback: even when `source_subscription_item_id` is missing
+        // on every line of this invoice, the invoice itself may carry
+        // `subscription_id` (cron-generated, NewInvoice "Fatura
+        // recorrente"). Treat that subscription as affected and pick
+        // the latest service_end_date among updated lines whose
+        // position is below the cron's setup-line offset (>=1000).
+        // Without the per-line link we can't tell recurring from
+        // addon, so we just skip the obvious setup-line range.
+        if (invRow?.subscription_id) {
+          const fallbackSubId = invRow.subscription_id as string;
+          affectedSubIds.add(fallbackSubId);
+          const positionByInvItem = new Map(
+            (invItemsAfter ?? []).map(r => [r.id, r.position as number | null]),
+          );
+          let latest = latestEndBySubId.get(fallbackSubId);
+          for (const u of updates) {
+            if (!u.id || !u.service_end_date) continue;
+            // Trust the linked-kind path when it already produced a
+            // value for this item — overwriting an explicit recurring
+            // pick with a fallback heuristic would be a regression.
+            const subItemId = (invItemsAfter ?? []).find(r => r.id === u.id)
+              ?.source_subscription_item_id;
+            if (subItemId && kindByItemId.get(subItemId) && kindByItemId.get(subItemId) !== "recurring") {
+              continue;
+            }
+            const pos = positionByInvItem.get(u.id);
+            if (typeof pos === "number" && pos >= 1000) continue;
+            if (!latest || u.service_end_date > latest) {
+              latest = u.service_end_date;
+            }
+          }
+          if (latest) {
+            latestEndBySubId.set(fallbackSubId, latest);
           }
         }
 
