@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, FileText, RefreshCw, Plus, Menu, CreditCard, CalendarDays, ChevronLeft, ChevronRight, Package, LogOut, Trash2, UserCog, History } from "lucide-react";
+import { LayoutDashboard, Users, FileText, RefreshCw, Plus, Menu, CreditCard, CalendarDays, ChevronLeft, ChevronRight, Package, LogOut, Trash2, UserCog, History, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -17,9 +17,16 @@ const navItems = [
   { to: "/subscricoes", icon: RefreshCw, label: "Subscrições" },
   { to: "/calendario", icon: CalendarDays, label: "Calendário" },
   { to: "/servicos", icon: Package, label: "Serviços" },
+  { to: "/lixo", icon: Trash2, label: "Lixo" },
+];
+
+// Atalhos compactos mostrados como linha de ícones por cima do botão
+// "Nova Fatura" — para páginas de gestão/admin que não precisam estar
+// no menu principal mas têm de ser facilmente alcançáveis.
+const shortcutItems = [
   { to: "/membros", icon: UserCog, label: "Membros" },
   { to: "/auditoria", icon: History, label: "Auditoria" },
-  { to: "/lixo", icon: Trash2, label: "Lixo" },
+  { to: "/docs", icon: BookOpen, label: "Documentação" },
 ];
 
 interface SidebarContextType {
@@ -82,6 +89,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="p-4 border-t border-sidebar-border space-y-2">
+        <ShortcutRow showLabels={showLabels} onNavigate={onNavigate} />
         <NavLink to="/faturas/nova" onClick={onNavigate}>
           <Button className={cn(
             "w-full gap-2 bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90",
@@ -94,6 +102,45 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         <SidebarFooter showLabels={showLabels} />
       </div>
     </>
+  );
+}
+
+function ShortcutRow({
+  showLabels,
+  onNavigate,
+}: {
+  showLabels: boolean;
+  onNavigate?: () => void;
+}) {
+  const location = useLocation();
+  return (
+    <div
+      className={cn(
+        "grid gap-1",
+        showLabels ? "grid-cols-3" : "grid-cols-1",
+      )}
+    >
+      {shortcutItems.map((item) => {
+        const isActive = location.pathname.startsWith(item.to);
+        return (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            onClick={onNavigate}
+            title={item.label}
+            aria-label={item.label}
+            className={cn(
+              "flex h-9 items-center justify-center rounded-md text-xs font-medium transition-colors",
+              isActive
+                ? "bg-sidebar-accent text-sidebar-primary-foreground"
+                : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+            )}
+          >
+            <item.icon className="h-4 w-4 shrink-0" />
+          </NavLink>
+        );
+      })}
+    </div>
   );
 }
 
