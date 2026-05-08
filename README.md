@@ -4,6 +4,10 @@ Self-hosted billing app for marketing freelancers / micro-agencies. Tracks
 clients, recurring subscriptions, invoices, and payments. Runs entirely
 **offline** on a single machine using docker-compose.
 
+> Para a documentação detalhada (em português) sobre todas as
+> funcionalidades, IVA, membros, auditoria, lixo e o guia do operador,
+> ver [`docs/`](./docs/README.md).
+
 ## What you get
 
 - **Frontend** — Vite + React 18 + shadcn/ui + TanStack Query (port `8080`)
