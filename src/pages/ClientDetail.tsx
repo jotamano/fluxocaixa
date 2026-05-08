@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useClients, useInvoices, usePayments, useSubscriptions, useDeleteClient, useUpdateClient } from "@/hooks/use-data";
+import { useClients, useInvoices, usePayments, useSubscriptions, useDeleteClient, useUpdateClient, useSyncIva } from "@/hooks/use-data";
 import { DEFAULT_IVA_PERCENTAGE, formatCurrency, getInvoiceTotalWithIva, getAmountWithIva, frequencyLabels, methodLabels } from "@/lib/data";
 import { generateClientStatement } from "@/lib/statement";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +33,7 @@ export default function ClientDetail() {
   const { data: subscriptions = [], isLoading: subscriptionsLoading } = useSubscriptions();
   const deleteClient = useDeleteClient();
   const updateClient = useUpdateClient();
+  const syncIva = useSyncIva();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -100,6 +101,9 @@ export default function ClientDetail() {
   };
 
   const handleEditSave = () => {
+    // Save the non-IVA fields directly. The IVA pair is routed through
+    // the sync_iva RPC so it cascades to every linked subscription and
+    // every still-editable invoice in one round-trip.
     updateClient.mutate(
       {
         id: client.id,
@@ -109,12 +113,23 @@ export default function ClientDetail() {
           company: editForm.company,
           phone: editForm.phone,
           nif: editForm.nif,
-          has_iva: editForm.has_iva,
-          iva_percentage: editForm.has_iva ? Number(editForm.iva_percentage) || 0 : 0,
         },
       },
       {
-        onSuccess: () => { setEditOpen(false); toast({ title: "Cliente atualizado!" }); },
+        onSuccess: () => {
+          syncIva.mutate(
+            {
+              source: "client",
+              sourceId: client.id,
+              hasIva: editForm.has_iva,
+              ivaPercentage: Number(editForm.iva_percentage) || 0,
+            },
+            {
+              onSuccess: () => { setEditOpen(false); toast({ title: "Cliente atualizado!", description: "IVA propagado para subscrições e faturas em aberto." }); },
+              onError: (err) => toast({ title: "Erro a sincronizar IVA", description: err.message, variant: "destructive" }),
+            },
+          );
+        },
         onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
       },
     );

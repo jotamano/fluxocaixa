@@ -2142,6 +2142,76 @@ export function useReorderInvoiceItems() {
   });
 }
 
+// ─── IVA cross-sync ───
+
+// Propagates an IVA toggle/percentage edit across:
+//   1. the client (always),
+//   2. all of the client's non-deleted subscriptions,
+//   3. every still-editable invoice for the client (i.e. not paid /
+//      partially_paid AND with no payment rows attached).
+//
+// Implemented as a Postgres function so the cascade is one round-trip
+// and can never be observed half-applied. Callers pass the *source*
+// of the edit so we can resolve the client from any of the three
+// entry points (client edit form, subscription edit popup, invoice
+// edit dialog). See migration 20260508130000_iva_sync_and_history.sql.
+export interface SyncIvaInput {
+  source: "client" | "subscription" | "invoice";
+  sourceId: string;
+  hasIva: boolean;
+  ivaPercentage: number;
+}
+
+export function useSyncIva() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ source, sourceId, hasIva, ivaPercentage }: SyncIvaInput) => {
+      const { error } = await supabase.rpc("sync_iva", {
+        p_source: source,
+        p_source_id: sourceId,
+        p_has_iva: hasIva,
+        p_iva_percentage: hasIva ? ivaPercentage : 0,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      // The RPC may have touched all three tables; refresh everything
+      // that renders an IVA badge or recomputes a total with IVA.
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+    },
+  });
+}
+
+// ─── Edit history (audit_log) for a single invoice ───
+
+export interface InvoiceHistoryRow {
+  id: number;
+  occurred_at: string;
+  actor_user_id: string | null;
+  actor_email: string | null;
+  action: string;
+  table_name: string;
+  row_id: string | null;
+  before_data: unknown;
+  after_data: unknown;
+}
+
+export function useInvoiceHistory(invoiceId: string | undefined) {
+  return useQuery({
+    queryKey: ["invoice_history", invoiceId],
+    enabled: !!invoiceId,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("invoice_history", {
+        p_invoice_id: invoiceId!,
+      });
+      if (error) throw error;
+      return (data ?? []) as InvoiceHistoryRow[];
+    },
+  });
+}
+
 // ─── Manual trigger of the daily generator ───
 
 export function useGenerateSubscriptionInvoices() {

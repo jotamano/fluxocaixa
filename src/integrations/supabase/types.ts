@@ -520,6 +520,29 @@ export type Database = {
         Args: Record<string, never>
         Returns: number
       }
+      sync_iva: {
+        Args: {
+          p_source: "client" | "subscription" | "invoice"
+          p_source_id: string
+          p_has_iva: boolean
+          p_iva_percentage: number
+        }
+        Returns: void
+      }
+      invoice_history: {
+        Args: { p_invoice_id: string }
+        Returns: {
+          id: number
+          occurred_at: string
+          actor_user_id: string | null
+          actor_email: string | null
+          action: string
+          table_name: string
+          row_id: string | null
+          before_data: Json | null
+          after_data: Json | null
+        }[]
+      }
     }
     Enums: {
       invoice_status:

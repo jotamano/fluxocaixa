@@ -13,6 +13,7 @@ import {
   useAddInvoice,
   useNextInvoiceNumber,
   useSubscriptionStats,
+  useSyncIva,
 } from "@/hooks/use-data";
 import { frequencyLabels, formatCurrency, frequencyDays, getClientLabel, getAmountWithIva, getEffectiveIvaPercentage, type SubscriptionFrequency, DEFAULT_IVA_PERCENTAGE } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -47,6 +48,7 @@ export default function Subscriptions() {
   const addSub = useAddSubscription();
   const deleteSub = useDeleteSubscription();
   const addInvoice = useAddInvoice();
+  const syncIva = useSyncIva();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -182,17 +184,29 @@ export default function Subscriptions() {
           // and complicate cascade rules). We omit client_id from the
           // payload as a defense-in-depth so a stale form state can't
           // override the original value.
+          // IVA is intentionally NOT sent here — it goes through the
+          // sync_iva RPC below so it cascades to the client and to
+          // every still-editable invoice in one shot.
           updates: {
             name: form.name,
             amount: Number(form.amount),
             frequency: form.frequency,
             next_billing_date: form.nextBillingDate,
-            has_iva: form.has_iva,
-            iva_percentage: form.has_iva ? Number(form.iva_percentage) || 0 : 0,
           },
         },
         {
           onSuccess: ({ syncedInvoiceIds }) => {
+            // Propagate IVA to the client and the client's other
+            // unpaid invoices/subscriptions. Fire-and-forget — failure
+            // surfaces via the dedicated toast and the user can retry.
+            syncIva.mutate({
+              source: "subscription",
+              sourceId: editingId,
+              hasIva: form.has_iva,
+              ivaPercentage: Number(form.iva_percentage) || 0,
+            }, {
+              onError: (err) => toast({ title: "Erro a sincronizar IVA", description: err.message, variant: "destructive" }),
+            });
             handleDialogChange(false);
             // Tell the user truthfully what happened. The sync helper
             // skips paid invoices (fiscal documents — see PR #37) and
