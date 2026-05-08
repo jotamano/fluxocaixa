@@ -843,9 +843,20 @@ export function useUpdateInvoiceItems() {
       return result;
     },
     onSuccess: () => {
+      // The list-key invalidations cover Invoices.tsx and
+      // Subscriptions.tsx; the singular `["subscription", id]` and
+      // `["subscription_invoices", id]` keys feed SubscriptionDetail,
+      // which would otherwise keep showing the stale next_billing_date
+      // even though the DB was updated. Same for the singular invoice
+      // queries (cascade preview / pending invoices) keyed off id.
       qc.invalidateQueries({ queryKey: ["invoices"] });
       qc.invalidateQueries({ queryKey: ["subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["subscription"] });
       qc.invalidateQueries({ queryKey: ["subscription_items"] });
+      qc.invalidateQueries({ queryKey: ["subscription_invoices"] });
+      qc.invalidateQueries({ queryKey: ["subscription_price_history"] });
+      qc.invalidateQueries({ queryKey: ["subscription_cascade_preview"] });
+      qc.invalidateQueries({ queryKey: ["pending_invoices_for_subscription"] });
     },
   });
 }
@@ -1444,10 +1455,15 @@ export function useUpdateSubscription() {
       };
     },
     onSuccess: () => {
+      // Same fan-out as useUpdateInvoiceItems — keep SubscriptionDetail
+      // and the per-sub invoice list in sync after a sub-side edit.
       qc.invalidateQueries({ queryKey: ["subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["subscription"] });
       qc.invalidateQueries({ queryKey: ["subscription_items"] });
       qc.invalidateQueries({ queryKey: ["subscription_price_history"] });
+      qc.invalidateQueries({ queryKey: ["subscription_invoices"] });
       qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["pending_invoices_for_subscription"] });
     },
   });
 }
