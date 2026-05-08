@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useAddPayment, usePayments, type Invoice } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, getClientLabel } from "@/lib/data";
+import { formatCurrency, getInvoiceTotalWithIva, getClientLabel } from "@/lib/data";
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -54,7 +54,7 @@ export function PaymentDialog({
   const outstandingByInvoice = useMemo(() => {
     const map = new Map<string, number>();
     invoices.forEach(inv => {
-      const total = getInvoiceItemsTotal(inv.invoice_items);
+      const total = getInvoiceTotalWithIva(inv.invoice_items, inv);
       const paid = allPayments
         .filter(p => p.invoice_id === inv.id)
         .reduce((s, p) => s + Number(p.amount), 0);
@@ -78,7 +78,7 @@ export function PaymentDialog({
     [invoices, form.invoiceId],
   );
 
-  const invoiceTotal = selectedInvoice ? getInvoiceItemsTotal(selectedInvoice.invoice_items) : 0;
+  const invoiceTotal = selectedInvoice ? getInvoiceTotalWithIva(selectedInvoice.invoice_items, selectedInvoice) : 0;
   const invoicePaid = selectedInvoice
     ? allPayments
         .filter(p => p.invoice_id === selectedInvoice.id)

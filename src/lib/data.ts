@@ -141,6 +141,21 @@ export function getInvoiceTotalWithIva(
 }
 
 /**
+ * Apply the source's IVA rate to a single scalar amount. Used for
+ * subscriptions (one amount per row) and any other place where we need
+ * the IVA-inclusive value but don't have an items array. Returns the
+ * amount unchanged when IVA is disabled or 0.
+ */
+export function getAmountWithIva(
+  amount: number,
+  source: IvaSource | null | undefined,
+): number {
+  const pct = getEffectiveIvaPercentage(source);
+  if (pct <= 0) return amount;
+  return round2(amount * (1 + pct / 100));
+}
+
+/**
  * Display label for an entity carrying a joined `clients` row. Falls
  * back from `company` (the most descriptive label) to `name` (the
  * contact person) before giving up with "Sem cliente". Prefer this

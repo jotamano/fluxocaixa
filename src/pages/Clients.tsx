@@ -3,7 +3,7 @@ import { Users, Plus, Mail, Phone, Building, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useClients, useAddClient, useInvoices, useSubscriptions } from "@/hooks/use-data";
-import { DEFAULT_IVA_PERCENTAGE, formatCurrency, getInvoiceItemsTotal } from "@/lib/data";
+import { DEFAULT_IVA_PERCENTAGE, formatCurrency, getInvoiceTotalWithIva } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -124,7 +124,7 @@ export default function Clients() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map(client => {
           const clientInvoices = invoices.filter(i => i.client_id === client.id);
-          const totalBilled = clientInvoices.reduce((sum, i) => sum + getInvoiceItemsTotal(i.invoice_items), 0);
+          const totalBilled = clientInvoices.reduce((sum, i) => sum + getInvoiceTotalWithIva(i.invoice_items, i), 0);
           const activeSubs = subscriptions.filter(s => s.client_id === client.id && s.active).length;
 
           return (

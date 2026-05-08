@@ -8,7 +8,7 @@ import {
   useSubscriptionPriceHistory,
 } from "@/hooks/use-data";
 import type { SubscriptionItem } from "@/hooks/use-data";
-import { formatCurrency, frequencyLabels, getClientLabel, getEffectiveIvaPercentage, getInvoiceTotalWithIva } from "@/lib/data";
+import { formatCurrency, frequencyLabels, getClientLabel, getEffectiveIvaPercentage, getInvoiceTotalWithIva, getAmountWithIva } from "@/lib/data";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 
@@ -34,7 +34,9 @@ export default function SubscriptionDetail() {
   const total = items.reduce((sum, it) => sum + (it.kind === "recurring" || it.kind === "addon" ? Number(it.amount) : 0), 0);
   const setupTotal = items.filter(it => it.kind === "setup").reduce((sum, it) => sum + Number(it.amount), 0);
   const ivaPct = getEffectiveIvaPercentage(sub);
-  const totalWithIva = ivaPct > 0 ? total * (1 + ivaPct / 100) : total;
+  const totalWithIva = getAmountWithIva(total, sub);
+  const setupTotalWithIva = getAmountWithIva(setupTotal, sub);
+  const ivaAmount = totalWithIva - total;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -72,11 +74,15 @@ export default function SubscriptionDetail() {
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
           <Stat
             label="Mensalidade"
-            value={formatCurrency(total)}
+            value={formatCurrency(totalWithIva)}
             suffix={`/${frequencyLabels[sub.frequency].toLowerCase()}`}
-            hint={ivaPct > 0 ? `${formatCurrency(totalWithIva)} c/ IVA` : undefined}
+            hint={ivaPct > 0 ? `${formatCurrency(total)} + IVA ${ivaPct}%` : undefined}
           />
-          <Stat label="Setup pendente" value={formatCurrency(setupTotal)} />
+          <Stat
+            label="Setup pendente"
+            value={formatCurrency(setupTotalWithIva)}
+            hint={ivaPct > 0 && setupTotal > 0 ? `${formatCurrency(setupTotal)} + IVA ${ivaPct}%` : undefined}
+          />
           <Stat label="Próxima faturação" value={new Date(sub.next_billing_date).toLocaleDateString('pt-PT')} />
         </div>
       </div>
@@ -104,6 +110,22 @@ export default function SubscriptionDetail() {
                 <span className="text-sm font-semibold">{formatCurrency(Number(it.amount))}</span>
               </div>
             ))}
+            {ivaPct > 0 && total > 0 && (
+              <div className="mt-3 rounded-lg border border-border bg-muted/40 px-4 py-3 space-y-1 text-sm">
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span>Subtotal recorrente / {frequencyLabels[sub.frequency].toLowerCase()}</span>
+                  <span>{formatCurrency(total)}</span>
+                </div>
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span>IVA {ivaPct}%</span>
+                  <span>{formatCurrency(ivaAmount)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-border pt-1 mt-1 font-semibold text-foreground">
+                  <span>Total c/ IVA</span>
+                  <span>{formatCurrency(totalWithIva)}</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

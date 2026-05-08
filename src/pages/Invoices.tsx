@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useInvoices } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, getClientLabel, type InvoiceStatus } from "@/lib/data";
+import { formatCurrency, getInvoiceTotalWithIva, getClientLabel, type InvoiceStatus } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -96,7 +96,7 @@ export default function Invoices() {
                 <td className="px-6 py-4 text-sm text-muted-foreground">{new Date(invoice.issue_date).toLocaleDateString('pt-PT')}</td>
                 <td className="px-6 py-4 text-sm text-muted-foreground">{new Date(invoice.due_date).toLocaleDateString('pt-PT')}</td>
                 <td className="px-6 py-4"><StatusBadge status={invoice.status} /></td>
-                <td className="px-6 py-4 text-right text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceItemsTotal(invoice.invoice_items))}</td>
+                <td className="px-6 py-4 text-right text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceTotalWithIva(invoice.invoice_items, invoice))}</td>
                 <td className="px-6 py-4 text-center">
                   <Button
                     variant="ghost"

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { Search, FileText, Users, RefreshCw, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useClients, useInvoices, useSubscriptions } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, getClientLabel } from "@/lib/data";
+import { formatCurrency, getInvoiceTotalWithIva, getAmountWithIva, getClientLabel } from "@/lib/data";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -46,7 +46,7 @@ export function GlobalSearch() {
         r.push({
           type: "invoice",
           title: inv.number,
-          subtitle: `${getClientLabel(inv)} — ${formatCurrency(getInvoiceItemsTotal(inv.invoice_items))}`,
+          subtitle: `${getClientLabel(inv)} — ${formatCurrency(getInvoiceTotalWithIva(inv.invoice_items, inv))}`,
           link: `/faturas/${inv.id}`,
         });
       }
@@ -60,7 +60,7 @@ export function GlobalSearch() {
         r.push({
           type: "subscription",
           title: sub.name,
-          subtitle: `${getClientLabel(sub)} — ${formatCurrency(Number(sub.amount))}`,
+          subtitle: `${getClientLabel(sub)} — ${formatCurrency(getAmountWithIva(Number(sub.amount), sub))}`,
           link: `/subscricoes?edit=${sub.id}`,
         });
       }

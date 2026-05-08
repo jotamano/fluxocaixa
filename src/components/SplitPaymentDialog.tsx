@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAddPayment, useClients, usePayments, type Invoice } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, getClientLabel } from "@/lib/data";
+import { formatCurrency, getInvoiceTotalWithIva, getClientLabel } from "@/lib/data";
 import { toast } from "sonner";
 
 type PaymentMethod = "transfer" | "mbway" | "cash" | "card";
@@ -46,7 +46,7 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
   const invoiceRemaining = useMemo(() => {
     const map = new Map<string, number>();
     unpaidInvoicesAll.forEach(inv => {
-      const total = getInvoiceItemsTotal(inv.invoice_items);
+      const total = getInvoiceTotalWithIva(inv.invoice_items, inv);
       const paid = allPayments
         .filter(p => p.invoice_id === inv.id)
         .reduce((s, p) => s + Number(p.amount), 0);

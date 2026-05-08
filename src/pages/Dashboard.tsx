@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Euro, Users, RefreshCw, TrendingUp, AlertTriangle, Bell } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
-import { formatCurrency, getInvoiceItemsTotal, frequencyDays, getClientLabel, type SubscriptionFrequency } from "@/lib/data";
+import { formatCurrency, getInvoiceTotalWithIva, getAmountWithIva, frequencyDays, getClientLabel, type SubscriptionFrequency } from "@/lib/data";
 import { useInvoices, useClients, useSubscriptions, usePayments } from "@/hooks/use-data";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -58,7 +58,7 @@ export default function Dashboard() {
 
   const pendingInvoices = filteredInvoices.filter(i => i.status === 'pending' || i.status === 'overdue' || i.status === 'partially_paid');
   const pendingAmount = pendingInvoices.reduce((sum, i) => {
-    const invoiceTotal = getInvoiceItemsTotal(i.invoice_items);
+    const invoiceTotal = getInvoiceTotalWithIva(i.invoice_items, i);
     const paid = payments.filter(p => p.invoice_id === i.id).reduce((s, p) => s + Number(p.amount), 0);
     return sum + Math.max(invoiceTotal - paid, 0);
   }, 0);
@@ -208,7 +208,7 @@ export default function Dashboard() {
                 <div className="flex items-center gap-4">
                   <StatusBadge status={invoice.status} />
                   <span className="text-sm font-semibold text-card-foreground min-w-[80px] text-right">
-                    {formatCurrency(getInvoiceItemsTotal(invoice.invoice_items))}
+                    {formatCurrency(getInvoiceTotalWithIva(invoice.invoice_items, invoice))}
                   </span>
                 </div>
               </Link>
@@ -229,7 +229,7 @@ export default function Dashboard() {
                   <p className="text-xs text-muted-foreground">{getClientLabel(sub)}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold text-card-foreground">{formatCurrency(Number(sub.amount))}/mês</p>
+                  <p className="text-sm font-semibold text-card-foreground">{formatCurrency(getAmountWithIva(Number(sub.amount), sub))}/mês</p>
                   <p className="text-xs text-muted-foreground">Próx: {new Date(sub.next_billing_date).toLocaleDateString('pt-PT')}</p>
                 </div>
               </div>
