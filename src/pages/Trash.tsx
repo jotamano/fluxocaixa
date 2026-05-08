@@ -52,6 +52,9 @@ function usePurgePayment() {
   };
 }
 
+// Mirrors the pg_cron job in 20260508110000_purge_old_trash.sql.
+const TRASH_RETENTION_DAYS = 90;
+
 function formatDeletedAt(iso: string | null | undefined): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-PT", {
@@ -61,6 +64,15 @@ function formatDeletedAt(iso: string | null | undefined): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function daysUntilAutoPurge(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const deleted = new Date(iso).getTime();
+  if (Number.isNaN(deleted)) return null;
+  const purgeAt = deleted + TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const days = Math.ceil((purgeAt - Date.now()) / (24 * 60 * 60 * 1000));
+  return days;
 }
 
 interface PendingPurge {
@@ -135,6 +147,10 @@ export default function Trash() {
           {totalTrashed === 0
             ? "Sem registos eliminados."
             : `${totalTrashed} registo(s) eliminado(s). Restaurar repõe sem efeitos colaterais; eliminar definitivamente é irreversível.`}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Os registos no lixo são apagados automaticamente {TRASH_RETENTION_DAYS} dias depois de eliminados.
+          O histórico fica em /auditoria.
         </p>
       </div>
 
@@ -270,7 +286,16 @@ function TrashList({ items, empty, onRestore, onPurge }: TrashListProps) {
             <div className="min-w-0">
               <p className="truncate font-medium">{item.title}</p>
               <p className="truncate text-sm text-muted-foreground">{item.subtitle}</p>
-              <p className="text-xs text-muted-foreground/70">eliminado {formatDeletedAt(item.deletedAt)}</p>
+              <p className="text-xs text-muted-foreground/70">
+                eliminado {formatDeletedAt(item.deletedAt)}
+                {(() => {
+                  const days = daysUntilAutoPurge(item.deletedAt);
+                  if (days === null) return null;
+                  if (days <= 0) return " · purga prevista no próximo ciclo";
+                  if (days === 1) return " · purga em 1 dia";
+                  return ` · purga em ${days} dias`;
+                })()}
+              </p>
             </div>
             <div className="flex shrink-0 gap-2">
               <Button size="sm" variant="outline" className="gap-1" onClick={() => onRestore(item)}>
