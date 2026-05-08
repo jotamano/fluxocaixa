@@ -608,6 +608,12 @@ export function useUpdateInvoiceItems() {
         const affectedSubIds = new Set<string>();
         const subItemUpdates: Array<{ subItemId: string; description: string; amount: number }> = [];
 
+        // The latest service_end_date per subscription, scoped to
+        // recurring lines only. Drives the
+        // subscription.next_billing_date bump below — setup/addon lines
+        // don't anchor the billing cycle so they're skipped on purpose.
+        const latestEndBySubId = new Map<string, string>();
+
         // We also need to know each linked sub_item's subscription_id
         // for the recalc step below. One round-trip fetches them all.
         const linkedSubItemIds = (invItemsAfter ?? [])
@@ -622,6 +628,9 @@ export function useUpdateInvoiceItems() {
 
           const subIdByItemId = new Map(
             (subItemRows ?? []).map(si => [si.id, si.subscription_id]),
+          );
+          const kindByItemId = new Map(
+            (subItemRows ?? []).map(si => [si.id, si.kind]),
           );
 
           for (const ir of invItemsAfter ?? []) {
@@ -638,6 +647,20 @@ export function useUpdateInvoiceItems() {
               description: src.description,
               amount: Number(src.unit_price) * src.quantity,
             });
+
+            // Track the most-recent service_end_date among recurring
+            // lines so the cycle anchor (next_billing_date) can move in
+            // step with the period the user just declared on the invoice.
+            if (
+              src.service_end_date
+              && subId
+              && kindByItemId.get(subItemId) === "recurring"
+            ) {
+              const prev = latestEndBySubId.get(subId);
+              if (!prev || src.service_end_date > prev) {
+                latestEndBySubId.set(subId, src.service_end_date);
+              }
+            }
           }
         }
 
@@ -653,7 +676,10 @@ export function useUpdateInvoiceItems() {
           ),
         );
 
-        // Recalc subscription.amount = sum of `recurring` items.
+        // Recalc subscription.amount = sum of `recurring` items, then
+        // (for subs whose recurring line had a new service_end_date)
+        // bump next_billing_date = service_end_date + 1 day so the cron
+        // picks up the day after the period the user just edited.
         await Promise.all(
           Array.from(affectedSubIds).map(async subId => {
             const { data: itemsForSub, error: e } = await supabase
@@ -664,9 +690,34 @@ export function useUpdateInvoiceItems() {
             const recurringTotal = (itemsForSub ?? [])
               .filter(it => it.kind === "recurring")
               .reduce((s, it) => s + Number(it.amount), 0);
+
+            const subUpdates: TablesUpdate<"subscriptions"> = {
+              amount: recurringTotal,
+            };
+
+            const endDate = latestEndBySubId.get(subId);
+            if (endDate) {
+              // String-only date math against the UTC midnight anchor —
+              // matches how Postgres stores `date` columns and avoids
+              // the off-by-one drift you'd get from local-tz Date math.
+              const anchor = new Date(endDate + "T00:00:00Z");
+              anchor.setUTCDate(anchor.getUTCDate() + 1);
+              const nextBillingDate = anchor.toISOString().split("T")[0];
+
+              const { data: subRow, error: subFetchErr } = await supabase
+                .from("subscriptions")
+                .select("next_billing_date")
+                .eq("id", subId)
+                .single();
+              if (subFetchErr) throw subFetchErr;
+              if (subRow.next_billing_date !== nextBillingDate) {
+                subUpdates.next_billing_date = nextBillingDate;
+              }
+            }
+
             const { error: updErr } = await supabase
               .from("subscriptions")
-              .update({ amount: recurringTotal })
+              .update(subUpdates)
               .eq("id", subId);
             if (updErr) throw updErr;
           }),
@@ -1237,6 +1288,9 @@ export function useUpdateSubscription() {
         updates.amount !== undefined && Number(updates.amount) !== Number(oldSub.amount);
       const nameChanged =
         typeof updates.name === "string" && updates.name !== oldSub.name;
+      const nextBillingChanged =
+        typeof updates.next_billing_date === "string"
+        && updates.next_billing_date !== oldSub.next_billing_date;
 
       const allSyncedInvoiceIds: string[] = [];
 
@@ -1313,6 +1367,19 @@ export function useUpdateSubscription() {
             allSyncedInvoiceIds.push(...syncedIds);
           }
         }
+      }
+
+      // Cascade next_billing_date edits to the still-editable invoice
+      // lines linked to this subscription's recurring sub_items. The
+      // service period on those lines moves to end the day before the
+      // new cycle anchor, mirroring the rule applied in the inverse
+      // direction by useUpdateInvoiceItems.
+      if (nextBillingChanged) {
+        const syncedIds = await syncNextBillingDateToInvoices({
+          subscriptionId: id,
+          newNextBillingDate: updates.next_billing_date as string,
+        });
+        allSyncedInvoiceIds.push(...syncedIds);
       }
 
       // Same invoice can show up via both recurring and setup paths;
@@ -1818,6 +1885,110 @@ async function syncSubItemToInvoices(opts: {
   }
 
   return syncedInvoiceIds;
+}
+
+/**
+ * Cascade a subscription's new `next_billing_date` to the service
+ * period of every still-editable invoice line linked to one of its
+ * recurring sub_items. We rewrite `service_end_date` to
+ * `next_billing_date - 1 day` so the invoice's covered period ends
+ * on the day before the cycle anchor — the inverse of the rule
+ * applied by `useUpdateInvoiceItems` when the user edits the period
+ * on the invoice side.
+ *
+ * Setup/addon lines are skipped because they don't anchor the cycle
+ * (the cron only advances `next_billing_date` per recurring item),
+ * and paid/soft-deleted invoices are skipped to keep fiscal records
+ * frozen — same editability check used by `syncSubItemToInvoices`.
+ */
+async function syncNextBillingDateToInvoices(opts: {
+  subscriptionId: string;
+  newNextBillingDate: string;
+}): Promise<string[]> {
+  const { data: recurringSubItems, error: siErr } = await supabase
+    .from("subscription_items")
+    .select("id")
+    .eq("subscription_id", opts.subscriptionId)
+    .eq("kind", "recurring");
+  if (siErr) throw siErr;
+  const recurringIds = (recurringSubItems ?? []).map(si => si.id);
+  if (recurringIds.length === 0) return [];
+
+  const { data: linkedItems, error: liErr } = await supabase
+    .from("invoice_items")
+    .select("id, invoice_id, service_end_date")
+    .in("source_subscription_item_id", recurringIds);
+  if (liErr) throw liErr;
+  if (!linkedItems || linkedItems.length === 0) return [];
+
+  const invoiceIds = Array.from(new Set(linkedItems.map(li => li.invoice_id as string)));
+
+  // Editability check mirrors syncSubItemToInvoices: drive "is this
+  // invoice paid?" off the same item-derived total + payment sum that
+  // the manual editor uses, instead of trusting `invoices.status`.
+  const [
+    { data: parentInvoices, error: invErr },
+    { data: allItems, error: itemsErr },
+    { data: allPayments, error: payErr },
+  ] = await Promise.all([
+    supabase.from("invoices").select("id, deleted_at").in("id", invoiceIds),
+    supabase
+      .from("invoice_items")
+      .select("invoice_id, quantity, unit_price")
+      .in("invoice_id", invoiceIds),
+    supabase
+      .from("payments")
+      .select("invoice_id, amount")
+      .in("invoice_id", invoiceIds)
+      .is("deleted_at", null),
+  ]);
+  if (invErr) throw invErr;
+  if (itemsErr) throw itemsErr;
+  if (payErr) throw payErr;
+
+  const invoicesById = new Map((parentInvoices ?? []).map(i => [i.id, i]));
+  const totalByInvoice = new Map<string, number>();
+  for (const it of allItems ?? []) {
+    totalByInvoice.set(
+      it.invoice_id,
+      (totalByInvoice.get(it.invoice_id) ?? 0) + Number(it.quantity) * Number(it.unit_price),
+    );
+  }
+  const paidByInvoice = new Map<string, number>();
+  for (const p of allPayments ?? []) {
+    paidByInvoice.set(
+      p.invoice_id as string,
+      (paidByInvoice.get(p.invoice_id as string) ?? 0) + Number(p.amount),
+    );
+  }
+  const isInvoiceFullyPaid = (invoiceId: string) => {
+    const total = totalByInvoice.get(invoiceId) ?? 0;
+    const paid = paidByInvoice.get(invoiceId) ?? 0;
+    return total > 0 && paid >= total;
+  };
+
+  // String-only date math against the UTC midnight anchor — matches
+  // how Postgres stores `date` columns and avoids local-tz drift.
+  const anchor = new Date(opts.newNextBillingDate + "T00:00:00Z");
+  anchor.setUTCDate(anchor.getUTCDate() - 1);
+  const newEnd = anchor.toISOString().split("T")[0];
+
+  const syncedInvoiceIds = new Set<string>();
+  for (const li of linkedItems) {
+    const parent = invoicesById.get(li.invoice_id as string);
+    if (!parent || parent.deleted_at) continue;
+    if (isInvoiceFullyPaid(parent.id as string)) continue;
+    if (li.service_end_date === newEnd) continue;
+
+    const { error: updErr } = await supabase
+      .from("invoice_items")
+      .update({ service_end_date: newEnd })
+      .eq("id", li.id);
+    if (updErr) throw updErr;
+    syncedInvoiceIds.add(li.invoice_id as string);
+  }
+
+  return Array.from(syncedInvoiceIds);
 }
 
 async function recalcInvoiceStatus(invoiceId: string) {
