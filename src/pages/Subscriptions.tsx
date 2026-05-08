@@ -458,7 +458,10 @@ export default function Subscriptions() {
       {(statusFilter === "all" || statusFilter === "cancelled") && cancelled.length > 0 && renderSection("Canceladas", cancelled, "")}
 
       <Dialog open={dialogOpen} onOpenChange={handleDialogChange}>
-        <DialogContent>
+        {/* Wider on desktop: the form has 8+ fields after the IVA addition,
+            so the default max-w-lg felt cramped. max-h+overflow lets short
+            laptop screens still scroll the dialog body if needed. */}
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-display">{editingId ? 'Editar subscrição' : 'Nova subscrição'}</DialogTitle>
           </DialogHeader>
