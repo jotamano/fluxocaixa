@@ -15,7 +15,7 @@ import {
   useSubscriptionStats,
   useSyncIva,
 } from "@/hooks/use-data";
-import { frequencyLabels, formatCurrency, frequencyDays, getClientLabel, getAmountWithIva, getEffectiveIvaPercentage, type SubscriptionFrequency, DEFAULT_IVA_PERCENTAGE } from "@/lib/data";
+import { frequencyLabels, formatCurrency, frequencyDays, getClientLabel, getAmountWithIva, getEffectiveIvaPercentage, type SubscriptionFrequency, DEFAULT_HAS_IVA, DEFAULT_IVA_PERCENTAGE } from "@/lib/data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,7 +66,7 @@ export default function Subscriptions() {
     setupFee: "",
     frequency: "monthly" as SubscriptionFrequency,
     nextBillingDate: new Date().toISOString().split('T')[0],
-    has_iva: true,
+    has_iva: DEFAULT_HAS_IVA,
     iva_percentage: DEFAULT_IVA_PERCENTAGE,
   });
   // Track whether the user manually changed IVA settings; until they
@@ -117,7 +117,7 @@ export default function Subscriptions() {
       setupFee: "",
       frequency: subscription.frequency,
       nextBillingDate: subscription.next_billing_date,
-      has_iva: subscription.has_iva ?? true,
+      has_iva: subscription.has_iva ?? DEFAULT_HAS_IVA,
       iva_percentage: Number(subscription.iva_percentage ?? DEFAULT_IVA_PERCENTAGE),
     });
     // Editing → IVA fields come from the subscription itself; don't
@@ -137,7 +137,7 @@ export default function Subscriptions() {
       setupFee: "",
       frequency: "monthly",
       nextBillingDate: new Date().toISOString().split('T')[0],
-      has_iva: true,
+      has_iva: DEFAULT_HAS_IVA,
       iva_percentage: DEFAULT_IVA_PERCENTAGE,
     });
     setHasIvaTouched(false);
@@ -153,7 +153,7 @@ export default function Subscriptions() {
     if (!selected) return;
     setForm(prev => ({
       ...prev,
-      has_iva: selected.has_iva ?? true,
+      has_iva: selected.has_iva ?? DEFAULT_HAS_IVA,
       iva_percentage: Number(selected.iva_percentage ?? DEFAULT_IVA_PERCENTAGE),
     }));
   }, [form.clientId, clients, hasIvaTouched, editingId]);

@@ -92,11 +92,18 @@ export function getInvoiceItemsTotal(items: { quantity: number; unit_price: numb
 }
 
 /**
- * Default IVA percentage used for newly created clients. Matches the
- * legacy hard-coded rate so existing PDFs keep rendering the same value
- * after the per-client IVA setting was introduced.
+ * Default IVA percentage used for newly created clients/invoices/subs.
+ * The user opted into "no IVA by default" so freelancer/non-IVA contacts
+ * don't get accidentally taxed; operators that need 23% (or any other
+ * rate) flip the toggle explicitly when creating or editing the entity.
+ *
+ * Existing rows are NOT migrated — only the *default* changed. See
+ * migration `20260508150000_iva_defaults_zero.sql`.
  */
-export const DEFAULT_IVA_PERCENTAGE = 23;
+export const DEFAULT_IVA_PERCENTAGE = 0;
+
+/** Mirrors the new DB default for `has_iva` (see DEFAULT_IVA_PERCENTAGE). */
+export const DEFAULT_HAS_IVA = false;
 
 type IvaSource = { has_iva?: boolean | null; iva_percentage?: number | null };
 

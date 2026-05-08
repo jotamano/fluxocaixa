@@ -14,9 +14,10 @@ import { PaymentDialog } from "@/components/PaymentDialog";
 import { DeleteInvoiceDialog } from "@/components/DeleteInvoiceDialog";
 import { QuickCreateServiceDialog } from "@/components/QuickCreateServiceDialog";
 import { EditHistoryPanel } from "@/components/EditHistoryPanel";
+import { EditClientDialog } from "@/components/EditClientDialog";
 import type { Subscription } from "@/hooks/use-data";
-import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions, useClientSubscriptionItems, useSyncIva } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceItemsTotal, getClientLabel, formatInvoiceItemPeriod, methodLabels, frequencyLabels, type SubscriptionFrequency, DEFAULT_IVA_PERCENTAGE, getEffectiveIvaPercentage, getInvoiceIvaAmount, getInvoiceTotalWithIva } from "@/lib/data";
+import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions, useClientSubscriptionItems, useSyncIva, useClients } from "@/hooks/use-data";
+import { formatCurrency, getInvoiceItemsTotal, getClientLabel, formatInvoiceItemPeriod, methodLabels, frequencyLabels, type SubscriptionFrequency, DEFAULT_HAS_IVA, DEFAULT_IVA_PERCENTAGE, getEffectiveIvaPercentage, getInvoiceIvaAmount, getInvoiceTotalWithIva } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
 
@@ -67,6 +68,7 @@ export default function InvoiceDetail() {
   const { data: payments = [], isLoading: paymentsLoading } = usePayments();
   const { data: services = [] } = useActiveServices();
   const { data: subscriptions = [] } = useSubscriptions();
+  const { data: clients = [] } = useClients();
   const deleteInvoice = useDeleteInvoice();
   const updateInvoice = useUpdateInvoice();
   const updateItems = useUpdateInvoiceItems();
@@ -75,12 +77,13 @@ export default function InvoiceDetail() {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [editClientOpen, setEditClientOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     issue_date: '',
     due_date: '',
     notes: '',
     status: '',
-    has_iva: true,
+    has_iva: DEFAULT_HAS_IVA,
     iva_percentage: DEFAULT_IVA_PERCENTAGE,
   });
   const [editItemsOpen, setEditItemsOpen] = useState(false);
@@ -210,7 +213,7 @@ export default function InvoiceDetail() {
       due_date: invoice.due_date,
       notes: invoice.notes || '',
       status: invoice.status,
-      has_iva: invoice.has_iva ?? true,
+      has_iva: invoice.has_iva ?? DEFAULT_HAS_IVA,
       iva_percentage: Number(invoice.iva_percentage ?? DEFAULT_IVA_PERCENTAGE),
     });
     setEditOpen(true);
@@ -395,8 +398,25 @@ export default function InvoiceDetail() {
               <h1 className="font-display text-3xl font-bold text-foreground">{invoice.number}</h1>
               <StatusBadge status={effectiveStatus} />
             </div>
-            <p className="mt-1 text-muted-foreground">
-              Cliente: <Link to={`/clientes/${invoice.client_id}`} className="font-medium text-primary hover:underline">{getClientLabel(invoice)}</Link>
+            <p className="mt-1 flex items-center gap-1 text-muted-foreground">
+              <span>
+                Cliente: <Link to={`/clientes/${invoice.client_id}`} className="font-medium text-primary hover:underline">{getClientLabel(invoice)}</Link>
+              </span>
+              {invoice.client_id && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setEditClientOpen(true)}
+                      aria-label="Editar dados do cliente"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Editar dados do cliente (propaga em todas as faturas)</TooltipContent>
+                </Tooltip>
+              )}
             </p>
           </div>
         </div>
@@ -820,6 +840,12 @@ export default function InvoiceDetail() {
         isPending={deleteInvoice.isPending}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={(opts) => handleDelete(opts)}
+      />
+
+      <EditClientDialog
+        client={clients.find(c => c.id === invoice.client_id) ?? null}
+        open={editClientOpen}
+        onOpenChange={setEditClientOpen}
       />
 
       <QuickCreateServiceDialog

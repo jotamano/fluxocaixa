@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useAddClient } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
-import { DEFAULT_IVA_PERCENTAGE } from "@/lib/data";
+import { DEFAULT_HAS_IVA, DEFAULT_IVA_PERCENTAGE } from "@/lib/data";
 import type { Tables } from "@/integrations/supabase/types";
 
 // Inline client creation surface used next to client pickers (subscription
@@ -46,13 +46,13 @@ export function QuickCreateClientDialog({ open, onOpenChange, onCreated, default
     company: "",
     phone: "",
     nif: "",
-    has_iva: true,
+    has_iva: DEFAULT_HAS_IVA,
     iva_percentage: DEFAULT_IVA_PERCENTAGE,
   });
 
   const resetForm = () => setForm({
     name: "", email: "", company: "", phone: "", nif: "",
-    has_iva: true, iva_percentage: DEFAULT_IVA_PERCENTAGE,
+    has_iva: DEFAULT_HAS_IVA, iva_percentage: DEFAULT_IVA_PERCENTAGE,
   });
 
   const handleAdd = () => {

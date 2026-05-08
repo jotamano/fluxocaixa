@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Users, Plus, Mail, Phone, Building, Search } from "lucide-react";
+import { Plus, Mail, Phone, Building, Search, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useClients, useAddClient, useInvoices, useSubscriptions } from "@/hooks/use-data";
-import { DEFAULT_IVA_PERCENTAGE, formatCurrency, getInvoiceTotalWithIva } from "@/lib/data";
+import { DEFAULT_HAS_IVA, DEFAULT_IVA_PERCENTAGE, formatCurrency, getInvoiceTotalWithIva } from "@/lib/data";
+import { EditClientDialog } from "@/components/EditClientDialog";
+import type { Tables } from "@/integrations/supabase/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -18,9 +20,10 @@ export default function Clients() {
   const addClient = useAddClient();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<Tables<"clients"> | null>(null);
   const [form, setForm] = useState({
     name: '', email: '', company: '', phone: '', nif: '',
-    has_iva: true, iva_percentage: DEFAULT_IVA_PERCENTAGE,
+    has_iva: DEFAULT_HAS_IVA, iva_percentage: DEFAULT_IVA_PERCENTAGE,
   });
 
   const filtered = clients.filter(c =>
@@ -43,7 +46,7 @@ export default function Clients() {
         onSuccess: () => {
           setForm({
             name: '', email: '', company: '', phone: '', nif: '',
-            has_iva: true, iva_percentage: DEFAULT_IVA_PERCENTAGE,
+            has_iva: DEFAULT_HAS_IVA, iva_percentage: DEFAULT_IVA_PERCENTAGE,
           });
           setDialogOpen(false);
         },
@@ -128,55 +131,77 @@ export default function Clients() {
           const activeSubs = subscriptions.filter(s => s.client_id === client.id && s.active).length;
 
           return (
-            <button
+            <div
               key={client.id}
-              type="button"
-              onClick={() => navigate(`/clientes/${client.id}`)}
-              className="rounded-xl border border-border bg-card p-6 text-left shadow-card transition-shadow hover:shadow-elevated"
+              className="group relative rounded-xl border border-border bg-card p-6 shadow-card transition-shadow hover:shadow-elevated"
             >
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 font-display font-bold text-primary">
-                  {client.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                </div>
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-display font-semibold text-card-foreground">{client.name}</h3>
-                    <Badge
-                      variant={client.has_iva ? "secondary" : "outline"}
-                      className="shrink-0 text-[10px] font-medium"
-                    >
-                      {client.has_iva ? `IVA ${Number(client.iva_percentage)}%` : "Sem IVA"}
-                    </Badge>
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation();
+                  setEditingClient(client);
+                }}
+                title="Editar cliente"
+                aria-label={`Editar ${client.name}`}
+                className="absolute right-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/clientes/${client.id}`)}
+                className="block w-full text-left"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 font-display font-bold text-primary">
+                    {client.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Building className="h-3 w-3" /> {client.company}
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-start justify-between gap-2 pr-8">
+                      <h3 className="font-display font-semibold text-card-foreground">{client.name}</h3>
+                      <Badge
+                        variant={client.has_iva ? "secondary" : "outline"}
+                        className="shrink-0 text-[10px] font-medium"
+                      >
+                        {client.has_iva ? `IVA ${Number(client.iva_percentage)}%` : "Sem IVA"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Building className="h-3 w-3" /> {client.company}
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Mail className="h-3 w-3" /> {client.email}
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Phone className="h-3 w-3" /> {client.phone}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Mail className="h-3 w-3" /> {client.email}
+                </div>
+                <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+                  <div className="text-center">
+                    <p className="text-lg font-bold font-display text-card-foreground">{formatCurrency(totalBilled)}</p>
+                    <p className="text-xs text-muted-foreground">Total faturado</p>
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Phone className="h-3 w-3" /> {client.phone}
+                  <div className="text-center">
+                    <p className="text-lg font-bold font-display text-card-foreground">{clientInvoices.length}</p>
+                    <p className="text-xs text-muted-foreground">Faturas</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-bold font-display text-card-foreground">{activeSubs}</p>
+                    <p className="text-xs text-muted-foreground">Subscrições</p>
                   </div>
                 </div>
-              </div>
-              <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
-                <div className="text-center">
-                  <p className="text-lg font-bold font-display text-card-foreground">{formatCurrency(totalBilled)}</p>
-                  <p className="text-xs text-muted-foreground">Total faturado</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold font-display text-card-foreground">{clientInvoices.length}</p>
-                  <p className="text-xs text-muted-foreground">Faturas</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold font-display text-card-foreground">{activeSubs}</p>
-                  <p className="text-xs text-muted-foreground">Subscrições</p>
-                </div>
-              </div>
-            </button>
+              </button>
+            </div>
           );
         })}
       </div>
+
+      <EditClientDialog
+        client={editingClient}
+        open={!!editingClient}
+        onOpenChange={open => { if (!open) setEditingClient(null); }}
+      />
     </div>
   );
 }
