@@ -77,24 +77,6 @@ export default function NewInvoice() {
   const [items, setItems] = useState<FormItem[]>([getDefaultItem()]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  // Pre-fill client from URL once clients are loaded.
-  useEffect(() => {
-    if (initialClientId && !clientId && clients.some((c) => c.id === initialClientId)) {
-      setClientId(initialClientId);
-    }
-  }, [initialClientId, clientId, clients]);
-
-  // Sync IVA defaults from the selected client until the user touches
-  // them. Mirrors the pattern used by the recurring frequency below:
-  // changing the client should refresh sensible defaults, but we never
-  // want to overwrite an explicit choice the user already made.
-  useEffect(() => {
-    if (hasIvaTouched) return;
-    const selected = clients.find(c => c.id === clientId);
-    if (!selected) return;
-    setHasIva(selected.has_iva ?? true);
-    setIvaPercentage(Number(selected.iva_percentage ?? DEFAULT_IVA_PERCENTAGE));
-  }, [clientId, clients, hasIvaTouched]);
   const [notes, setNotes] = useState("");
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const [newClient, setNewClient] = useState({
@@ -113,6 +95,25 @@ export default function NewInvoice() {
   // Tracks which line opened the "+ Novo serviço" dialog so the
   // dialog's onCreated knows which line to update with the new id.
   const [quickServiceForIndex, setQuickServiceForIndex] = useState<number | null>(null);
+
+  // Pre-fill client from URL once clients are loaded.
+  useEffect(() => {
+    if (initialClientId && !clientId && clients.some((c) => c.id === initialClientId)) {
+      setClientId(initialClientId);
+    }
+  }, [initialClientId, clientId, clients]);
+
+  // Sync IVA defaults from the selected client until the user touches
+  // them. Mirrors the pattern used by the recurring frequency below:
+  // changing the client should refresh sensible defaults, but we never
+  // want to overwrite an explicit choice the user already made.
+  useEffect(() => {
+    if (hasIvaTouched) return;
+    const selected = clients.find(c => c.id === clientId);
+    if (!selected) return;
+    setHasIva(selected.has_iva ?? true);
+    setIvaPercentage(Number(selected.iva_percentage ?? DEFAULT_IVA_PERCENTAGE));
+  }, [clientId, clients, hasIvaTouched]);
 
   const addItem = () => setItems(prev => [...prev, getDefaultItem()]);
 
