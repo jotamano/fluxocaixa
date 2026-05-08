@@ -14,6 +14,7 @@ import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import { useClients, useAddClient, useAddInvoice, useNextInvoiceNumber, useActiveServices, useAddSubscription } from "@/hooks/use-data";
 import {
+  DEFAULT_HAS_IVA,
   DEFAULT_IVA_PERCENTAGE,
   formatCurrency,
   type SubscriptionFrequency,
@@ -81,12 +82,12 @@ export default function NewInvoice() {
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const [newClient, setNewClient] = useState({
     name: '', email: '', company: '', phone: '', nif: '',
-    has_iva: true, iva_percentage: DEFAULT_IVA_PERCENTAGE,
+    has_iva: DEFAULT_HAS_IVA, iva_percentage: DEFAULT_IVA_PERCENTAGE,
   });
   // IVA snapshot for this invoice. Defaults from the selected client
   // (`hasIvaTouched` flips once the user manually changes either field
   // so further client switches don't clobber their override).
-  const [hasIva, setHasIva] = useState(true);
+  const [hasIva, setHasIva] = useState<boolean>(DEFAULT_HAS_IVA);
   const [ivaPercentage, setIvaPercentage] = useState<number>(DEFAULT_IVA_PERCENTAGE);
   const [hasIvaTouched, setHasIvaTouched] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
@@ -111,7 +112,7 @@ export default function NewInvoice() {
     if (hasIvaTouched) return;
     const selected = clients.find(c => c.id === clientId);
     if (!selected) return;
-    setHasIva(selected.has_iva ?? true);
+    setHasIva(selected.has_iva ?? DEFAULT_HAS_IVA);
     setIvaPercentage(Number(selected.iva_percentage ?? DEFAULT_IVA_PERCENTAGE));
   }, [clientId, clients, hasIvaTouched]);
 
@@ -172,7 +173,7 @@ export default function NewInvoice() {
           setClientId(data.id);
           setNewClient({
             name: '', email: '', company: '', phone: '', nif: '',
-            has_iva: true, iva_percentage: DEFAULT_IVA_PERCENTAGE,
+            has_iva: DEFAULT_HAS_IVA, iva_percentage: DEFAULT_IVA_PERCENTAGE,
           });
           setClientDialogOpen(false);
           toast({ title: "Cliente criado!" });
