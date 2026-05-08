@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, FileText, RefreshCw, Plus, Menu, CreditCard, CalendarDays, ChevronLeft, ChevronRight, Package, LogOut, Trash2, UserCog, History, BookOpen } from "lucide-react";
+import { LayoutDashboard, Users, FileText, RefreshCw, Plus, Menu, CreditCard, CalendarDays, ChevronLeft, ChevronRight, Package, LogOut, Trash2, UserCog, History, BookOpen, Settings as SettingsIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -24,6 +24,7 @@ const navItems = [
 // "Nova Fatura" — para páginas de gestão/admin que não precisam estar
 // no menu principal mas têm de ser facilmente alcançáveis.
 const shortcutItems = [
+  { to: "/configuracoes", icon: SettingsIcon, label: "Configurações" },
   { to: "/membros", icon: UserCog, label: "Membros" },
   { to: "/auditoria", icon: History, label: "Auditoria" },
   { to: "/docs", icon: BookOpen, label: "Documentação" },

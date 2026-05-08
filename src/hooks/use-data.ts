@@ -9,6 +9,62 @@ export type InvoiceItem = Tables<"invoice_items">;
 export type Subscription = Tables<"subscriptions"> & { clients?: Client };
 export type Payment = Tables<"payments">;
 export type Service = Tables<"services">;
+export type AppSettings = Tables<"app_settings">;
+
+// Default used when the app_settings row hasn't been read yet, or in
+// edge cases where the table is unreachable. Matches the pre-settings
+// hardcoded behavior so existing installations keep their cycle anchor
+// in the same place after this rolls out.
+export const DEFAULT_BILLING_ANCHOR_OFFSET_DAYS = 1;
+
+// Reads the singleton app_settings row directly. The mutation paths
+// that recompute next_billing_date / service_end_date call this once
+// at the top of the mutation so every line in the same save uses the
+// same offset (avoids a race where a setting toggle mid-save would
+// produce a half-applied result).
+async function getBillingAnchorOffsetDays(): Promise<number> {
+  const { data, error } = await supabase
+    .from("app_settings")
+    .select("billing_anchor_offset_days")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.billing_anchor_offset_days ?? DEFAULT_BILLING_ANCHOR_OFFSET_DAYS;
+}
+
+export function useAppSettings() {
+  return useQuery({
+    queryKey: ["app_settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("*")
+        .eq("id", 1)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as AppSettings | null;
+    },
+  });
+}
+
+export function useUpdateAppSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (updates: TablesUpdate<"app_settings">) => {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", 1)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as AppSettings;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["app_settings"] });
+    },
+  });
+}
 
 // ─── Services ───
 
@@ -730,8 +786,10 @@ export function useUpdateInvoiceItems() {
 
         // Recalc subscription.amount = sum of `recurring` items, then
         // (for subs whose recurring line had a new service_end_date)
-        // bump next_billing_date = service_end_date + 1 day so the cron
-        // picks up the day after the period the user just edited.
+        // bump next_billing_date = service_end_date + offset so the
+        // cron picks up the period the user just edited. Offset is
+        // user-configurable via app_settings (default +1 day).
+        const billingAnchorOffsetDays = await getBillingAnchorOffsetDays();
         await Promise.all(
           Array.from(affectedSubIds).map(async subId => {
             const { data: itemsForSub, error: e } = await supabase
@@ -753,7 +811,7 @@ export function useUpdateInvoiceItems() {
               // matches how Postgres stores `date` columns and avoids
               // the off-by-one drift you'd get from local-tz Date math.
               const anchor = new Date(endDate + "T00:00:00Z");
-              anchor.setUTCDate(anchor.getUTCDate() + 1);
+              anchor.setUTCDate(anchor.getUTCDate() + billingAnchorOffsetDays);
               const nextBillingDate = anchor.toISOString().split("T")[0];
 
               const { data: subRow, error: subFetchErr } = await supabase
@@ -1959,10 +2017,12 @@ async function syncSubItemToInvoices(opts: {
  * Cascade a subscription's new `next_billing_date` to the service
  * period of every still-editable invoice line linked to one of its
  * recurring sub_items. We rewrite `service_end_date` to
- * `next_billing_date - 1 day` so the invoice's covered period ends
- * on the day before the cycle anchor — the inverse of the rule
- * applied by `useUpdateInvoiceItems` when the user edits the period
- * on the invoice side.
+ * `next_billing_date - offset` so the invoice's covered period ends
+ * on the day before the cycle anchor (default offset = 1 day) — the
+ * inverse of the rule applied by `useUpdateInvoiceItems` when the
+ * user edits the period on the invoice side. The offset is read once
+ * per call from app_settings so a single sub edit produces a
+ * consistent service_end_date across all linked invoices.
  *
  * Setup/addon lines are skipped because they don't anchor the cycle
  * (the cron only advances `next_billing_date` per recurring item),
@@ -2037,8 +2097,12 @@ async function syncNextBillingDateToInvoices(opts: {
 
   // String-only date math against the UTC midnight anchor — matches
   // how Postgres stores `date` columns and avoids local-tz drift.
+  // Subtract the configured offset (default 1 day) so the service
+  // window ends `offset` days before the next cycle anchor — exact
+  // inverse of the +offset bump applied on the invoice-edit side.
+  const billingAnchorOffsetDays = await getBillingAnchorOffsetDays();
   const anchor = new Date(opts.newNextBillingDate + "T00:00:00Z");
-  anchor.setUTCDate(anchor.getUTCDate() - 1);
+  anchor.setUTCDate(anchor.getUTCDate() - billingAnchorOffsetDays);
   const newEnd = anchor.toISOString().split("T")[0];
 
   const syncedInvoiceIds = new Set<string>();
