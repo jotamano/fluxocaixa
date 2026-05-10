@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
-import { Euro, Users, RefreshCw, TrendingUp, AlertTriangle, Bell } from "lucide-react";
+import { Euro, Users, RefreshCw, TrendingUp, AlertTriangle, Bell, Package } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatCurrency, getInvoiceTotalWithIva, getAmountWithIva, frequencyDays, getClientLabel, type SubscriptionFrequency } from "@/lib/data";
-import { useInvoices, useClients, useSubscriptions, usePayments } from "@/hooks/use-data";
+import { useInvoices, useClients, useSubscriptions, usePayments, useServices } from "@/hooks/use-data";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { topServicesByRevenue } from "@/lib/stats";
 
 const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -34,9 +35,23 @@ export default function Dashboard() {
   const { data: clients = [] } = useClients();
   const { data: subscriptions = [] } = useSubscriptions();
   const { data: payments = [] } = usePayments();
+  const { data: services = [] } = useServices();
   const [dateRange, setDateRange] = useState<DateRange>("year");
 
   const { start, end } = getDateRange(dateRange);
+
+  // Same-length window immediately preceding the active one — used to
+  // compute period-over-period deltas next to the headline KPI. Falls
+  // back to the same start when range = "all" so the badge naturally
+  // hides itself (delta = 0%).
+  const previousRange = useMemo(() => {
+    if (dateRange === "all") return { start, end: start };
+    const span = end.getTime() - start.getTime();
+    return {
+      start: new Date(start.getTime() - span - 86_400_000),
+      end: new Date(start.getTime() - 86_400_000),
+    };
+  }, [start, end, dateRange]);
 
   const filteredInvoices = useMemo(() =>
     invoices.filter(i => {
@@ -55,6 +70,24 @@ export default function Dashboard() {
   );
 
   const totalRevenue = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+  // Revenue from the previous period of equal length. Used to compute
+  // the up/down arrow next to "Receita Total". Skipped when the user
+  // is showing "Tudo" since there's no meaningful comparison window.
+  const previousRevenue = useMemo(() => {
+    if (dateRange === "all") return 0;
+    return payments
+      .filter(p => {
+        const d = new Date(p.date);
+        return d >= previousRange.start && d <= previousRange.end;
+      })
+      .reduce((sum, p) => sum + Number(p.amount), 0);
+  }, [payments, previousRange, dateRange]);
+
+  const revenueDelta = useMemo(() => {
+    if (dateRange === "all" || previousRevenue === 0) return null;
+    return ((totalRevenue - previousRevenue) / previousRevenue) * 100;
+  }, [totalRevenue, previousRevenue, dateRange]);
 
   const pendingInvoices = filteredInvoices.filter(i => i.status === 'pending' || i.status === 'overdue' || i.status === 'partially_paid');
   const pendingAmount = pendingInvoices.reduce((sum, i) => {
@@ -108,6 +141,25 @@ export default function Dashboard() {
       .slice(0, 5);
   }, [filteredPayments, invoices]);
 
+  // Top services by billed amount in the selected period. Built from
+  // *issued* invoices (not just paid) so newly-issued work shows up
+  // even when the client hasn't paid yet — matches operator intuition
+  // about "what was sold this month".
+  const serviceLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of services) map.set(s.id, s.name);
+    return map;
+  }, [services]);
+
+  const topServices = useMemo(
+    () => topServicesByRevenue(filteredInvoices, serviceLabelById, 5),
+    [filteredInvoices, serviceLabelById],
+  );
+  const topServicesTotal = useMemo(
+    () => topServices.reduce((s, r) => s + r.total, 0),
+    [topServices],
+  );
+
   const dateFilters: { value: DateRange; label: string }[] = [
     { value: "month", label: "Este mês" },
     { value: "quarter", label: "Trimestre" },
@@ -151,7 +203,17 @@ export default function Dashboard() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Receita Total" value={formatCurrency(totalRevenue)} subtitle="Pagamentos recebidos" trend="up" icon={Euro} />
+        <StatCard
+          title="Receita Total"
+          value={formatCurrency(totalRevenue)}
+          subtitle={
+            revenueDelta === null
+              ? "Pagamentos recebidos"
+              : `${revenueDelta >= 0 ? "+" : ""}${revenueDelta.toFixed(1)}% vs período anterior`
+          }
+          trend={revenueDelta === null ? "neutral" : revenueDelta >= 0 ? "up" : "down"}
+          icon={Euro}
+        />
         <StatCard title="Em Dívida" value={formatCurrency(pendingAmount)} subtitle={`${overdueInvoices.length} fatura(s) vencida(s)`} trend="down" icon={TrendingUp} />
         <StatCard title="Clientes Ativos" value={String(clients.length)} trend="up" icon={Users} />
         <StatCard title="Receita Recorrente" value={formatCurrency(monthlyRecurring)} subtitle={`${activeSubscriptions.length} subscrições ativas`} trend="neutral" icon={RefreshCw} />
@@ -190,6 +252,47 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card shadow-card">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <div className="flex items-center gap-2">
+            <Package className="h-4 w-4 text-primary" />
+            <h2 className="font-display font-semibold text-card-foreground">Top Serviços</h2>
+          </div>
+          <Link to="/servicos" className="text-sm font-medium text-primary hover:underline">Ver todos</Link>
+        </div>
+        {topServices.length === 0 ? (
+          <div className="px-6 py-6 text-sm text-muted-foreground">Sem serviços faturados no período selecionado.</div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {topServices.map(s => {
+              const pct = topServicesTotal > 0 ? (s.total / topServicesTotal) * 100 : 0;
+              const row = (
+                <div className="flex items-center gap-3 px-6 py-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-card-foreground">{s.label}</p>
+                    <p className="text-xs text-muted-foreground">{s.invoiceCount} fatura(s)</p>
+                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                  <div className="min-w-[100px] text-right">
+                    <p className="text-sm font-semibold text-card-foreground">{formatCurrency(s.total)}</p>
+                    <p className="text-xs text-muted-foreground tabular-nums">{pct.toFixed(0)}%</p>
+                  </div>
+                </div>
+              );
+              return s.serviceId ? (
+                <li key={s.serviceId}>
+                  <Link to={`/servicos/${s.serviceId}`} className="block hover:bg-muted/30 transition-colors">{row}</Link>
+                </li>
+              ) : (
+                <li key={`none-${s.label}`}>{row}</li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

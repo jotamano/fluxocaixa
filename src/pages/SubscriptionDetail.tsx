@@ -1,5 +1,6 @@
+import { useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, History } from "lucide-react";
+import { ArrowLeft, Pencil, History, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   useSubscription,
@@ -11,6 +12,8 @@ import type { SubscriptionItem } from "@/hooks/use-data";
 import { formatCurrency, frequencyLabels, getClientLabel, getEffectiveIvaPercentage, getInvoiceTotalWithIva, getAmountWithIva } from "@/lib/data";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
+import { invoicesIssuedByMonth, summarizeInvoices } from "@/lib/stats";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const KIND_LABELS: Record<SubscriptionItem["kind"], string> = {
   recurring: "Recorrente",
@@ -26,6 +29,16 @@ export default function SubscriptionDetail() {
   const { data: items = [] } = useSubscriptionItems(id);
   const { data: invoices = [] } = useSubscriptionInvoices(id);
   const { data: priceHistory = [] } = useSubscriptionPriceHistory(id);
+
+  // Lifetime stats over all invoices generated from this subscription.
+  // Pulled from the dedicated `useSubscriptionInvoices` query so we
+  // already have IVA + status server-side. The chart uses the same
+  // 12-month window helper used elsewhere for visual consistency.
+  // Hooks must run unconditionally — runs even before the loading
+  // early-return so React doesn't see a different hook order across
+  // renders.
+  const summary = useMemo(() => summarizeInvoices(invoices), [invoices]);
+  const monthlyIssued = useMemo(() => invoicesIssuedByMonth(invoices, 12), [invoices]);
 
   if (!sub) {
     return <div className="p-8 text-muted-foreground">A carregar…</div>;
@@ -71,7 +84,7 @@ export default function SubscriptionDetail() {
             </span>
           </div>
         </div>
-        <div className="mt-6 grid gap-4 sm:grid-cols-3">
+        <div className="mt-6 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
           <Stat
             label="Mensalidade"
             value={formatCurrency(totalWithIva)}
@@ -84,6 +97,51 @@ export default function SubscriptionDetail() {
             hint={ivaPct > 0 && setupTotal > 0 ? `${formatCurrency(setupTotal)} + IVA ${ivaPct}%` : undefined}
           />
           <Stat label="Próxima faturação" value={new Date(sub.next_billing_date).toLocaleDateString('pt-PT')} />
+          <Stat
+            label="Faturado vit."
+            value={formatCurrency(summary.totalGross)}
+            hint={`${summary.count} fatura(s)`}
+          />
+          <Stat
+            label="Recebido"
+            value={formatCurrency(summary.paidGross)}
+            hint={summary.totalGross > 0 ? `${((summary.paidGross / summary.totalGross) * 100).toFixed(0)}% pago` : undefined}
+          />
+          <Stat
+            label="Em aberto"
+            value={formatCurrency(summary.pendingGross + summary.overdueGross)}
+            hint={summary.overdueGross > 0 ? `${formatCurrency(summary.overdueGross)} vencido` : undefined}
+          />
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-6 shadow-card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-primary" />
+            <h2 className="font-display font-semibold text-foreground">Faturado mensal</h2>
+          </div>
+          <p className="text-xs text-muted-foreground">Últimos 12 meses (com IVA)</p>
+        </div>
+        <div className="h-56">
+          {monthlyIssued.every(m => m.value === 0) ? (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              Sem faturas geradas nos últimos 12 meses.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyIssued} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 15%, 90%)" />
+                <XAxis dataKey="month" tick={{ fontSize: 12, fill: "hsl(220, 10%, 50%)" }} />
+                <YAxis tick={{ fontSize: 12, fill: "hsl(220, 10%, 50%)" }} tickFormatter={v => `${v}€`} />
+                <Tooltip
+                  formatter={(value: number) => [formatCurrency(value), "Faturado"]}
+                  contentStyle={{ borderRadius: 8, border: "1px solid hsl(220, 15%, 90%)", fontSize: 13 }}
+                />
+                <Bar dataKey="value" fill="hsl(220, 70%, 45%)" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
