@@ -27,13 +27,24 @@ export function GlobalSearch() {
 
   const results = useMemo<SearchResult[]>(() => {
     if (query.length < 2) return [];
-    const q = query.toLowerCase();
+    const q = query.toLowerCase().trim();
     const r: SearchResult[] = [];
 
+    // Detect if the query looks like a number (for exact-amount matching).
+    // Accepts both "90" and "90.00" / "90,50" (comma as decimal).
+    const numericQuery = parseFloat(q.replace(",", "."));
+    const isNumeric = !isNaN(numericQuery) && numericQuery > 0;
+
     clients.forEach(c => {
-      if (c.name.toLowerCase().includes(q) || c.company.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)) {
+      if (
+        c.name.toLowerCase().includes(q) ||
+        c.company.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q) ||
+        (c.nif && c.nif.toLowerCase().includes(q))
+      ) {
         const title = c.company?.trim() || c.name?.trim() || "Sem cliente";
-        const subtitle = c.company?.trim() && c.name?.trim() && c.company !== c.name ? c.name : c.email;
+        const extra = c.nif ? ` · NIF ${c.nif}` : "";
+        const subtitle = (c.company?.trim() && c.name?.trim() && c.company !== c.name ? c.name : c.email) + extra;
         r.push({ type: "client", title, subtitle, link: `/clientes/${c.id}` });
       }
     });
@@ -42,11 +53,19 @@ export function GlobalSearch() {
       const matchesClient =
         inv.clients?.company?.toLowerCase().includes(q) ||
         inv.clients?.name?.toLowerCase().includes(q);
-      if (inv.number.toLowerCase().includes(q) || matchesClient) {
+      const matchesNif = inv.clients?.nif?.toLowerCase().includes(q);
+      const matchesNumber = inv.number.toLowerCase().includes(q);
+      const matchesLineDesc = inv.invoice_items?.some(
+        item => item.description.toLowerCase().includes(q),
+      );
+      const total = getInvoiceTotalWithIva(inv.invoice_items, inv);
+      const matchesAmount = isNumeric && Math.abs(total - numericQuery) < 0.01;
+
+      if (matchesNumber || matchesClient || matchesNif || matchesLineDesc || matchesAmount) {
         r.push({
           type: "invoice",
           title: inv.number,
-          subtitle: `${getClientLabel(inv)} — ${formatCurrency(getInvoiceTotalWithIva(inv.invoice_items, inv))}`,
+          subtitle: `${getClientLabel(inv)} — ${formatCurrency(total)}`,
           link: `/faturas/${inv.id}`,
         });
       }
@@ -56,17 +75,22 @@ export function GlobalSearch() {
       const matchesClient =
         sub.clients?.company?.toLowerCase().includes(q) ||
         sub.clients?.name?.toLowerCase().includes(q);
-      if (sub.name.toLowerCase().includes(q) || matchesClient) {
+      const matchesNif = sub.clients?.nif?.toLowerCase().includes(q);
+      const matchesName = sub.name.toLowerCase().includes(q);
+      const amt = getAmountWithIva(Number(sub.amount), sub);
+      const matchesAmount = isNumeric && Math.abs(amt - numericQuery) < 0.01;
+
+      if (matchesName || matchesClient || matchesNif || matchesAmount) {
         r.push({
           type: "subscription",
           title: sub.name,
-          subtitle: `${getClientLabel(sub)} — ${formatCurrency(getAmountWithIva(Number(sub.amount), sub))}`,
+          subtitle: `${getClientLabel(sub)} — ${formatCurrency(amt)}`,
           link: `/subscricoes?edit=${sub.id}`,
         });
       }
     });
 
-    return r.slice(0, 8);
+    return r.slice(0, 12);
   }, [query, clients, invoices, subscriptions]);
 
   useEffect(() => { setSelectedIdx(0); }, [results]);

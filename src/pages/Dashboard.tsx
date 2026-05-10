@@ -30,6 +30,8 @@ function getDateRange(range: DateRange): { start: Date; end: Date } {
   }
 }
 
+type CompareMode = "previous" | "yoy";
+
 export default function Dashboard() {
   const { data: invoices = [] } = useInvoices();
   const { data: clients = [] } = useClients();
@@ -37,21 +39,32 @@ export default function Dashboard() {
   const { data: payments = [] } = usePayments();
   const { data: services = [] } = useServices();
   const [dateRange, setDateRange] = useState<DateRange>("year");
+  const [compareMode, setCompareMode] = useState<CompareMode>("previous");
 
   const { start, end } = getDateRange(dateRange);
 
-  // Same-length window immediately preceding the active one — used to
-  // compute period-over-period deltas next to the headline KPI. Falls
-  // back to the same start when range = "all" so the badge naturally
-  // hides itself (delta = 0%).
-  const previousRange = useMemo(() => {
+  // Comparison window. Two modes:
+  //   - "previous": same-length window immediately before the active one
+  //     (e.g. Jul-Sep 2026 vs Apr-Jun 2026 for "Trimestre")
+  //   - "yoy": exact same calendar window shifted back 1 year so we're
+  //     comparing like-for-like (e.g. Jan-Dec 2026 vs Jan-Dec 2025)
+  // Falls back to a zero-length window when range = "all" so the badge
+  // naturally hides itself (delta = null).
+  const compareRange = useMemo(() => {
     if (dateRange === "all") return { start, end: start };
+    if (compareMode === "yoy") {
+      const s = new Date(start);
+      const e = new Date(end);
+      s.setFullYear(s.getFullYear() - 1);
+      e.setFullYear(e.getFullYear() - 1);
+      return { start: s, end: e };
+    }
     const span = end.getTime() - start.getTime();
     return {
       start: new Date(start.getTime() - span - 86_400_000),
       end: new Date(start.getTime() - 86_400_000),
     };
-  }, [start, end, dateRange]);
+  }, [start, end, dateRange, compareMode]);
 
   const filteredInvoices = useMemo(() =>
     invoices.filter(i => {
@@ -71,23 +84,48 @@ export default function Dashboard() {
 
   const totalRevenue = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0);
 
-  // Revenue from the previous period of equal length. Used to compute
-  // the up/down arrow next to "Receita Total". Skipped when the user
-  // is showing "Tudo" since there's no meaningful comparison window.
-  const previousRevenue = useMemo(() => {
+  // Revenue from the comparison window. Drives the up/down arrow next
+  // to "Receita Total". Hidden when range = "Tudo" since there's no
+  // meaningful comparison window.
+  const compareRevenue = useMemo(() => {
     if (dateRange === "all") return 0;
     return payments
       .filter(p => {
         const d = new Date(p.date);
-        return d >= previousRange.start && d <= previousRange.end;
+        return d >= compareRange.start && d <= compareRange.end;
       })
       .reduce((sum, p) => sum + Number(p.amount), 0);
-  }, [payments, previousRange, dateRange]);
+  }, [payments, compareRange, dateRange]);
 
   const revenueDelta = useMemo(() => {
-    if (dateRange === "all" || previousRevenue === 0) return null;
-    return ((totalRevenue - previousRevenue) / previousRevenue) * 100;
-  }, [totalRevenue, previousRevenue, dateRange]);
+    if (dateRange === "all" || compareRevenue === 0) return null;
+    return ((totalRevenue - compareRevenue) / compareRevenue) * 100;
+  }, [totalRevenue, compareRevenue, dateRange]);
+
+  // Invoiced amount in the comparison window (total billed, not just
+  // collected). Surfaces alongside the revenue delta so operators see
+  // both "what was paid" and "what was sold" YoY.
+  const filteredInvoicedTotal = useMemo(
+    () => filteredInvoices.reduce((s, i) => s + getInvoiceTotalWithIva(i.invoice_items, i), 0),
+    [filteredInvoices],
+  );
+
+  const compareInvoicedTotal = useMemo(() => {
+    if (dateRange === "all") return 0;
+    return invoices
+      .filter(i => {
+        const d = new Date(i.issue_date);
+        return d >= compareRange.start && d <= compareRange.end;
+      })
+      .reduce((s, i) => s + getInvoiceTotalWithIva(i.invoice_items, i), 0);
+  }, [invoices, compareRange, dateRange]);
+
+  const invoicedDelta = useMemo(() => {
+    if (dateRange === "all" || compareInvoicedTotal === 0) return null;
+    return ((filteredInvoicedTotal - compareInvoicedTotal) / compareInvoicedTotal) * 100;
+  }, [filteredInvoicedTotal, compareInvoicedTotal, dateRange]);
+
+  const compareLabel = compareMode === "yoy" ? "vs ano homólogo" : "vs período anterior";
 
   const pendingInvoices = filteredInvoices.filter(i => i.status === 'pending' || i.status === 'overdue' || i.status === 'partially_paid');
   const pendingAmount = pendingInvoices.reduce((sum, i) => {
@@ -171,15 +209,35 @@ export default function Dashboard() {
     <div className="space-y-8 animate-fade-in">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold font-display text-foreground">Dashboard</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold font-display text-foreground">Dashboard</h1>
           <p className="mt-1 text-muted-foreground">Visão geral do teu negócio</p>
         </div>
-        <div className="flex gap-1">
-          {dateFilters.map(f => (
-            <Button key={f.value} variant={dateRange === f.value ? "default" : "outline"} size="sm" onClick={() => setDateRange(f.value)}>
-              {f.label}
-            </Button>
-          ))}
+        <div className="flex flex-wrap gap-2">
+          <div className="flex gap-1">
+            {dateFilters.map(f => (
+              <Button key={f.value} variant={dateRange === f.value ? "default" : "outline"} size="sm" onClick={() => setDateRange(f.value)}>
+                {f.label}
+              </Button>
+            ))}
+          </div>
+          {dateRange !== "all" && (
+            <div className="flex gap-1 border-l border-border pl-2">
+              <Button
+                variant={compareMode === "previous" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setCompareMode("previous")}
+              >
+                vs Anterior
+              </Button>
+              <Button
+                variant={compareMode === "yoy" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setCompareMode("yoy")}
+              >
+                vs Ano
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -202,20 +260,30 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Receita Total"
           value={formatCurrency(totalRevenue)}
           subtitle={
             revenueDelta === null
               ? "Pagamentos recebidos"
-              : `${revenueDelta >= 0 ? "+" : ""}${revenueDelta.toFixed(1)}% vs período anterior`
+              : `${revenueDelta >= 0 ? "+" : ""}${revenueDelta.toFixed(1)}% ${compareLabel}`
           }
           trend={revenueDelta === null ? "neutral" : revenueDelta >= 0 ? "up" : "down"}
           icon={Euro}
         />
-        <StatCard title="Em Dívida" value={formatCurrency(pendingAmount)} subtitle={`${overdueInvoices.length} fatura(s) vencida(s)`} trend="down" icon={TrendingUp} />
-        <StatCard title="Clientes Ativos" value={String(clients.length)} trend="up" icon={Users} />
+        <StatCard
+          title="Faturado"
+          value={formatCurrency(filteredInvoicedTotal)}
+          subtitle={
+            invoicedDelta === null
+              ? `${filteredInvoices.length} fatura(s)`
+              : `${invoicedDelta >= 0 ? "+" : ""}${invoicedDelta.toFixed(1)}% ${compareLabel}`
+          }
+          trend={invoicedDelta === null ? "neutral" : invoicedDelta >= 0 ? "up" : "down"}
+          icon={TrendingUp}
+        />
+        <StatCard title="Em Dívida" value={formatCurrency(pendingAmount)} subtitle={`${overdueInvoices.length} fatura(s) vencida(s)`} trend={pendingAmount > 0 ? "down" : "neutral"} icon={AlertTriangle} />
         <StatCard title="Receita Recorrente" value={formatCurrency(monthlyRecurring)} subtitle={`${activeSubscriptions.length} subscrições ativas`} trend="neutral" icon={RefreshCw} />
       </div>
 

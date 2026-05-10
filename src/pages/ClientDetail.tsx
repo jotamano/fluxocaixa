@@ -158,32 +158,32 @@ export default function ClientDetail() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <div className="rounded-xl border border-border bg-card p-5 shadow-card">
-          <p className="text-sm text-muted-foreground">Total faturado</p>
-          <p className="mt-2 font-display text-3xl font-bold text-card-foreground">{formatCurrency(totalBilled)}</p>
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-card">
+          <p className="text-xs sm:text-sm text-muted-foreground">Total faturado</p>
+          <p className="mt-2 font-display text-xl sm:text-2xl lg:text-3xl font-bold text-card-foreground">{formatCurrency(totalBilled)}</p>
           <p className="text-xs text-muted-foreground mt-1">{clientInvoices.length} fatura(s)</p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-5 shadow-card">
-          <p className="text-sm text-muted-foreground">Total pago</p>
-          <p className="mt-2 font-display text-3xl font-bold text-card-foreground">{formatCurrency(totalPaid)}</p>
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-card">
+          <p className="text-xs sm:text-sm text-muted-foreground">Total pago</p>
+          <p className="mt-2 font-display text-xl sm:text-2xl lg:text-3xl font-bold text-card-foreground">{formatCurrency(totalPaid)}</p>
           <p className="text-xs text-muted-foreground mt-1">{clientPayments.length} pagamento(s)</p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-5 shadow-card">
-          <p className="text-sm text-muted-foreground">Em dívida</p>
-          <p className="mt-2 font-display text-3xl font-bold text-card-foreground">{formatCurrency(outstanding)}</p>
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-card">
+          <p className="text-xs sm:text-sm text-muted-foreground">Em dívida</p>
+          <p className="mt-2 font-display text-xl sm:text-2xl lg:text-3xl font-bold text-card-foreground">{formatCurrency(outstanding)}</p>
           <p className="text-xs text-muted-foreground mt-1">
             {totalBilled > 0 ? `${((outstanding / totalBilled) * 100).toFixed(0)}% do faturado` : "—"}
           </p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-5 shadow-card">
-          <p className="text-sm text-muted-foreground">Subscrições ativas</p>
-          <p className="mt-2 font-display text-3xl font-bold text-card-foreground">{clientSubscriptions.filter(s => s.active).length}</p>
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-card">
+          <p className="text-xs sm:text-sm text-muted-foreground">Subscrições ativas</p>
+          <p className="mt-2 font-display text-xl sm:text-2xl lg:text-3xl font-bold text-card-foreground">{clientSubscriptions.filter(s => s.active).length}</p>
           <p className="text-xs text-muted-foreground mt-1">de {clientSubscriptions.length} total</p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-5 shadow-card">
-          <p className="text-sm text-muted-foreground">Pagamento médio</p>
-          <p className="mt-2 font-display text-3xl font-bold text-card-foreground">
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-card col-span-2 lg:col-span-1">
+          <p className="text-xs sm:text-sm text-muted-foreground">Pagamento médio</p>
+          <p className="mt-2 font-display text-xl sm:text-2xl lg:text-3xl font-bold text-card-foreground">
             {avgPaymentLag === null ? "—" : `${avgPaymentLag}d`}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
