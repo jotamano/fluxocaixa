@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { FileText, Search, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useInvoices } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceTotalWithIva, getClientLabel, getEffectiveIvaPercentage, type InvoiceStatus } from "@/lib/data";
+import { summarizeInvoices } from "@/lib/stats";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -16,7 +17,7 @@ export default function Invoices() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  const filtered = invoices.filter(invoice => {
+  const filtered = useMemo(() => invoices.filter(invoice => {
     const lowerSearch = search.toLowerCase();
     const matchesSearch =
       invoice.number.toLowerCase().includes(lowerSearch) ||
@@ -26,7 +27,13 @@ export default function Invoices() {
     const matchesFrom = !fromDate || invoice.issue_date >= fromDate;
     const matchesTo = !toDate || invoice.issue_date <= toDate;
     return matchesSearch && matchesStatus && matchesFrom && matchesTo;
-  });
+  }), [invoices, search, statusFilter, fromDate, toDate]);
+
+  // Summary chips computed against the *filtered* list so the operator
+  // sees totals for the slice they're inspecting (e.g. "all overdue in
+  // the last 30 days"). When the user resets filters this naturally
+  // collapses to lifetime totals.
+  const summary = useMemo(() => summarizeInvoices(filtered), [filtered]);
 
   const statuses: Array<{ value: InvoiceStatus | "all"; label: string }> = [
     { value: "all", label: "Todas" },
@@ -47,6 +54,32 @@ export default function Invoices() {
         <Link to="/faturas/nova">
           <Button className="gap-2"><FileText className="h-4 w-4" /> Nova Fatura</Button>
         </Link>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-card">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Total filtrado</p>
+          <p className="mt-1 font-display text-xl font-bold text-card-foreground">{formatCurrency(summary.totalGross)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{summary.count} fatura(s)</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-card">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Pagas</p>
+          <p className="mt-1 font-display text-xl font-bold text-success">{formatCurrency(summary.paidGross)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{summary.totalGross > 0 ? Math.round((summary.paidGross / summary.totalGross) * 100) : 0}% recebido</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-card">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Pendentes</p>
+          <p className="mt-1 font-display text-xl font-bold text-warning">{formatCurrency(summary.pendingGross)}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-card">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Vencidas</p>
+          <p className={`mt-1 font-display text-xl font-bold ${summary.overdueGross > 0 ? 'text-destructive' : 'text-card-foreground'}`}>{formatCurrency(summary.overdueGross)}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-card">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Ticket médio</p>
+          <p className="mt-1 font-display text-xl font-bold text-card-foreground">{formatCurrency(summary.averageTicket)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Exclui rascunhos</p>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

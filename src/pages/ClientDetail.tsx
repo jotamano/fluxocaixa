@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ArrowLeft, Building2, Mail, Phone, FileDown, Trash2, FileText, CreditCard, UserPlus, Clock, Pencil, FilePlus2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowLeft, Building2, Mail, Phone, FileDown, Trash2, FileText, CreditCard, UserPlus, Clock, Pencil, FilePlus2, TrendingUp } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,8 @@ import { useClients, useInvoices, usePayments, useSubscriptions, useDeleteClient
 import { formatCurrency, getInvoiceTotalWithIva, getAmountWithIva, frequencyLabels, methodLabels } from "@/lib/data";
 import { generateClientStatement } from "@/lib/statement";
 import { useToast } from "@/hooks/use-toast";
+import { paymentsByMonth, invoicePaymentLagDays, paymentMethodBreakdown } from "@/lib/stats";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 interface TimelineEvent {
   date: Date;
@@ -32,11 +34,48 @@ export default function ClientDetail() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
+  // Hooks must run unconditionally — pre-compute the per-client slices
+  // before the loading/not-found early returns. The slices are cheap
+  // (filter passes over a few hundred rows at most) and stable across
+  // renders thanks to TanStack Query's reference equality.
+  const client = clients.find(item => item.id === id);
+  const clientInvoices = useMemo(
+    () => (client ? invoices.filter(invoice => invoice.client_id === client.id) : []),
+    [invoices, client],
+  );
+  const clientPayments = useMemo(
+    () => (client ? payments.filter(payment => payment.client_id === client.id) : []),
+    [payments, client],
+  );
+
+  // Monthly received-revenue series for the trailing 12 months. Uses the
+  // dedicated helper so the same shape is rendered identically on
+  // Dashboard / SubscriptionDetail / ClientDetail.
+  const monthlyRevenue = useMemo(() => paymentsByMonth(clientPayments, 12), [clientPayments]);
+
+  // Average days-to-pay across closed invoices: lets the operator spot
+  // slow payers without scrolling through individual invoices. We only
+  // count invoices that ever received a payment so a single huge open
+  // invoice doesn't poison the average with `null`.
+  const avgPaymentLag = useMemo(() => {
+    const lags: number[] = [];
+    for (const inv of clientInvoices) {
+      const lag = invoicePaymentLagDays(inv, clientPayments);
+      if (lag !== null && lag >= 0) lags.push(lag);
+    }
+    if (lags.length === 0) return null;
+    return Math.round(lags.reduce((a, b) => a + b, 0) / lags.length);
+  }, [clientInvoices, clientPayments]);
+
+  // Method mix shown as a small ranked list — Recharts' Pie has too much
+  // overhead for what is usually 1-3 categories. Sorted desc by value
+  // inside the helper.
+  const methodMix = useMemo(() => paymentMethodBreakdown(clientPayments), [clientPayments]);
+  const methodMixTotal = methodMix.reduce((s, m) => s + m.total, 0);
+
   if (clientsLoading || invoicesLoading || paymentsLoading || subscriptionsLoading) {
     return <div className="py-10 text-sm text-muted-foreground">A carregar cliente...</div>;
   }
-
-  const client = clients.find(item => item.id === id);
 
   if (!client) {
     return (
@@ -51,8 +90,6 @@ export default function ClientDetail() {
     );
   }
 
-  const clientInvoices = invoices.filter(invoice => invoice.client_id === client.id);
-  const clientPayments = payments.filter(payment => payment.client_id === client.id);
   const clientSubscriptions = subscriptions.filter(subscription => subscription.client_id === client.id);
 
   const totalBilled = clientInvoices.reduce((sum, invoice) => sum + getInvoiceTotalWithIva(invoice.invoice_items, invoice), 0);
@@ -121,22 +158,97 @@ export default function ClientDetail() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <div className="rounded-xl border border-border bg-card p-5 shadow-card">
           <p className="text-sm text-muted-foreground">Total faturado</p>
           <p className="mt-2 font-display text-3xl font-bold text-card-foreground">{formatCurrency(totalBilled)}</p>
+          <p className="text-xs text-muted-foreground mt-1">{clientInvoices.length} fatura(s)</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-5 shadow-card">
           <p className="text-sm text-muted-foreground">Total pago</p>
           <p className="mt-2 font-display text-3xl font-bold text-card-foreground">{formatCurrency(totalPaid)}</p>
+          <p className="text-xs text-muted-foreground mt-1">{clientPayments.length} pagamento(s)</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-5 shadow-card">
           <p className="text-sm text-muted-foreground">Em dívida</p>
           <p className="mt-2 font-display text-3xl font-bold text-card-foreground">{formatCurrency(outstanding)}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {totalBilled > 0 ? `${((outstanding / totalBilled) * 100).toFixed(0)}% do faturado` : "—"}
+          </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-5 shadow-card">
           <p className="text-sm text-muted-foreground">Subscrições ativas</p>
           <p className="mt-2 font-display text-3xl font-bold text-card-foreground">{clientSubscriptions.filter(s => s.active).length}</p>
+          <p className="text-xs text-muted-foreground mt-1">de {clientSubscriptions.length} total</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-5 shadow-card">
+          <p className="text-sm text-muted-foreground">Pagamento médio</p>
+          <p className="mt-2 font-display text-3xl font-bold text-card-foreground">
+            {avgPaymentLag === null ? "—" : `${avgPaymentLag}d`}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {avgPaymentLag === null ? "Sem dados" : "Após emissão"}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+        <div className="rounded-xl border border-border bg-card shadow-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              <h2 className="font-display text-lg font-semibold text-card-foreground">Receita mensal</h2>
+            </div>
+            <p className="text-xs text-muted-foreground">Últimos 12 meses</p>
+          </div>
+          <div className="h-56">
+            {monthlyRevenue.every(m => m.value === 0) ? (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Sem pagamentos nos últimos 12 meses.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyRevenue} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 15%, 90%)" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: "hsl(220, 10%, 50%)" }} />
+                  <YAxis tick={{ fontSize: 12, fill: "hsl(220, 10%, 50%)" }} tickFormatter={v => `${v}€`} />
+                  <Tooltip
+                    formatter={(value: number) => [formatCurrency(value), "Recebido"]}
+                    contentStyle={{ borderRadius: 8, border: "1px solid hsl(220, 15%, 90%)", fontSize: 13 }}
+                  />
+                  <Bar dataKey="value" fill="hsl(220, 70%, 45%)" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card shadow-card p-6">
+          <h2 className="font-display text-lg font-semibold text-card-foreground mb-4">Métodos de pagamento</h2>
+          {methodMix.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sem pagamentos registados.</p>
+          ) : (
+            <ul className="space-y-3">
+              {methodMix.map(m => {
+                const pct = methodMixTotal > 0 ? (m.total / methodMixTotal) * 100 : 0;
+                const label = methodLabels[m.method as keyof typeof methodLabels] ?? m.method;
+                return (
+                  <li key={m.method}>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-card-foreground">{label}</span>
+                      <span className="font-semibold text-card-foreground tabular-nums">{formatCurrency(m.total)}</span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-xs text-muted-foreground tabular-nums w-9 text-right">{pct.toFixed(0)}%</span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </div>
 

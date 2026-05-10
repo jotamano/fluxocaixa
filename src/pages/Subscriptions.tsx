@@ -14,8 +14,10 @@ import {
   useNextInvoiceNumber,
   useSubscriptionStats,
   useSyncIva,
+  useInvoices,
 } from "@/hooks/use-data";
 import { frequencyLabels, formatCurrency, frequencyDays, getClientLabel, getAmountWithIva, getEffectiveIvaPercentage, type SubscriptionFrequency, DEFAULT_HAS_IVA, DEFAULT_IVA_PERCENTAGE } from "@/lib/data";
+import { summarizeSubscriptions } from "@/lib/stats";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,6 +43,7 @@ export default function Subscriptions() {
   const { data: services = [] } = useActiveServices();
   const { data: subscriptions = [] } = useSubscriptions();
   const { data: stats = {} } = useSubscriptionStats();
+  const { data: invoices = [] } = useInvoices();
   const { data: nextNumber = "" } = useNextInvoiceNumber();
   const [searchParams, setSearchParams] = useSearchParams();
   const setStatus = useSetSubscriptionStatus();
@@ -103,6 +106,14 @@ export default function Subscriptions() {
       const periodDays = frequencyDays[s.frequency as SubscriptionFrequency] ?? 30;
       return sum + (amt * 30) / periodDays;
     }, 0);
+
+  // Workspace roll-up: counts by status + YTD revenue from paid
+  // subscription invoices. Drives the KPI strip above the list so the
+  // operator sees portfolio totals before drilling into a card.
+  const summary = useMemo(
+    () => summarizeSubscriptions(subscriptions, invoices),
+    [subscriptions, invoices],
+  );
 
   const openEditor = (id: string) => {
     const subscription = subscriptions.find(item => item.id === id);
@@ -453,6 +464,29 @@ export default function Subscriptions() {
         </div>
         <div className="flex gap-2">
           <Button className="gap-2" onClick={openCreate}><Plus className="h-4 w-4" /> Nova Subscrição</Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-card">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">MRR</p>
+          <p className="mt-1 font-display text-xl font-bold text-card-foreground">{formatCurrency(summary.mrr)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Equivalente mensal das ativas</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-card">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Ativas</p>
+          <p className="mt-1 font-display text-xl font-bold text-success">{summary.active}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{subscriptions.length} no total</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-card">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Pausadas / canceladas</p>
+          <p className="mt-1 font-display text-xl font-bold text-card-foreground">{summary.paused + summary.cancelled}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{summary.paused} pausada(s) · {summary.cancelled} cancelada(s)</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-card">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Recebido em {new Date().getFullYear()}</p>
+          <p className="mt-1 font-display text-xl font-bold text-card-foreground">{formatCurrency(summary.receivedThisYear)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Faturas pagas ligadas a subs</p>
         </div>
       </div>
 

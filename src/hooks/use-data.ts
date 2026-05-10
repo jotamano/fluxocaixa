@@ -2164,6 +2164,34 @@ async function recalcInvoiceStatus(invoiceId: string) {
 
 export type SubscriptionItem = Tables<"subscription_items">;
 
+/**
+ * Lightweight projection of subscription_items used by stats panels
+ * (ServiceDetail, Services list). Pulls only the columns needed to
+ * count usage per service, keeping the payload small even when there
+ * are hundreds of items across the workspace.
+ */
+export interface SubscriptionItemUsage {
+  id: string;
+  subscription_id: string;
+  service_id: string | null;
+  amount: number;
+  description: string;
+  kind: SubscriptionItem["kind"];
+}
+
+export function useAllSubscriptionItems() {
+  return useQuery({
+    queryKey: ["subscription_items", "all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subscription_items")
+        .select("id, subscription_id, service_id, amount, description, kind");
+      if (error) throw error;
+      return (data ?? []) as SubscriptionItemUsage[];
+    },
+  });
+}
+
 export function useSubscriptionItems(subscriptionId: string | undefined) {
   return useQuery({
     queryKey: ["subscription_items", subscriptionId],
