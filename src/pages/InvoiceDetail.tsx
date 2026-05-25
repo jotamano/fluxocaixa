@@ -3,6 +3,7 @@ import { ArrowLeft, Download, Wallet, Trash2, Pencil, Plus, X, Copy } from "luci
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DecimalInput } from "@/components/DecimalInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -667,13 +668,9 @@ export default function InvoiceDetail() {
               {editForm.has_iva && (
                 <div className="space-y-1">
                   <Label className="text-xs">Percentagem de IVA (%)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="0.01"
+                  <DecimalInput
                     value={editForm.iva_percentage}
-                    onChange={e => setEditForm(p => ({ ...p, iva_percentage: Number(e.target.value) }))}
+                    onChange={v => setEditForm(p => ({ ...p, iva_percentage: v }))}
                   />
                 </div>
               )}
@@ -745,7 +742,7 @@ export default function InvoiceDetail() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Preço (€)</Label>
-                    <Input type="number" min={0} step="0.01" value={item.unitPrice} onChange={e => updateEditItem(index, 'unitPrice', Number(e.target.value))} />
+                    <DecimalInput value={item.unitPrice} onChange={v => updateEditItem(index, 'unitPrice', v)} />
                   </div>
                 </div>
                 {/* Optional service period — both inputs are independent

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2, ArrowLeft, UserPlus, GripVertical, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DecimalInput } from "@/components/DecimalInput";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -493,13 +494,9 @@ export default function NewInvoice() {
           {hasIva && (
             <div className="space-y-1">
               <Label className="text-xs">Percentagem de IVA (%)</Label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step="0.01"
+              <DecimalInput
                 value={ivaPercentage}
-                onChange={e => { setIvaPercentage(Number(e.target.value)); setHasIvaTouched(true); }}
+                onChange={v => { setIvaPercentage(v); setHasIvaTouched(true); }}
               />
             </div>
           )}
@@ -569,13 +566,9 @@ export default function NewInvoice() {
               {newClient.has_iva && (
                 <div className="space-y-2">
                   <Label className="text-sm">Percentagem de IVA (%)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="0.01"
+                  <DecimalInput
                     value={newClient.iva_percentage}
-                    onChange={e => setNewClient(prev => ({ ...prev, iva_percentage: Number(e.target.value) }))}
+                    onChange={v => setNewClient(prev => ({ ...prev, iva_percentage: v }))}
                   />
                 </div>
               )}
@@ -692,7 +685,7 @@ function SortableInvoiceItem({ item, index, canRemove, services, showFrequency, 
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Preço unitário (€)</Label>
-              <Input type="number" min={0} step="0.01" value={item.unitPrice} onChange={e => onUpdate(index, 'unitPrice', Number(e.target.value))} />
+              <DecimalInput value={item.unitPrice} onChange={v => onUpdate(index, 'unitPrice', v)} />
             </div>
           </div>
         </div>

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useAddPayment, usePayments, type Invoice } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceTotalWithIva, getClientLabel } from "@/lib/data";
+import { formatCurrency, getInvoiceTotalWithIva, getClientLabel, parseDecimal, formatDecimalForInput } from "@/lib/data";
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -97,7 +97,7 @@ export function PaymentDialog({
     let prefillAmount = initialAmount ?? "";
     if (!prefillAmount && startInvoice) {
       const outstanding = outstandingByInvoice.get(startInvoice.id) ?? 0;
-      if (outstanding > 0) prefillAmount = outstanding.toFixed(2);
+      if (outstanding > 0) prefillAmount = formatDecimalForInput(outstanding);
     }
     setForm({
       invoiceId: initialInvoiceId,
@@ -118,14 +118,16 @@ export function PaymentDialog({
     const outstanding = outstandingByInvoice.get(newInvoiceId) ?? 0;
     setForm(prev => {
       const previousOutstanding = outstandingByInvoice.get(prev.invoiceId) ?? 0;
+      // Compare numerically so the auto-prefill detection works
+      // regardless of whether the user typed "," or "." — string
+      // comparison would say "12,50" ≠ "12.50" and incorrectly
+      // preserve a value that's identical to the outstanding.
       const userTypedCustomAmount =
-        prev.amount !== "" &&
-        prev.amount !== previousOutstanding.toFixed(2) &&
-        prev.amount !== String(previousOutstanding);
+        prev.amount !== "" && parseDecimal(prev.amount) !== previousOutstanding;
       return {
         ...prev,
         invoiceId: newInvoiceId,
-        amount: userTypedCustomAmount ? prev.amount : outstanding > 0 ? outstanding.toFixed(2) : "",
+        amount: userTypedCustomAmount ? prev.amount : outstanding > 0 ? formatDecimalForInput(outstanding) : "",
       };
     });
   };
@@ -137,7 +139,7 @@ export function PaymentDialog({
       {
         invoice_id: selectedInvoice.id,
         client_id: selectedInvoice.client_id,
-        amount: parseFloat(form.amount),
+        amount: parseDecimal(form.amount),
         date: form.date,
         method: form.method,
         notes: form.notes || null,
@@ -148,7 +150,7 @@ export function PaymentDialog({
     );
   };
 
-  const amountNumber = parseFloat(form.amount) || 0;
+  const amountNumber = parseDecimal(form.amount);
   const exceedsOutstanding = amountNumber > invoiceOutstanding && invoiceOutstanding > 0;
 
   return (
@@ -201,17 +203,20 @@ export function PaymentDialog({
           <div className="space-y-2">
             <Label>Valor (€)</Label>
             <Input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="0.00"
+              type="text"
+              inputMode="decimal"
+              placeholder="0,00"
               value={form.amount}
-              onChange={e => setForm(prev => ({ ...prev, amount: e.target.value }))}
+              onChange={e => {
+                const v = e.target.value;
+                if (v !== "" && !/^-?\d*[.,]?\d*$/.test(v)) return;
+                setForm(prev => ({ ...prev, amount: v }));
+              }}
             />
             {selectedInvoice && invoiceOutstanding > 0 && (
               <button
                 type="button"
-                onClick={() => setForm(prev => ({ ...prev, amount: invoiceOutstanding.toFixed(2) }))}
+                onClick={() => setForm(prev => ({ ...prev, amount: formatDecimalForInput(invoiceOutstanding) }))}
                 className="text-xs text-primary hover:underline"
               >
                 Pagar valor em falta ({formatCurrency(invoiceOutstanding)})

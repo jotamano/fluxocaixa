@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DecimalInput } from "@/components/DecimalInput";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -146,13 +147,9 @@ export function EditClientDialog({ client, open, onOpenChange }: Props) {
             {form.has_iva && (
               <div className="space-y-2">
                 <Label className="text-sm">Percentagem de IVA (%)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step="0.01"
+                <DecimalInput
                   value={form.iva_percentage}
-                  onChange={e => setForm(prev => ({ ...prev, iva_percentage: Number(e.target.value) }))}
+                  onChange={v => setForm(prev => ({ ...prev, iva_percentage: v }))}
                 />
               </div>
             )}

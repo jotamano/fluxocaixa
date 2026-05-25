@@ -16,7 +16,8 @@ import {
   useSyncIva,
   useInvoices,
 } from "@/hooks/use-data";
-import { frequencyLabels, formatCurrency, frequencyDays, getClientLabel, getAmountWithIva, getEffectiveIvaPercentage, type SubscriptionFrequency, DEFAULT_HAS_IVA, DEFAULT_IVA_PERCENTAGE } from "@/lib/data";
+import { frequencyLabels, formatCurrency, frequencyDays, getClientLabel, getAmountWithIva, getEffectiveIvaPercentage, parseDecimal, formatDecimalForInput, type SubscriptionFrequency, DEFAULT_HAS_IVA, DEFAULT_IVA_PERCENTAGE } from "@/lib/data";
+import { DecimalInput } from "@/components/DecimalInput";
 import { summarizeSubscriptions } from "@/lib/stats";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -124,7 +125,7 @@ export default function Subscriptions() {
       clientId: subscription.client_id,
       name: subscription.name,
       serviceId: matchedService?.id || "",
-      amount: String(Number(subscription.amount)),
+      amount: formatDecimalForInput(subscription.amount),
       setupFee: "",
       frequency: subscription.frequency,
       nextBillingDate: subscription.next_billing_date,
@@ -200,7 +201,7 @@ export default function Subscriptions() {
           // every still-editable invoice in one shot.
           updates: {
             name: form.name,
-            amount: Number(form.amount),
+            amount: parseDecimal(form.amount),
             frequency: form.frequency,
             next_billing_date: form.nextBillingDate,
           },
@@ -247,11 +248,11 @@ export default function Subscriptions() {
         {
           client_id: form.clientId,
           name: form.name,
-          amount: Number(form.amount),
+          amount: parseDecimal(form.amount),
           frequency: form.frequency,
           next_billing_date: form.nextBillingDate,
           start_date: new Date().toISOString().split('T')[0],
-          setup_fee: form.setupFee ? Number(form.setupFee) : null,
+          setup_fee: form.setupFee ? parseDecimal(form.setupFee) : null,
           has_iva: form.has_iva,
           iva_percentage: form.has_iva ? Number(form.iva_percentage) || 0 : 0,
         },
@@ -286,15 +287,15 @@ export default function Subscriptions() {
                 {
                   description: `${form.name} — ${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`,
                   quantity: 1,
-                  unit_price: Number(form.amount),
+                  unit_price: parseDecimal(form.amount),
                   source_subscription_item_id: recurringSubItem?.id ?? null,
                 },
               ];
-              if (form.setupFee && Number(form.setupFee) > 0) {
+              if (form.setupFee && parseDecimal(form.setupFee) > 0) {
                 items.push({
                   description: `Setup ${form.name}`,
                   quantity: 1,
-                  unit_price: Number(form.setupFee),
+                  unit_price: parseDecimal(form.setupFee),
                   source_subscription_item_id: setupSubItem?.id ?? null,
                 });
               }
@@ -576,7 +577,7 @@ export default function Subscriptions() {
                       ...prev,
                       serviceId: value,
                       name: svc.name,
-                      amount: String(Number(svc.default_price)),
+                      amount: formatDecimalForInput(svc.default_price),
                     }));
                   }
                 }}>
@@ -608,7 +609,16 @@ export default function Subscriptions() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Mensalidade (€)</Label>
-                <Input type="number" min="0" step="0.01" value={form.amount} onChange={e => setForm(prev => ({ ...prev, amount: e.target.value }))} />
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={form.amount}
+                  onChange={e => {
+                    const v = e.target.value;
+                    if (v !== "" && !/^-?\d*[.,]?\d*$/.test(v)) return;
+                    setForm(prev => ({ ...prev, amount: v }));
+                  }}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Frequência</Label>
@@ -626,11 +636,14 @@ export default function Subscriptions() {
               <div className="space-y-2">
                 <Label>Setup fee (€) — opcional</Label>
                 <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={form.setupFee}
-                  onChange={e => setForm(prev => ({ ...prev, setupFee: e.target.value }))}
+                  onChange={e => {
+                    const v = e.target.value;
+                    if (v !== "" && !/^-?\d*[.,]?\d*$/.test(v)) return;
+                    setForm(prev => ({ ...prev, setupFee: v }));
+                  }}
                   placeholder="0,00"
                 />
                 <p className="text-xs text-muted-foreground">Cobrado uma única vez na primeira fatura.</p>
@@ -658,13 +671,9 @@ export default function Subscriptions() {
               {form.has_iva && (
                 <div className="space-y-2">
                   <Label className="text-sm">Percentagem de IVA (%)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="0.01"
+                  <DecimalInput
                     value={form.iva_percentage}
-                    onChange={e => { setForm(prev => ({ ...prev, iva_percentage: Number(e.target.value) })); setHasIvaTouched(true); }}
+                    onChange={v => { setForm(prev => ({ ...prev, iva_percentage: v })); setHasIvaTouched(true); }}
                   />
                 </div>
               )}
@@ -715,7 +724,7 @@ export default function Subscriptions() {
             ...prev,
             serviceId: svc.id,
             name: svc.name,
-            amount: String(Number(svc.default_price)),
+            amount: formatDecimalForInput(svc.default_price),
           }));
         }}
       />

@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAddService } from "@/hooks/use-data";
+import { parseDecimal } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -45,8 +46,8 @@ export function QuickCreateServiceDialog({ open, onOpenChange, onCreated, defaul
       toast({ title: "Nome obrigatório", variant: "destructive" });
       return;
     }
-    const price = Number(form.defaultPrice);
-    if (Number.isNaN(price) || price < 0) {
+    const price = parseDecimal(form.defaultPrice);
+    if (!Number.isFinite(price) || price < 0) {
       toast({ title: "Preço inválido", variant: "destructive" });
       return;
     }
@@ -81,11 +82,14 @@ export function QuickCreateServiceDialog({ open, onOpenChange, onCreated, defaul
           <div className="space-y-2">
             <Label>Preço base (€)</Label>
             <Input
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
               value={form.defaultPrice}
-              onChange={e => setForm(prev => ({ ...prev, defaultPrice: e.target.value }))}
+              onChange={e => {
+                const v = e.target.value;
+                if (v !== "" && !/^-?\d*[.,]?\d*$/.test(v)) return;
+                setForm(prev => ({ ...prev, defaultPrice: v }));
+              }}
             />
           </div>
           <Button onClick={handleAdd} className="w-full" disabled={addService.isPending}>

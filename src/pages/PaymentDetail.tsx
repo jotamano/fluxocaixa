@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useClients, useInvoices, usePayments, useDeletePayment, useUpdatePayment } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceTotalWithIva, getEffectiveIvaPercentage, methodLabels, type PaymentMethod } from "@/lib/data";
+import { formatCurrency, formatDecimalForInput, getInvoiceTotalWithIva, getEffectiveIvaPercentage, methodLabels, parseDecimal, type PaymentMethod } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 
 export default function PaymentDetail() {
@@ -57,7 +57,7 @@ export default function PaymentDetail() {
 
   const openEdit = () => {
     setEditForm({
-      amount: String(Number(payment.amount)),
+      amount: formatDecimalForInput(payment.amount),
       method: payment.method,
       date: payment.date,
       notes: payment.notes || '',
@@ -69,7 +69,7 @@ export default function PaymentDetail() {
     updatePayment.mutate({
       id: payment.id,
       updates: {
-        amount: parseFloat(editForm.amount),
+        amount: parseDecimal(editForm.amount),
         method: editForm.method,
         date: editForm.date,
         notes: editForm.notes || null,
@@ -142,7 +142,16 @@ export default function PaymentDetail() {
           <div className="space-y-4 pt-4">
             <div className="space-y-2">
               <Label>Valor (€)</Label>
-              <Input type="number" min="0" step="0.01" value={editForm.amount} onChange={e => setEditForm(p => ({ ...p, amount: e.target.value }))} />
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={editForm.amount}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (v !== "" && !/^-?\d*[.,]?\d*$/.test(v)) return;
+                  setEditForm(p => ({ ...p, amount: v }));
+                }}
+              />
             </div>
             <div className="space-y-2">
               <Label>Método</Label>

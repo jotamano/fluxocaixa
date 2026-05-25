@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, Mail, Phone, Building, Search, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DecimalInput } from "@/components/DecimalInput";
 import { useClients, useAddClient, useInvoices, useSubscriptions } from "@/hooks/use-data";
 import { DEFAULT_HAS_IVA, DEFAULT_IVA_PERCENTAGE, formatCurrency, getInvoiceTotalWithIva } from "@/lib/data";
 import { EditClientDialog } from "@/components/EditClientDialog";
@@ -100,13 +101,9 @@ export default function Clients() {
                 {form.has_iva && (
                   <div className="space-y-2">
                     <Label className="text-sm">Percentagem de IVA (%)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step="0.01"
+                    <DecimalInput
                       value={form.iva_percentage}
-                      onChange={e => setForm(prev => ({ ...prev, iva_percentage: Number(e.target.value) }))}
+                      onChange={v => setForm(prev => ({ ...prev, iva_percentage: v }))}
                     />
                   </div>
                 )}

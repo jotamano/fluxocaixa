@@ -16,7 +16,7 @@ import {
   useAllSubscriptionItems,
   type Service,
 } from "@/hooks/use-data";
-import { formatCurrency } from "@/lib/data";
+import { formatCurrency, formatDecimalForInput, parseDecimal } from "@/lib/data";
 import { computeServiceUsageStats } from "@/lib/stats";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
@@ -64,7 +64,7 @@ export default function Services() {
     setEditingId(id);
     setForm({
       name: s.name,
-      defaultPrice: String(Number(s.default_price)),
+      defaultPrice: formatDecimalForInput(s.default_price),
       active: s.active,
     });
     setDialogOpen(true);
@@ -73,7 +73,7 @@ export default function Services() {
   const handleSave = () => {
     if (editingId) {
       updateService.mutate(
-        { id: editingId, updates: { name: form.name, default_price: Number(form.defaultPrice), active: form.active } },
+        { id: editingId, updates: { name: form.name, default_price: parseDecimal(form.defaultPrice), active: form.active } },
         {
           onSuccess: () => { setDialogOpen(false); toast({ title: "Serviço atualizado!" }); },
           onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
@@ -81,7 +81,7 @@ export default function Services() {
       );
     } else {
       addService.mutate(
-        { name: form.name, default_price: Number(form.defaultPrice) },
+        { name: form.name, default_price: parseDecimal(form.defaultPrice) },
         {
           onSuccess: () => { setDialogOpen(false); toast({ title: "Serviço criado!" }); },
           onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
@@ -220,7 +220,17 @@ export default function Services() {
             </div>
             <div className="space-y-2">
               <Label>Preço Base (€)</Label>
-              <Input type="number" min="0" step="0.01" placeholder="0.00" value={form.defaultPrice} onChange={e => setForm(p => ({ ...p, defaultPrice: e.target.value }))} />
+              <Input
+                type="text"
+                inputMode="decimal"
+                placeholder="0,00"
+                value={form.defaultPrice}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (v !== "" && !/^-?\d*[.,]?\d*$/.test(v)) return;
+                  setForm(p => ({ ...p, defaultPrice: v }));
+                }}
+              />
             </div>
             {editingId && (
               <div className="flex items-center justify-between">
