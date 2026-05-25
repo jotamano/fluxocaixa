@@ -1528,17 +1528,55 @@ export function useUpdateSubscription() {
 
 export interface DeleteSubscriptionResult {
   subscriptionId: string;
-  cascadedInvoiceIds: string[]; // unpaid invoices that were soft-deleted
-  cascadedPaymentIds: string[]; // payments on those invoices that were soft-deleted
+  mode: DeleteSubscriptionMode;
+  cascadedInvoiceIds: string[]; // unpaid invoices that were soft-deleted (cascade mode)
+  cascadedPaymentIds: string[]; // payments on those invoices that were soft-deleted (cascade mode)
+  detachedInvoiceIds: string[]; // cron-generated invoices whose subscription_id was cleared (detach mode)
+  detachedInvoiceItemIds: string[]; // invoice_items whose source_subscription_item_id was cleared (detach mode)
+}
+
+// Two ways to delete a subscription:
+//   - "cascade" (default): soft-delete the sub and drag every unpaid
+//     linked invoice + their payments to /lixo (legacy behaviour).
+//   - "detach": soft-delete only the subscription, leaving every
+//     already-issued invoice intact. The link from invoice_items back
+//     to the subscription is broken so the lines stop looking
+//     "recurring" — they become regular one-off items on those
+//     invoices, and the cron stops generating new ones because the
+//     sub itself is now soft-deleted.
+export type DeleteSubscriptionMode = "cascade" | "detach";
+
+export interface DeleteSubscriptionInput {
+  id: string;
+  mode?: DeleteSubscriptionMode;
 }
 
 export function useDeleteSubscription() {
   const qc = useQueryClient();
-  return useMutation<DeleteSubscriptionResult, Error, string>({
-    mutationFn: async (id: string) => {
+  return useMutation<DeleteSubscriptionResult, Error, DeleteSubscriptionInput>({
+    mutationFn: async ({ id, mode = "cascade" }) => {
       const now = new Date().toISOString();
+      if (mode === "detach") {
+        const { detachedInvoiceIds, detachedInvoiceItemIds } =
+          await detachSubscriptionFromInvoices(id, now);
+        return {
+          subscriptionId: id,
+          mode,
+          cascadedInvoiceIds: [],
+          cascadedPaymentIds: [],
+          detachedInvoiceIds,
+          detachedInvoiceItemIds,
+        };
+      }
       const { invoiceIds, paymentIds } = await cascadeSoftDeleteSubscription(id, now);
-      return { subscriptionId: id, cascadedInvoiceIds: invoiceIds, cascadedPaymentIds: paymentIds };
+      return {
+        subscriptionId: id,
+        mode,
+        cascadedInvoiceIds: invoiceIds,
+        cascadedPaymentIds: paymentIds,
+        detachedInvoiceIds: [],
+        detachedInvoiceItemIds: [],
+      };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["subscriptions"] });
@@ -1546,6 +1584,77 @@ export function useDeleteSubscription() {
       qc.invalidateQueries({ queryKey: ["payments"] });
     },
   });
+}
+
+// "Detach" deletion: soft-delete the subscription itself but leave every
+// linked invoice in place. The link is broken on both sides so the
+// invoice rows stop pretending they came from a recurring subscription:
+//   - invoices.subscription_id (cron-generated children) is nulled.
+//   - invoice_items.source_subscription_item_id (set by NewInvoice and
+//     the cron generator) is nulled.
+// The source_invoice_id pointer on the subscription itself stays — it
+// only matters for the cascade restore path which we don't reach in this
+// mode.
+async function detachSubscriptionFromInvoices(
+  subscriptionId: string,
+  now: string,
+): Promise<{ detachedInvoiceIds: string[]; detachedInvoiceItemIds: string[] }> {
+  // 1. Cron-generated children: invoices.subscription_id = sub.id.
+  const { data: childInvoices, error: invSelErr } = await supabase
+    .from("invoices")
+    .select("id")
+    .eq("subscription_id", subscriptionId)
+    .is("deleted_at", null);
+  if (invSelErr) throw invSelErr;
+  const detachedInvoiceIds = (childInvoices ?? []).map(i => i.id as string);
+
+  if (detachedInvoiceIds.length > 0) {
+    const { error: invUpdErr } = await supabase
+      .from("invoices")
+      .update({ subscription_id: null })
+      .in("id", detachedInvoiceIds);
+    if (invUpdErr) throw invUpdErr;
+  }
+
+  // 2. invoice_items.source_subscription_item_id pointing at any of this
+  //    subscription's items. Covers both the spawning invoice (set by
+  //    NewInvoice) and the cron-generated children (set by
+  //    generate_subscription_invoices()).
+  const { data: subItems, error: subItErr } = await supabase
+    .from("subscription_items")
+    .select("id")
+    .eq("subscription_id", subscriptionId);
+  if (subItErr) throw subItErr;
+  const subItemIds = (subItems ?? []).map(si => si.id as string);
+
+  let detachedInvoiceItemIds: string[] = [];
+  if (subItemIds.length > 0) {
+    const { data: linkedInvoiceItems, error: invItSelErr } = await supabase
+      .from("invoice_items")
+      .select("id")
+      .in("source_subscription_item_id", subItemIds);
+    if (invItSelErr) throw invItSelErr;
+    detachedInvoiceItemIds = (linkedInvoiceItems ?? []).map(ii => ii.id as string);
+
+    if (detachedInvoiceItemIds.length > 0) {
+      const { error: invItUpdErr } = await supabase
+        .from("invoice_items")
+        .update({ source_subscription_item_id: null })
+        .in("id", detachedInvoiceItemIds);
+      if (invItUpdErr) throw invItUpdErr;
+    }
+  }
+
+  // 3. Finally soft-delete the subscription header. The cron filters on
+  //    `deleted_at is null` so this is what actually stops future
+  //    invoices from being generated.
+  const { error: subErr } = await supabase
+    .from("subscriptions")
+    .update({ deleted_at: now })
+    .eq("id", subscriptionId);
+  if (subErr) throw subErr;
+
+  return { detachedInvoiceIds, detachedInvoiceItemIds };
 }
 
 export function useRestoreSubscription() {

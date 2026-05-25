@@ -333,17 +333,27 @@ export default function Subscriptions() {
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = (mode: "cascade" | "detach") => {
     if (!deleteId) return;
-    deleteSub.mutate(deleteId, {
-      onSuccess: ({ cascadedInvoiceIds, cascadedPaymentIds }) => {
+    deleteSub.mutate({ id: deleteId, mode }, {
+      onSuccess: (result) => {
         setConfirmOpen(false);
         setDeleteId(null);
-        // Mirror InvoiceDetail's delete toast: report the actual
-        // cascade so the user knows what landed in /lixo.
+        if (result.mode === "detach") {
+          const detachedInv = result.detachedInvoiceIds.length;
+          toast({
+            title: "Subscrição anulada",
+            description: detachedInv > 0
+              ? `${detachedInv} fatura(s) mantidas; as linhas passam a pagamento único.`
+              : "As faturas associadas ficam como estão.",
+          });
+          return;
+        }
+        // cascade — mirror InvoiceDetail's delete toast: report the
+        // actual cascade so the user knows what landed in /lixo.
         const parts: string[] = [];
-        if (cascadedInvoiceIds.length > 0) parts.push(`${cascadedInvoiceIds.length} fatura(s) em aberto`);
-        if (cascadedPaymentIds.length > 0) parts.push(`${cascadedPaymentIds.length} pagamento(s)`);
+        if (result.cascadedInvoiceIds.length > 0) parts.push(`${result.cascadedInvoiceIds.length} fatura(s) em aberto`);
+        if (result.cascadedPaymentIds.length > 0) parts.push(`${result.cascadedPaymentIds.length} pagamento(s)`);
         toast({
           title: "Subscrição eliminada",
           description: parts.length > 0
@@ -684,7 +694,7 @@ export default function Subscriptions() {
         subscriptionId={confirmOpen ? deleteId : null}
         isPending={deleteSub.isPending}
         onCancel={() => { setConfirmOpen(false); setDeleteId(null); }}
-        onConfirm={handleDelete}
+        onConfirm={(mode) => handleDelete(mode)}
       />
 
       <QuickCreateClientDialog

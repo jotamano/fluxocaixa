@@ -34,6 +34,10 @@ const MONTHS_PT = [
 // "no manual override — let the dates / global default decide". We can't
 // use an empty string because shadcn's <SelectItem> rejects "" values.
 const FREQUENCY_AUTO = "__auto__";
+// Sentinel for the per-line frequency <Select> meaning "this line is a
+// one-off charge — do not spawn a subscription for it even when the
+// global Fatura recorrente toggle is on". Stored on FormItem.frequency.
+const FREQUENCY_NONE = "__none__";
 
 interface FormItem {
   id: string;
@@ -44,10 +48,12 @@ interface FormItem {
   startDate: string;
   endDate: string;
   // Per-line frequency for the recurring case. "" means "use the global
-  // fallback below". When the user enters a start+end range we auto-fill
-  // this with the inferred frequency, but they can still override by
-  // picking another value from the dropdown.
-  frequency: SubscriptionFrequency | "";
+  // fallback below". "none" opts this line out of subscription creation
+  // entirely (stays as a one-off charge on the invoice). When the user
+  // enters a start+end range we auto-fill the displayed frequency by
+  // inference, but they can still override by picking another value
+  // from the dropdown.
+  frequency: SubscriptionFrequency | "" | "none";
 }
 
 function getDefaultItem(): FormItem {
@@ -252,7 +258,10 @@ export default function NewInvoice() {
             line,
             invoiceItem: createdItems.find(it => it.position === idx) ?? null,
           }))
-          .filter(({ line }) => line.description && line.unitPrice > 0);
+          // Skip lines explicitly marked as one-off (frequency === "none")
+          // — those stay as regular invoice items and are NOT promoted
+          // to subscriptions, even though the global toggle is on.
+          .filter(({ line }) => line.description && line.unitPrice > 0 && line.frequency !== "none");
 
         const results = await Promise.allSettled(
           validLines.map(({ line, invoiceItem }) => {
@@ -260,9 +269,13 @@ export default function NewInvoice() {
             // inference from current dates → global fallback. Inference
             // is always re-run from the current (startDate, endDate) so
             // edits to the dates after picking flow through correctly,
-            // even if the dropdown was previously "auto".
+            // even if the dropdown was previously "auto". "none" is
+            // already filtered out above, but we still narrow it away
+            // here so TS treats line.frequency as a real frequency.
+            const explicitFrequency: SubscriptionFrequency | "" =
+              line.frequency === "none" ? "" : line.frequency;
             const lineFrequency: SubscriptionFrequency =
-              line.frequency ||
+              explicitFrequency ||
               inferFrequencyFromRange(line.startDate, line.endDate) ||
               recurringFrequency;
 
@@ -310,6 +323,13 @@ export default function NewInvoice() {
 
         const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
         const succeeded = results.length - failures.length;
+        // Lines the user opted out of (Frequência da subscrição → "Sem
+        // subscrição"). Counted from the original items list, before
+        // the validity filter, so we can mention them in the success
+        // toast.
+        const optedOutCount = items.filter(
+          (line) => line.description && line.unitPrice > 0 && line.frequency === "none",
+        ).length;
 
         if (failures.length > 0) {
           const firstErr = failures[0].reason as Error;
@@ -322,10 +342,22 @@ export default function NewInvoice() {
           // staying on the form would let the user re-submit and
           // create a duplicate invoice. From /faturas or /subscricoes
           // they can re-create just the missing subscriptions.
+        } else if (results.length === 0) {
+          // Toggle ligado mas todas as linhas marcadas como "Sem
+          // subscrição" → nada para criar; só avisar para o utilizador
+          // saber que não foi feito nenhum erro silencioso.
+          if (optedOutCount > 0) {
+            toast({
+              title: "Nenhuma subscrição criada",
+              description: "Todas as linhas estão marcadas como pagamento único.",
+            });
+          }
         } else {
           toast({
             title: succeeded === 1 ? "Subscrição criada!" : `${succeeded} subscrições criadas!`,
-            description: "Cada serviço fica como subscrição independente.",
+            description: optedOutCount > 0
+              ? `${optedOutCount} linha(s) ficaram como pagamento único.`
+              : "Cada serviço fica como subscrição independente.",
           });
         }
       }
@@ -676,23 +708,35 @@ function SortableInvoiceItem({ item, index, canRemove, services, showFrequency, 
         </div>
         {showFrequency && (() => {
           const inferred = inferFrequencyFromRange(item.startDate, item.endDate);
-          // Display order: manual override first; otherwise show what
-          // would actually be used at submit time (inferred from dates,
-          // or the FREQUENCY_AUTO sentinel meaning "fall back to global").
-          const displayValue = item.frequency || inferred || FREQUENCY_AUTO;
+          // Display order: explicit choice (including the "none" opt-out)
+          // first; otherwise show what would actually be used at submit
+          // time (inferred from dates, or the FREQUENCY_AUTO sentinel
+          // meaning "fall back to global").
+          const displayValue =
+            item.frequency === "none"
+              ? FREQUENCY_NONE
+              : item.frequency || inferred || FREQUENCY_AUTO;
+          const isOptedOut = item.frequency === "none";
           return (
             <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">Frequência da subscrição</Label>
               <Select
                 value={displayValue}
                 onValueChange={(v) =>
-                  onUpdate(index, 'frequency', v === FREQUENCY_AUTO ? "" : v)
+                  onUpdate(
+                    index,
+                    'frequency',
+                    v === FREQUENCY_AUTO ? "" : v === FREQUENCY_NONE ? "none" : v,
+                  )
                 }
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={FREQUENCY_NONE}>
+                    Sem subscrição (pagamento único)
+                  </SelectItem>
                   <SelectItem value={FREQUENCY_AUTO}>
                     Automática (datas / por defeito)
                   </SelectItem>
@@ -702,11 +746,13 @@ function SortableInvoiceItem({ item, index, canRemove, services, showFrequency, 
                 </SelectContent>
               </Select>
               <p className="text-[10px] text-muted-foreground">
-                {item.frequency
-                  ? "Frequência fixa para este item. Escolhe “Automática” para voltar a usar as datas / a frequência por defeito."
-                  : inferred
-                    ? `Inferida a partir das datas (${frequencyLabels[inferred].toLowerCase()}). Editar as datas re-calcula automaticamente.`
-                    : "Sem datas: usa a frequência por defeito definida acima."}
+                {isOptedOut
+                  ? "Este artigo fica como pagamento único — não cria subscrição mesmo com a fatura marcada como recorrente."
+                  : item.frequency
+                    ? "Frequência fixa para este item. Escolhe “Automática” para voltar a usar as datas / a frequência por defeito."
+                    : inferred
+                      ? `Inferida a partir das datas (${frequencyLabels[inferred].toLowerCase()}). Editar as datas re-calcula automaticamente.`
+                      : "Sem datas: usa a frequência por defeito definida acima."}
               </p>
             </div>
           );
