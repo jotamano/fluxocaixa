@@ -87,6 +87,45 @@ export function formatCurrency(value: number): string {
   return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
 }
 
+/**
+ * Parse a user-entered decimal string, accepting BOTH "," and "." as
+ * decimal separators. Falls back to 0 when the input cannot be parsed
+ * (empty string, lone separator, garbage). Numbers pass through.
+ *
+ * This is the canonical way to read any monetary / decimal value from
+ * an <input> in this codebase — never call `Number(...)` or
+ * `parseFloat(...)` directly on form values, because PT users
+ * frequently type "1234,56" (which `Number` returns NaN for) and we
+ * want to silently accept the comma alongside the dot.
+ */
+export function parseDecimal(value: string | number | null | undefined): number {
+  if (value === null || value === undefined || value === "") return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  // Drop thousand-separator spaces ("1 234,56") and normalize "," to "."
+  // before delegating to parseFloat. We intentionally do not try to
+  // distinguish "1.234,56" (PT thousand sep) from "1.234" (US) because
+  // the inputs never include thousand separators — only paste paths
+  // might, and Number() didn't support those either.
+  const normalized = value.replace(/\s/g, "").replace(",", ".");
+  const n = parseFloat(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Render a number for display inside a decimal text input. Uses comma
+ * as the decimal separator (PT convention). Returns "" for non-finite
+ * inputs so a freshly mounted "empty" field doesn't show "NaN".
+ *
+ * Counterpart of `parseDecimal`. Together they make `<DecimalInput>`
+ * round-trip cleanly regardless of which separator the user types.
+ */
+export function formatDecimalForInput(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "";
+  const n = typeof value === "number" ? value : parseDecimal(value);
+  if (!Number.isFinite(n)) return "";
+  return String(n).replace(".", ",");
+}
+
 export function getInvoiceItemsTotal(items: { quantity: number; unit_price: number }[]): number {
   return items.reduce((sum, item) => sum + item.quantity * Number(item.unit_price), 0);
 }

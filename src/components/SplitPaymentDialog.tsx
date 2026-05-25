@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAddPayment, useClients, usePayments, type Invoice } from "@/hooks/use-data";
-import { formatCurrency, getInvoiceTotalWithIva, getClientLabel } from "@/lib/data";
+import { formatCurrency, getInvoiceTotalWithIva, getClientLabel, parseDecimal } from "@/lib/data";
 import { toast } from "sonner";
 
 type PaymentMethod = "transfer" | "mbway" | "cash" | "card";
@@ -132,7 +132,7 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
   // oldest due_date first. Allocates against each invoice's remaining
   // balance so a partially-paid invoice gets only what's left.
   const distribution = useMemo(() => {
-    const amount = parseFloat(totalAmount) || 0;
+    const amount = parseDecimal(totalAmount);
     if (amount <= 0 || selectedInvoices.length === 0) return [];
 
     const sorted = [...selectedInvoices].sort(
@@ -148,7 +148,7 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
     }).filter(d => d.amount > 0);
   }, [totalAmount, selectedInvoices, invoiceRemaining]);
 
-  const enteredAmount = parseFloat(totalAmount) || 0;
+  const enteredAmount = parseDecimal(totalAmount);
   const allocatedAmount = distribution.reduce((sum, d) => sum + d.amount, 0);
   const leftover = Math.max(0, enteredAmount - allocatedAmount);
 
@@ -200,12 +200,15 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
             <div className="space-y-2">
               <Label>Valor total recebido (€)</Label>
               <Input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Ex: 1000.00"
+                type="text"
+                inputMode="decimal"
+                placeholder="Ex: 1000,00"
                 value={totalAmount}
-                onChange={e => setTotalAmount(e.target.value)}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (v !== "" && !/^-?\d*[.,]?\d*$/.test(v)) return;
+                  setTotalAmount(v);
+                }}
               />
             </div>
             <div className="space-y-2">
