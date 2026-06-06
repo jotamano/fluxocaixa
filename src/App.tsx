@@ -12,6 +12,7 @@ import Invoices from "@/pages/Invoices";
 import NewInvoice from "@/pages/NewInvoice";
 import Subscriptions from "@/pages/Subscriptions";
 import SubscriptionDetail from "@/pages/SubscriptionDetail";
+import ScheduledInvoices from "@/pages/ScheduledInvoices";
 import Services from "@/pages/Services";
 import ServiceDetail from "@/pages/ServiceDetail";
 import Payments from "@/pages/Payments";
@@ -52,6 +53,7 @@ const App = () => (
                 <Route path="/servicos/:id" element={<ServiceDetail />} />
                 <Route path="/subscricoes" element={<Subscriptions />} />
                 <Route path="/subscricoes/:id" element={<SubscriptionDetail />} />
+                <Route path="/faturas-agendadas" element={<ScheduledInvoices />} />
                 <Route path="/calendario" element={<CalendarPage />} />
                 <Route path="/lixo" element={<Trash />} />
                 <Route path="/membros" element={<Members />} />

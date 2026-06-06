@@ -2751,3 +2751,46 @@ export function useGenerateSubscriptionInvoices() {
     },
   });
 }
+
+// ─── One-click "gerar agora / antecipar" for a single subscription ───
+
+export function useGenerateInvoiceNow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (subscriptionId: string) => {
+      const { data, error } = await supabase.rpc("generate_subscription_invoice_now", {
+        p_subscription_id: subscriptionId,
+      });
+      if (error) throw error;
+      return data as string | null;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["subscription_items"] });
+    },
+  });
+}
+
+// ─── Status of the invoice-generation pg_cron job ───
+
+export interface CronInvoiceStatus {
+  schedule: string;
+  active: boolean;
+  last_run_started: string | null;
+  last_run_finished: string | null;
+  last_status: string | null;
+  last_message: string | null;
+}
+
+export function useCronInvoiceStatus() {
+  return useQuery({
+    queryKey: ["cron_invoice_status"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("cron_invoice_status");
+      if (error) throw error;
+      const rows = (data ?? []) as CronInvoiceStatus[];
+      return rows[0] ?? null;
+    },
+  });
+}

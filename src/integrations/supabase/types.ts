@@ -515,6 +515,21 @@ export type Database = {
         Args: Record<string, never>
         Returns: number
       }
+      generate_subscription_invoice_now: {
+        Args: { p_subscription_id: string }
+        Returns: string | null
+      }
+      cron_invoice_status: {
+        Args: Record<string, never>
+        Returns: {
+          schedule: string
+          active: boolean
+          last_run_started: string | null
+          last_run_finished: string | null
+          last_status: string | null
+          last_message: string | null
+        }[]
+      }
       next_invoice_number: {
         Args: { target_year: number }
         Returns: string
