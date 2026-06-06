@@ -24,7 +24,7 @@ ver [funcionalidades.md](./funcionalidades.md).
    │                │      Postgres + pg_cron      │  │
    │                │  - tabelas: clients, ...     │  │
    │                │  - audit_log + triggers      │  │
-   │                │  - generate_*  cron 03:30    │  │
+   │                │  - generate_*  cron hourly   │  │
    │                │  - purge_old_trash cron 04:00│  │
    │                └──────────────────────────────┘  │
    └──────────────────────────────────────────────────┘
@@ -117,7 +117,7 @@ order by version;
 | Versão | O que faz |
 | --- | --- |
 | `20260411094000_subscription_price_history.sql` | log de mudanças de preço por subscrição |
-| `20260411095000_generate_subscription_invoices_sql.sql` | função SQL + cron 03:30 para emitir faturas das subscrições |
+| `20260411095000_generate_subscription_invoices_sql.sql` | função SQL + cron para emitir faturas das subscrições |
 | `20260413120000_soft_delete.sql` | adiciona `deleted_at` + cascata em clientes |
 | `20260415100000_cascade_soft_delete.sql` | colunas `deleted_via_*` para restauros precisos |
 | `20260417100000_invoice_item_service_id.sql` | linhas de fatura podem ligar a `services` |
@@ -141,10 +141,18 @@ Jobs configurados:
 | jobname | schedule | função |
 | --- | --- | --- |
 | `reactivate-subscriptions` | `15 3 * * *` | `public.reactivate_paused_subscriptions()` |
-| `generate-subscription-invoices` | `30 3 * * *` | `public.generate_subscription_invoices()` |
+| `generate-subscription-invoices` | `30 * * * *` (de hora a hora) | `public.generate_subscription_invoices()` |
 | `purge-old-trash` | `0 4 * * *` | `public.purge_old_trash()` |
 
-Tudo em UTC. Para correr manualmente:
+Tudo em UTC. O `generate-subscription-invoices` corre **de hora a
+hora** (não só de madrugada): se a máquina estiver desligada à hora
+de um job, o próximo arranque apanha tudo o que ficou em atraso. A
+função emite **uma fatura por cada período em falta** numa única
+execução, por isso mesmo que o servidor fique dias/meses desligado,
+ao voltar a ligar gera todas as faturas em atraso de uma vez (e é
+idempotente — correr de novo no mesmo dia não duplica nada).
+
+Para correr manualmente:
 
 ```sql
 select public.generate_subscription_invoices();   -- emite as faturas pendentes

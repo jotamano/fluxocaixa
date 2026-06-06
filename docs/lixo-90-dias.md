@@ -96,9 +96,10 @@ select cron.schedule(
 ```
 
 **Diariamente às 04:00 UTC** (cerca das 05:00 em Portugal continental
-no inverno e 05:00 no verão CEST). Foi escolhido depois do cron de
-geração de faturas das subscrições (03:30 UTC) para os snapshots dos
-soft-deletes desse dia já estarem na auditoria antes de qualquer purga.
+no inverno e 05:00 no verão CEST). Foi escolhido depois do tick das
+03:30 do cron de geração de faturas das subscrições (que agora corre
+de hora a hora) para os snapshots dos soft-deletes desse dia já
+estarem na auditoria antes de qualquer purga.
 
 ### Para correr manualmente
 

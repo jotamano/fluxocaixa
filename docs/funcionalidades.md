@@ -196,8 +196,9 @@ ou eliminar (vai para o Lixo; restaurar repõe o pagamento).
 ## 5. Subscrições (`/subscricoes`)
 
 Cada subscrição é um contrato recorrente (ex.: "Gestão SEO mensal de
-350€"). A app emite faturas automaticamente todos os dias às 03:30 UTC
-(ver [operador.md](./operador.md) para alterar o horário).
+350€"). A app emite faturas automaticamente de hora a hora; se o
+servidor estiver desligado, ao voltar a ligar gera todas as faturas
+em atraso de uma vez (ver [operador.md](./operador.md) para detalhes).
 
 **Lista:** pesquisa + filtro por estado (Todas · Ativas · Pausadas ·
 Canceladas). Cada cartão mostra:
