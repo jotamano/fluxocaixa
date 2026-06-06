@@ -31,8 +31,10 @@ público-alvo:
   depois das imagens estarem puxadas.
 - Numeração fiscal: **`FT YYYY/NNN`** (ano/número sequencial), atribuída
   na primeira gravação de cada fatura.
-- Recorrência das subscrições: **diário às 03:30 UTC** o `pg_cron`
-  chama `generate_subscription_invoices()` e cria as faturas em aberto.
+- Recorrência das subscrições: **de hora a hora** o `pg_cron` chama
+  `generate_subscription_invoices()` e cria as faturas em aberto,
+  apanhando qualquer período em atraso caso o servidor tenha estado
+  desligado.
 - Limpeza do lixo: **diário às 04:00 UTC** o `pg_cron` chama
   `purge_old_trash()` e apaga em hard-delete tudo o que está no Lixo
   há mais de 90 dias. O histórico fica em `/auditoria` para sempre.
