@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, Download, Wallet, Trash2, Pencil, Plus, X, Copy } from "lucide-react";
+import { ArrowLeft, Download, Wallet, Trash2, Pencil, Plus, X, Copy, MessageCircle } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,7 @@ import { QuickCreateServiceDialog } from "@/components/QuickCreateServiceDialog"
 import { EditHistoryPanel } from "@/components/EditHistoryPanel";
 import { EditClientDialog } from "@/components/EditClientDialog";
 import type { Subscription } from "@/hooks/use-data";
-import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions, useClientSubscriptionItems, useSyncIva, useClients } from "@/hooks/use-data";
+import { useInvoices, usePayments, useDeleteInvoice, useUpdateInvoice, useUpdateInvoiceItems, useActiveServices, useDuplicateInvoice, useSubscriptions, useClientSubscriptionItems, useSyncIva, useClients, useSendInvoiceWhatsApp } from "@/hooks/use-data";
 import { formatCurrency, getInvoiceItemsTotal, getClientLabel, formatInvoiceItemPeriod, methodLabels, frequencyLabels, type SubscriptionFrequency, DEFAULT_HAS_IVA, DEFAULT_IVA_PERCENTAGE, getEffectiveIvaPercentage, getInvoiceIvaAmount, getInvoiceTotalWithIva } from "@/lib/data";
 import { generateInvoicePDF } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
@@ -75,6 +75,7 @@ export default function InvoiceDetail() {
   const updateItems = useUpdateInvoiceItems();
   const duplicateInvoice = useDuplicateInvoice();
   const syncIva = useSyncIva();
+  const sendWhatsApp = useSendInvoiceWhatsApp();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -457,6 +458,27 @@ export default function InvoiceDetail() {
           </Button>
           <Button variant="outline" className="gap-2" onClick={() => invoice.clients && generateInvoicePDF(invoice, invoice.clients)} disabled={!invoice.clients}>
             <Download className="h-4 w-4" /> PDF
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            disabled={sendWhatsApp.isPending}
+            onClick={() =>
+              sendWhatsApp.mutate(invoice.id, {
+                onSuccess: (status) => {
+                  const queued = status.startsWith("Envio enfileirado");
+                  toast({
+                    title: queued ? "WhatsApp" : "WhatsApp — nada enviado",
+                    description: status,
+                    variant: queued ? undefined : "destructive",
+                  });
+                },
+                onError: (err) =>
+                  toast({ title: "Erro a enviar WhatsApp", description: err.message, variant: "destructive" }),
+              })
+            }
+          >
+            <MessageCircle className="h-4 w-4" /> {sendWhatsApp.isPending ? "A enviar…" : "WhatsApp"}
           </Button>
           {outstanding > 0 && (
             <Button className="gap-2" onClick={() => setPaymentDialogOpen(true)}>
