@@ -1,6 +1,8 @@
+import { useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { sendInvoiceToHub } from "@/lib/whatsapp";
 
 export type Client = Tables<"clients">;
 export type Invoice = Tables<"invoices"> & { invoice_items: InvoiceItem[]; clients?: Client };
@@ -66,20 +68,76 @@ export function useUpdateAppSettings() {
   });
 }
 
-// Manual one-click "Enviar por WhatsApp" for a single invoice. Calls the
-// SECURITY DEFINER RPC which builds the message and enqueues the send via
-// pg_net (the request leaves Postgres, not the browser — no CORS / mixed
-// content). Returns the human-readable status string for a toast.
+// Manual one-click "Enviar por WhatsApp" for a single invoice. Sends from
+// the BROWSER straight to the hub (the Postgres container can't reach the
+// hub across docker networks, so the old pg_net path was dropped). On
+// success it stamps invoices.whatsapp_sent_at so the "por enviar" badge
+// clears. Takes the full invoice (with its `clients` + `invoice_items`)
+// so the message template can be rendered client-side.
 export function useSendInvoiceWhatsApp() {
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (invoiceId: string) => {
-      const { data, error } = await supabase.rpc("send_invoice_whatsapp", {
-        p_invoice_id: invoiceId,
-      });
+    mutationFn: async (invoice: Invoice) => {
+      const { data: settings, error } = await supabase
+        .from("app_settings")
+        .select("*")
+        .eq("id", 1)
+        .maybeSingle();
       if (error) throw error;
-      return data as string;
+      await sendInvoiceToHub((settings ?? null) as AppSettings | null, invoice);
+      const { error: markErr } = await supabase.rpc("mark_invoice_whatsapp_sent", {
+        p_invoice_id: invoice.id,
+      });
+      if (markErr) throw markErr;
     },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
   });
+}
+
+// Browser-side "auto-send": the cron can no longer reach the hub, so instead
+// every invoice is created with whatsapp_sent_at = NULL and, whenever the app
+// is open AND auto-send is enabled, this hook sends the eligible unsent
+// invoices (client has a group JID) and marks them. Each invoice is attempted
+// at most once per session to avoid a retry loop when the hub is unreachable;
+// failures stay unsent (badge remains) for the manual button / next open.
+// Mount once in the app layout.
+export function useWhatsAppAutoSend() {
+  const qc = useQueryClient();
+  const { data: settings } = useAppSettings();
+  const { data: invoices = [] } = useInvoices();
+  const attempted = useRef<Set<string>>(new Set());
+  const running = useRef(false);
+
+  useEffect(() => {
+    if (running.current) return;
+    if (!settings || settings.whatsapp_enabled !== true || settings.whatsapp_auto_send !== true) return;
+
+    const pending = invoices.filter(
+      inv =>
+        !inv.whatsapp_sent_at &&
+        !!inv.clients?.whatsapp_group_jid?.trim() &&
+        !attempted.current.has(inv.id),
+    );
+    if (pending.length === 0) return;
+
+    running.current = true;
+    void (async () => {
+      let sentAny = false;
+      for (const inv of pending) {
+        attempted.current.add(inv.id);
+        try {
+          await sendInvoiceToHub(settings, inv);
+          await supabase.rpc("mark_invoice_whatsapp_sent", { p_invoice_id: inv.id });
+          sentAny = true;
+        } catch {
+          // Swallow: config issues / hub unreachable. Stays unsent (badge
+          // remains) and can be retried manually or next time the app opens.
+        }
+      }
+      running.current = false;
+      if (sentAny) qc.invalidateQueries({ queryKey: ["invoices"] });
+    })();
+  }, [settings, invoices, qc]);
 }
 
 // A single WhatsApp group as returned by the hub's GET /v1/groups.

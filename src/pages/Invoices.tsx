@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { FileText, Search, Download, CheckCircle2, Trash2, X } from "lucide-react";
+import { FileText, Search, Download, CheckCircle2, Trash2, X, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -352,7 +352,17 @@ export default function Invoices() {
                       aria-label={`Selecionar fatura ${invoice.number}`}
                     />
                   </td>
-                  <td className="px-4 py-4 text-sm font-medium text-card-foreground">{invoice.number}</td>
+                  <td className="px-4 py-4 text-sm font-medium text-card-foreground">
+                    <span className="inline-flex items-center gap-1.5">
+                      {invoice.number}
+                      {!invoice.whatsapp_sent_at && invoice.clients?.whatsapp_group_jid?.trim() && (
+                        <MessageCircle
+                          className="h-3.5 w-3.5 text-amber-500"
+                          aria-label="WhatsApp por enviar"
+                        />
+                      )}
+                    </span>
+                  </td>
                   <td className="px-4 py-4">
                     <p className="text-sm font-medium text-card-foreground">{getClientLabel(invoice)}</p>
                     {invoice.clients?.name && invoice.clients?.company

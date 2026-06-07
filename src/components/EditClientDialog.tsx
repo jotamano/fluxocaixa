@@ -147,7 +147,9 @@ export function EditClientDialog({ client, open, onOpenChange }: Props) {
   };
 
   const isPending = updateClient.isPending || syncIva.isPending;
-  const canSave = !!form.name.trim() && !!form.email.trim() && !!form.company.trim();
+  // Only the name is required — email, company, phone and NIF are optional
+  // (matches the client-creation forms, which already require only a name).
+  const canSave = !!form.name.trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -170,7 +172,12 @@ export function EditClientDialog({ client, open, onOpenChange }: Props) {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {FIELDS.map(field => (
                 <div key={field.key} className={`space-y-2 ${field.full ? "sm:col-span-2" : ""}`}>
-                  <Label>{field.label}</Label>
+                  <Label>
+                    {field.label}
+                    {field.key !== "name" && (
+                      <span className="ml-1 text-xs font-normal text-muted-foreground">(opcional)</span>
+                    )}
+                  </Label>
                   <Input
                     type={field.type ?? "text"}
                     placeholder={field.placeholder}

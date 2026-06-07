@@ -213,6 +213,7 @@ export type Database = {
           number: string
           status: Database["public"]["Enums"]["invoice_status"]
           subscription_id: string | null
+          whatsapp_sent_at: string | null
         }
         Insert: {
           client_id: string
@@ -228,6 +229,7 @@ export type Database = {
           number: string
           status?: Database["public"]["Enums"]["invoice_status"]
           subscription_id?: string | null
+          whatsapp_sent_at?: string | null
         }
         Update: {
           client_id?: string
@@ -243,6 +245,7 @@ export type Database = {
           number?: string
           status?: Database["public"]["Enums"]["invoice_status"]
           subscription_id?: string | null
+          whatsapp_sent_at?: string | null
         }
         Relationships: [
           {
@@ -540,9 +543,9 @@ export type Database = {
         Args: { p_subscription_id: string }
         Returns: string | null
       }
-      send_invoice_whatsapp: {
-        Args: { p_invoice_id: string }
-        Returns: string
+      mark_invoice_whatsapp_sent: {
+        Args: { p_invoice_id: string; p_sent?: string }
+        Returns: string | null
       }
       cron_invoice_status: {
         Args: Record<string, never>
