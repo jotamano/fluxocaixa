@@ -82,6 +82,62 @@ export function useSendInvoiceWhatsApp() {
   });
 }
 
+// A single WhatsApp group as returned by the hub's GET /v1/groups.
+export interface WhatsAppGroup {
+  jid: string;
+  name: string | null;
+  participantCount: number;
+  avatarUrl: string | null;
+}
+
+// Fetches the list of WhatsApp groups for the configured instance directly
+// from the hub (GET /v1/groups). Unlike the invoice send — which goes
+// through Postgres/pg_net to avoid leaking the API key — this is a harmless
+// read used only to populate a picker, so it runs from the browser using
+// the same config the user already sees in Settings. The hub URL must be
+// reachable from the browser (use the public URL, not an internal one).
+export function useFetchWhatsAppGroups() {
+  return useMutation<WhatsAppGroup[], Error, void>({
+    mutationFn: async () => {
+      const { data: settings, error } = await supabase
+        .from("app_settings")
+        .select("whatsapp_hub_url, whatsapp_api_key, whatsapp_instance")
+        .eq("id", 1)
+        .maybeSingle();
+      if (error) throw error;
+      const hubUrl = settings?.whatsapp_hub_url?.trim();
+      const apiKey = settings?.whatsapp_api_key?.trim();
+      const instance = settings?.whatsapp_instance?.trim();
+      if (!hubUrl || !apiKey || !instance) {
+        throw new Error(
+          "Configura primeiro o WhatsApp em Configurações (URL do hub, API key e instância).",
+        );
+      }
+
+      const url = `${hubUrl.replace(/\/+$/, "")}/v1/groups?instanceName=${encodeURIComponent(instance)}`;
+      let res: Response;
+      try {
+        res = await fetch(url, { headers: { "x-api-key": apiKey } });
+      } catch {
+        throw new Error(
+          "Não consegui contactar o WhatsApp Hub a partir do browser. Confirma que a URL é acessível publicamente (não uma URL interna).",
+        );
+      }
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          throw new Error("API key inválida ou sem permissão (scope groups:read) no WhatsApp Hub.");
+        }
+        if (res.status === 404) {
+          throw new Error("Instância não encontrada no WhatsApp Hub, ou o hub ainda não suporta /v1/groups.");
+        }
+        throw new Error(`O WhatsApp Hub respondeu com erro ${res.status}.`);
+      }
+      const body = (await res.json()) as { items?: WhatsAppGroup[] };
+      return body.items ?? [];
+    },
+  });
+}
+
 // ─── Services ───
 
 export function useServices() {
