@@ -222,9 +222,10 @@ export default function Settings() {
           </CardTitle>
           <CardDescription>
             Envia as faturas para um grupo de WhatsApp por cliente, através do teu
-            WhatsApp Hub (Evolution). O envio sai do servidor de faturação, por isso
-            funciona mesmo com a app fechada. O grupo de cada cliente define-se na ficha
-            do cliente (campo <strong>Grupo WhatsApp (JID)</strong>).
+            WhatsApp Hub (Evolution). O envio é feito a partir do <strong>browser</strong>
+            (com a app aberta), por isso a URL do hub tem de ser acessível pelo teu
+            navegador. O grupo de cada cliente define-se na ficha do cliente (campo{" "}
+            <strong>Grupo WhatsApp (JID)</strong>).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 max-w-xl">
@@ -246,15 +247,16 @@ export default function Settings() {
             <Label htmlFor="wa-url">URL do WhatsApp Hub</Label>
             <Input
               id="wa-url"
-              placeholder="http://whatsapp-hub-api:3000"
+              placeholder="https://hub.exemplo.pt"
               value={wa.hub_url}
               onChange={e => setWa(prev => ({ ...prev, hub_url: e.target.value }))}
               disabled={isLoading || updateMutation.isPending}
             />
             <p className="text-xs text-muted-foreground">
-              Base da API pública do hub (sem <code>/v1/messages</code>). No mesmo Coolify usa
-              o nome interno do serviço (ex.: <code>http://whatsapp-hub-api:3000</code>); de fora,
-              o URL público <code>https://hub.exemplo.pt</code>.
+              Base da API pública do hub (sem <code>/v1/messages</code>). Como o envio sai do
+              browser, usa a URL <strong>pública/acessível pelo navegador</strong> (ex.:{" "}
+              <code>https://hub.exemplo.pt</code> ou <code>http://192.168.2.46:3010</code>) —
+              <strong> não</strong> o nome interno do serviço no Coolify.
             </p>
           </div>
 
@@ -305,11 +307,12 @@ export default function Settings() {
 
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
             <div>
-              <Label className="text-sm">Auto-envio ao gerar fatura</Label>
+              <Label className="text-sm">Auto-envio das faturas por enviar</Label>
               <p className="text-xs text-muted-foreground">
-                Envia automaticamente (só texto) sempre que uma fatura é gerada a partir de uma
-                subscrição — incluindo pelo agendador automático. O PDF continua disponível pelo
-                botão na fatura.
+                Sempre que abres a app, envia automaticamente (só texto) as faturas ainda{" "}
+                <strong>por enviar</strong> dos clientes com grupo definido. As faturas geradas
+                pelo agendador ficam marcadas com o aviso <em>“WhatsApp por enviar”</em> até serem
+                enviadas (aqui automaticamente, ou no botão da fatura).
               </p>
             </div>
             <Switch

@@ -2,10 +2,13 @@ import { Outlet } from "react-router-dom";
 import { AppSidebar, SidebarProvider, MobileMenuTrigger, useSidebarState } from "./AppSidebar";
 import { GlobalSearch } from "./GlobalSearch";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useWhatsAppAutoSend } from "@/hooks/use-data";
 
 function LayoutInner() {
   const isMobile = useIsMobile();
   const { collapsed } = useSidebarState();
+  // Browser-side auto-send of pending WhatsApp invoices (no-op unless enabled).
+  useWhatsAppAutoSend();
 
   return (
     <div className="min-h-screen bg-background">

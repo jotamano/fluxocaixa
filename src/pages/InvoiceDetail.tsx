@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { DeleteInvoiceDialog } from "@/components/DeleteInvoiceDialog";
@@ -399,6 +400,11 @@ export default function InvoiceDetail() {
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="font-display text-3xl font-bold text-foreground">{invoice.number}</h1>
               <StatusBadge status={effectiveStatus} />
+              {!invoice.whatsapp_sent_at && invoice.clients?.whatsapp_group_jid?.trim() && (
+                <Badge variant="outline" className="gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400">
+                  <MessageCircle className="h-3 w-3" /> WhatsApp por enviar
+                </Badge>
+              )}
             </div>
             <p className="mt-1 flex items-center gap-1 text-muted-foreground">
               <span>
@@ -464,21 +470,16 @@ export default function InvoiceDetail() {
             className="gap-2"
             disabled={sendWhatsApp.isPending}
             onClick={() =>
-              sendWhatsApp.mutate(invoice.id, {
-                onSuccess: (status) => {
-                  const queued = status.startsWith("Envio enfileirado");
-                  toast({
-                    title: queued ? "WhatsApp" : "WhatsApp — nada enviado",
-                    description: status,
-                    variant: queued ? undefined : "destructive",
-                  });
-                },
+              sendWhatsApp.mutate(invoice, {
+                onSuccess: () =>
+                  toast({ title: "WhatsApp enviado", description: "A fatura foi enviada para o grupo do cliente." }),
                 onError: (err) =>
-                  toast({ title: "Erro a enviar WhatsApp", description: err.message, variant: "destructive" }),
+                  toast({ title: "WhatsApp — não enviado", description: err.message, variant: "destructive" }),
               })
             }
           >
-            <MessageCircle className="h-4 w-4" /> {sendWhatsApp.isPending ? "A enviar…" : "WhatsApp"}
+            <MessageCircle className="h-4 w-4" />{" "}
+            {sendWhatsApp.isPending ? "A enviar…" : invoice.whatsapp_sent_at ? "Reenviar WhatsApp" : "WhatsApp"}
           </Button>
           {outstanding > 0 && (
             <Button className="gap-2" onClick={() => setPaymentDialogOpen(true)}>
