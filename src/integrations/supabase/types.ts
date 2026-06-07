@@ -18,18 +18,36 @@ export type Database = {
         Row: {
           id: number
           billing_anchor_offset_days: number
+          whatsapp_enabled: boolean
+          whatsapp_hub_url: string | null
+          whatsapp_api_key: string | null
+          whatsapp_instance: string | null
+          whatsapp_auto_send: boolean
+          whatsapp_message_template: string
           updated_at: string
           updated_by: string | null
         }
         Insert: {
           id?: number
           billing_anchor_offset_days?: number
+          whatsapp_enabled?: boolean
+          whatsapp_hub_url?: string | null
+          whatsapp_api_key?: string | null
+          whatsapp_instance?: string | null
+          whatsapp_auto_send?: boolean
+          whatsapp_message_template?: string
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
           id?: number
           billing_anchor_offset_days?: number
+          whatsapp_enabled?: boolean
+          whatsapp_hub_url?: string | null
+          whatsapp_api_key?: string | null
+          whatsapp_instance?: string | null
+          whatsapp_auto_send?: boolean
+          whatsapp_message_template?: string
           updated_at?: string
           updated_by?: string | null
         }
@@ -83,6 +101,7 @@ export type Database = {
           name: string
           nif: string
           phone: string
+          whatsapp_group_jid: string | null
         }
         Insert: {
           company: string
@@ -95,6 +114,7 @@ export type Database = {
           name: string
           nif?: string
           phone?: string
+          whatsapp_group_jid?: string | null
         }
         Update: {
           company?: string
@@ -107,6 +127,7 @@ export type Database = {
           name?: string
           nif?: string
           phone?: string
+          whatsapp_group_jid?: string | null
         }
         Relationships: []
       }
@@ -518,6 +539,10 @@ export type Database = {
       generate_subscription_invoice_now: {
         Args: { p_subscription_id: string }
         Returns: string | null
+      }
+      send_invoice_whatsapp: {
+        Args: { p_invoice_id: string }
+        Returns: string
       }
       cron_invoice_status: {
         Args: Record<string, never>

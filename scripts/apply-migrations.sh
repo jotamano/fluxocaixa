@@ -143,3 +143,14 @@ if [[ $pending -eq 0 ]]; then
 else
   echo "Applied $applied migration(s)."
 fi
+
+# 4. Tell PostgREST to reload its schema cache so any new functions, tables
+#    or columns become visible to the REST API immediately. Without this,
+#    freshly added RPCs (e.g. generate_subscription_invoice_now) keep
+#    returning "Could not find the function ... in the schema cache" until
+#    the rest service is restarted. NOTIFY is harmless when nothing changed.
+echo
+echo "Reloading PostgREST schema cache (notify pgrst, 'reload schema')…"
+run_sql -c "notify pgrst, 'reload schema';" >/dev/null \
+  && echo "PostgREST schema cache reload signalled." \
+  || echo "WARNING: could not signal PostgREST reload (is the db reachable?)." >&2

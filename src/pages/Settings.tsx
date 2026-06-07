@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Settings as SettingsIcon, MessageCircle, CalendarClock, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   DEFAULT_BILLING_ANCHOR_OFFSET_DAYS,
@@ -33,6 +36,9 @@ function explainOffset(offset: number): string {
   return `A próxima fatura é emitida ${Math.abs(offset)} dia(s) antes do fim do serviço.`;
 }
 
+const DEFAULT_WA_TEMPLATE =
+  "Olá {cliente}! 👋\n\nFoi emitida a fatura {numero} no valor de {valor}, com vencimento a {vencimento}.\n\nObrigado!";
+
 export default function Settings() {
   const { toast } = useToast();
   const { data: settings, isLoading, error } = useAppSettings();
@@ -56,6 +62,48 @@ export default function Settings() {
     Number.isFinite(parsed) && parsed >= OFFSET_MIN && parsed <= OFFSET_MAX;
   const dirty = settings ? parsed !== settings.billing_anchor_offset_days : true;
   const previewOffset = isValid ? parsed : DEFAULT_BILLING_ANCHOR_OFFSET_DAYS;
+
+  // ── WhatsApp / Evolution hub config ──────────────────────────────
+  const [wa, setWa] = useState({
+    enabled: false,
+    hub_url: "",
+    api_key: "",
+    instance: "",
+    auto_send: false,
+    template: DEFAULT_WA_TEMPLATE,
+  });
+
+  useEffect(() => {
+    if (!settings) return;
+    setWa({
+      enabled: settings.whatsapp_enabled ?? false,
+      hub_url: settings.whatsapp_hub_url ?? "",
+      api_key: settings.whatsapp_api_key ?? "",
+      instance: settings.whatsapp_instance ?? "",
+      auto_send: settings.whatsapp_auto_send ?? false,
+      template: settings.whatsapp_message_template ?? DEFAULT_WA_TEMPLATE,
+    });
+  }, [settings]);
+
+  const handleSaveWhatsApp = async () => {
+    try {
+      await updateMutation.mutateAsync({
+        whatsapp_enabled: wa.enabled,
+        whatsapp_hub_url: wa.hub_url.trim() || null,
+        whatsapp_api_key: wa.api_key.trim() || null,
+        whatsapp_instance: wa.instance.trim() || null,
+        whatsapp_auto_send: wa.auto_send,
+        whatsapp_message_template: wa.template,
+      });
+      toast({ title: "WhatsApp guardado", description: "A configuração de envio foi atualizada." });
+    } catch (err) {
+      toast({
+        title: "Erro a guardar",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -163,6 +211,137 @@ export default function Settings() {
               )}
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* WhatsApp / Evolution hub */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageCircle className="h-5 w-5" /> Envio por WhatsApp
+          </CardTitle>
+          <CardDescription>
+            Envia as faturas para um grupo de WhatsApp por cliente, através do teu
+            WhatsApp Hub (Evolution). O envio sai do servidor de faturação, por isso
+            funciona mesmo com a app fechada. O grupo de cada cliente define-se na ficha
+            do cliente (campo <strong>Grupo WhatsApp (JID)</strong>).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 max-w-xl">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+            <div>
+              <Label className="text-sm">Ativar envio por WhatsApp</Label>
+              <p className="text-xs text-muted-foreground">
+                Liga a integração. Sem isto, o botão e o auto-envio ficam inativos.
+              </p>
+            </div>
+            <Switch
+              checked={wa.enabled}
+              onCheckedChange={v => setWa(prev => ({ ...prev, enabled: v }))}
+              disabled={isLoading || updateMutation.isPending}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="wa-url">URL do WhatsApp Hub</Label>
+            <Input
+              id="wa-url"
+              placeholder="http://whatsapp-hub-api:3000"
+              value={wa.hub_url}
+              onChange={e => setWa(prev => ({ ...prev, hub_url: e.target.value }))}
+              disabled={isLoading || updateMutation.isPending}
+            />
+            <p className="text-xs text-muted-foreground">
+              Base da API pública do hub (sem <code>/v1/messages</code>). No mesmo Coolify usa
+              o nome interno do serviço (ex.: <code>http://whatsapp-hub-api:3000</code>); de fora,
+              o URL público <code>https://hub.exemplo.pt</code>.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="wa-key">API key</Label>
+            <Input
+              id="wa-key"
+              type="password"
+              placeholder="whk_..."
+              value={wa.api_key}
+              onChange={e => setWa(prev => ({ ...prev, api_key: e.target.value }))}
+              disabled={isLoading || updateMutation.isPending}
+            />
+            <p className="text-xs text-muted-foreground">
+              Chave da API pública do hub (cabeçalho <code>x-api-key</code>), começa por <code>whk_</code>.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="wa-instance">Instância</Label>
+            <Input
+              id="wa-instance"
+              placeholder="principal"
+              value={wa.instance}
+              onChange={e => setWa(prev => ({ ...prev, instance: e.target.value }))}
+              disabled={isLoading || updateMutation.isPending}
+            />
+            <p className="text-xs text-muted-foreground">
+              Nome da instância (número) configurada no hub que vai enviar as mensagens.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="wa-template">Mensagem</Label>
+            <Textarea
+              id="wa-template"
+              rows={5}
+              value={wa.template}
+              onChange={e => setWa(prev => ({ ...prev, template: e.target.value }))}
+              disabled={isLoading || updateMutation.isPending}
+            />
+            <p className="text-xs text-muted-foreground">
+              Variáveis disponíveis: <code>{"{cliente}"}</code>, <code>{"{empresa}"}</code>,{" "}
+              <code>{"{nome}"}</code>, <code>{"{numero}"}</code>, <code>{"{valor}"}</code>,{" "}
+              <code>{"{vencimento}"}</code>, <code>{"{emissao}"}</code>.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+            <div>
+              <Label className="text-sm">Auto-envio ao gerar fatura</Label>
+              <p className="text-xs text-muted-foreground">
+                Envia automaticamente (só texto) sempre que uma fatura é gerada a partir de uma
+                subscrição — incluindo pelo agendador automático. O PDF continua disponível pelo
+                botão na fatura.
+              </p>
+            </div>
+            <Switch
+              checked={wa.auto_send}
+              onCheckedChange={v => setWa(prev => ({ ...prev, auto_send: v }))}
+              disabled={isLoading || updateMutation.isPending}
+            />
+          </div>
+
+          <Button onClick={handleSaveWhatsApp} disabled={isLoading || updateMutation.isPending}>
+            {updateMutation.isPending ? "A guardar…" : "Guardar WhatsApp"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Shortcut to the scheduled-invoices operational page */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarClock className="h-5 w-5" /> Faturas agendadas
+          </CardTitle>
+          <CardDescription>
+            Vê as próximas faturas que o agendador vai gerar, antecipa ou regenera qualquer uma,
+            e confirma o estado da última execução automática.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild variant="outline" className="gap-2">
+            <Link to="/faturas-agendadas">
+              Abrir faturas agendadas <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </div>

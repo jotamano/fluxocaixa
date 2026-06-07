@@ -46,6 +46,7 @@ export function EditClientDialog({ client, open, onOpenChange }: Props) {
     company: "",
     phone: "",
     nif: "",
+    whatsapp_group_jid: "",
     has_iva: DEFAULT_HAS_IVA,
     iva_percentage: DEFAULT_IVA_PERCENTAGE as number,
   });
@@ -62,6 +63,7 @@ export function EditClientDialog({ client, open, onOpenChange }: Props) {
       company: client.company,
       phone: client.phone || "",
       nif: client.nif || "",
+      whatsapp_group_jid: client.whatsapp_group_jid || "",
       has_iva: client.has_iva ?? DEFAULT_HAS_IVA,
       iva_percentage: Number(client.iva_percentage ?? DEFAULT_IVA_PERCENTAGE),
     });
@@ -79,6 +81,7 @@ export function EditClientDialog({ client, open, onOpenChange }: Props) {
           company: form.company,
           phone: form.phone,
           nif: form.nif,
+          whatsapp_group_jid: form.whatsapp_group_jid.trim() || null,
         },
       },
       {
@@ -133,6 +136,19 @@ export function EditClientDialog({ client, open, onOpenChange }: Props) {
               />
             </div>
           ))}
+          <div className="space-y-2">
+            <Label>Grupo WhatsApp (JID)</Label>
+            <Input
+              placeholder="120363xxxxxxxxxxxx@g.us"
+              value={form.whatsapp_group_jid}
+              onChange={e => setForm(prev => ({ ...prev, whatsapp_group_jid: e.target.value }))}
+            />
+            <p className="text-xs text-muted-foreground">
+              Destino dos envios de faturas por WhatsApp para este cliente. Cola o
+              <strong> JID do grupo</strong> (termina em <code>@g.us</code>) — copia-o no WhatsApp Hub.
+              Também aceita um número de telemóvel para envio individual. Deixa vazio para não enviar.
+            </p>
+          </div>
           <div className="rounded-lg border border-border p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>

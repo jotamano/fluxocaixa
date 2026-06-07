@@ -66,6 +66,22 @@ export function useUpdateAppSettings() {
   });
 }
 
+// Manual one-click "Enviar por WhatsApp" for a single invoice. Calls the
+// SECURITY DEFINER RPC which builds the message and enqueues the send via
+// pg_net (the request leaves Postgres, not the browser — no CORS / mixed
+// content). Returns the human-readable status string for a toast.
+export function useSendInvoiceWhatsApp() {
+  return useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const { data, error } = await supabase.rpc("send_invoice_whatsapp", {
+        p_invoice_id: invoiceId,
+      });
+      if (error) throw error;
+      return data as string;
+    },
+  });
+}
+
 // ─── Services ───
 
 export function useServices() {
