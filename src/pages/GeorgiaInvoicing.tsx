@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useInvoices } from '@/hooks/use-data';
+import { useAppSettings, useInvoices } from '@/hooks/use-data';
+import type { GeorgiaCompanyProfile } from '@/lib/georgia';
 import { getClientLabel, getInvoiceTotalWithIva } from '@/lib/data';
 import { supabase } from '@/integrations/supabase/client';
 import GeorgiaInvoiceList from '../components/GeorgiaInvoiceList';
@@ -21,6 +22,14 @@ interface GeorgiaInvoice {
   currency: string;
   exchange_rate?: number;
   amount_gel?: number;
+  issuer_name?: string | null;
+  issuer_address?: string | null;
+  issuer_tax_id?: string | null;
+  issuer_country?: string | null;
+  issuer_email?: string | null;
+  issuer_phone?: string | null;
+  issuer_registration_number?: string | null;
+  issuer_bank_details?: string | null;
   status: string;
   created_at?: string;
 }
@@ -40,6 +49,17 @@ export default function GeorgiaInvoicing() {
   const [stats, setStats] = useState<DashboardStats>({ totalInvoices: 0, totalAmount: 0, monthAmount: 0 });
   const [importInvoiceId, setImportInvoiceId] = useState('');
   const { data: sourceInvoices = [], isLoading: sourceInvoicesLoading } = useInvoices();
+  const { data: settings } = useAppSettings();
+  const companyProfile: GeorgiaCompanyProfile = {
+    name: settings?.georgia_company_name ?? '',
+    address: settings?.georgia_company_address ?? '',
+    tax_id: settings?.georgia_company_tax_id ?? '',
+    country: settings?.georgia_company_country ?? 'Portugal',
+    email: settings?.georgia_company_email ?? '',
+    phone: settings?.georgia_company_phone ?? '',
+    registration_number: settings?.georgia_company_registration_number ?? '',
+    bank_details: settings?.georgia_company_bank_details ?? '',
+  };
 
   useEffect(() => {
     fetchInvoices();
@@ -194,6 +214,7 @@ export default function GeorgiaInvoicing() {
       {showForm && (
         <GeorgiaInvoiceForm
           invoice={editingInvoice}
+          issuerProfile={companyProfile}
           onSave={handleSaveSuccess}
           onCancel={() => setShowForm(false)}
         />
@@ -202,6 +223,7 @@ export default function GeorgiaInvoicing() {
       {previewInvoice && (
         <GeorgiaInvoicePreview
           invoice={previewInvoice}
+          companyProfile={companyProfile}
           onClose={() => setPreviewInvoice(null)}
         />
       )}

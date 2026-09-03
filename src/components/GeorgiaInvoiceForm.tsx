@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { GeorgiaCompanyProfile } from '@/lib/georgia';
+import { isGeorgiaCompanyProfileComplete } from '@/lib/georgia';
 
 // A tabela georgia_invoices ainda não está incluída nos tipos gerados do projecto.
 const georgiaSupabase = supabase as any;
@@ -20,11 +22,12 @@ interface GeorgiaInvoice {
 
 interface Props {
   invoice: GeorgiaInvoice | null;
+  issuerProfile: GeorgiaCompanyProfile;
   onSave: () => void;
   onCancel: () => void;
 }
 
-export default function GeorgiaInvoiceForm({ invoice, onSave, onCancel }: Props) {
+export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onCancel }: Props) {
   const [formData, setFormData] = useState<GeorgiaInvoice>({
     invoice_number: '',
     invoice_date: new Date().toISOString().split('T')[0],
@@ -60,6 +63,11 @@ export default function GeorgiaInvoiceForm({ invoice, onSave, onCancel }: Props)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!isGeorgiaCompanyProfileComplete(issuerProfile)) {
+      alert('Configura primeiro o nome legal, a morada e o NIF da empresa em Configurações.');
+      return;
+    }
+
     const user = (await georgiaSupabase.auth.getUser()).data.user;
     if (!user) {
       alert('Erro: utilizador nÃ£o autenticado');
@@ -80,6 +88,16 @@ export default function GeorgiaInvoiceForm({ invoice, onSave, onCancel }: Props)
       status: formData.status,
       updated_at: new Date().toISOString(),
     };
+    const issuerSnapshot = {
+      issuer_name: issuerProfile.name.trim(),
+      issuer_address: issuerProfile.address.trim(),
+      issuer_tax_id: issuerProfile.tax_id.trim(),
+      issuer_country: issuerProfile.country.trim() || 'Portugal',
+      issuer_email: issuerProfile.email.trim() || null,
+      issuer_phone: issuerProfile.phone.trim() || null,
+      issuer_registration_number: issuerProfile.registration_number.trim() || null,
+      issuer_bank_details: issuerProfile.bank_details.trim() || null,
+    };
 
     try {
       if (invoice?.id) {
@@ -90,7 +108,7 @@ export default function GeorgiaInvoiceForm({ invoice, onSave, onCancel }: Props)
       } else {
         await georgiaSupabase
           .from('georgia_invoices')
-          .insert([{ ...payload, created_at: new Date().toISOString() }]);
+          .insert([{ ...payload, ...issuerSnapshot, created_at: new Date().toISOString() }]);
       }
       onSave();
     } catch (err) {
@@ -107,6 +125,11 @@ export default function GeorgiaInvoiceForm({ invoice, onSave, onCancel }: Props)
       {invoice && !invoice.id && (
         <p className="mb-4 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800">
           Fatura importada como rascunho. Pode editar qualquer campo e os valores antes de guardar.
+        </p>
+      )}
+      {!isGeorgiaCompanyProfileComplete(issuerProfile) && (
+        <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Para guardar uma Fatura Geórgia válida, configura o nome legal, a morada e o NIF da empresa em <a className="font-semibold underline" href="/settings">Configurações</a>.
         </p>
       )}
       

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Settings as SettingsIcon, MessageCircle, CalendarClock, ArrowRight } from "lucide-react";
+import { Settings as SettingsIcon, MessageCircle, CalendarClock, ArrowRight, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,16 @@ export default function Settings() {
   // type a leading "-" without React snapping it back to 0 mid-edit.
   // The persisted value is parsed at submit time.
   const [offsetInput, setOffsetInput] = useState<string>("");
+  const [issuer, setIssuer] = useState({
+    name: "",
+    address: "",
+    tax_id: "",
+    country: "Portugal",
+    email: "",
+    phone: "",
+    registration_number: "",
+    bank_details: "",
+  });
 
   useEffect(() => {
     if (settings) {
@@ -56,6 +66,20 @@ export default function Settings() {
       setOffsetInput(String(DEFAULT_BILLING_ANCHOR_OFFSET_DAYS));
     }
   }, [settings, isLoading, error]);
+
+  useEffect(() => {
+    if (!settings) return;
+    setIssuer({
+      name: settings.georgia_company_name ?? "",
+      address: settings.georgia_company_address ?? "",
+      tax_id: settings.georgia_company_tax_id ?? "",
+      country: settings.georgia_company_country ?? "Portugal",
+      email: settings.georgia_company_email ?? "",
+      phone: settings.georgia_company_phone ?? "",
+      registration_number: settings.georgia_company_registration_number ?? "",
+      bank_details: settings.georgia_company_bank_details ?? "",
+    });
+  }, [settings]);
 
   const parsed = Number.parseInt(offsetInput, 10);
   const isValid =
@@ -84,6 +108,37 @@ export default function Settings() {
       template: settings.whatsapp_message_template ?? DEFAULT_WA_TEMPLATE,
     });
   }, [settings]);
+
+  const handleSaveIssuer = async () => {
+    if (!issuer.name.trim() || !issuer.address.trim() || !issuer.tax_id.trim()) {
+      toast({
+        title: "Dados incompletos",
+        description: "Preenche pelo menos o nome legal, a morada e o NIF da empresa.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await updateMutation.mutateAsync({
+        georgia_company_name: issuer.name.trim(),
+        georgia_company_address: issuer.address.trim(),
+        georgia_company_tax_id: issuer.tax_id.trim(),
+        georgia_company_country: issuer.country.trim() || "Portugal",
+        georgia_company_email: issuer.email.trim(),
+        georgia_company_phone: issuer.phone.trim(),
+        georgia_company_registration_number: issuer.registration_number.trim(),
+        georgia_company_bank_details: issuer.bank_details.trim(),
+      });
+      toast({ title: "Dados da empresa guardados", description: "O perfil será usado nas próximas Faturas Geórgia." });
+    } catch (err) {
+      toast({
+        title: "Erro a guardar",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleSaveWhatsApp = async () => {
     try {
@@ -211,6 +266,107 @@ export default function Settings() {
               )}
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Building2 className="h-5 w-5" /> Empresa emissora — Faturas Geórgia
+          </CardTitle>
+          <CardDescription>
+            Estes dados aparecem como fornecedor nas novas Faturas Geórgia. O nome legal, a morada e o NIF são obrigatórios; os restantes campos ajudam a completar o documento e ficam guardados como histórico na fatura.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 max-w-2xl">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="georgia-company-name">Nome legal da empresa *</Label>
+              <Input
+                id="georgia-company-name"
+                value={issuer.name}
+                onChange={e => setIssuer(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Nome oficial da empresa"
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="georgia-company-address">Morada completa *</Label>
+              <Textarea
+                id="georgia-company-address"
+                rows={3}
+                value={issuer.address}
+                onChange={e => setIssuer(prev => ({ ...prev, address: e.target.value }))}
+                placeholder="Rua, número, código postal, cidade e país"
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="georgia-company-tax-id">NIF / identificação fiscal *</Label>
+              <Input
+                id="georgia-company-tax-id"
+                value={issuer.tax_id}
+                onChange={e => setIssuer(prev => ({ ...prev, tax_id: e.target.value }))}
+                placeholder="PT000000000"
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="georgia-company-country">País</Label>
+              <Input
+                id="georgia-company-country"
+                value={issuer.country}
+                onChange={e => setIssuer(prev => ({ ...prev, country: e.target.value }))}
+                placeholder="Portugal"
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="georgia-company-email">Email</Label>
+              <Input
+                id="georgia-company-email"
+                type="email"
+                value={issuer.email}
+                onChange={e => setIssuer(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="faturacao@empresa.pt"
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="georgia-company-phone">Telefone</Label>
+              <Input
+                id="georgia-company-phone"
+                value={issuer.phone}
+                onChange={e => setIssuer(prev => ({ ...prev, phone: e.target.value }))}
+                placeholder="+351 ..."
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="georgia-company-registration">Número de registo comercial (opcional)</Label>
+              <Input
+                id="georgia-company-registration"
+                value={issuer.registration_number}
+                onChange={e => setIssuer(prev => ({ ...prev, registration_number: e.target.value }))}
+                placeholder="Número de registo da empresa"
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="georgia-company-bank">Dados de pagamento (opcional)</Label>
+              <Textarea
+                id="georgia-company-bank"
+                rows={3}
+                value={issuer.bank_details}
+                onChange={e => setIssuer(prev => ({ ...prev, bank_details: e.target.value }))}
+                placeholder="IBAN, SWIFT/BIC ou instruções de pagamento"
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+          </div>
+          <Button onClick={handleSaveIssuer} disabled={isLoading || updateMutation.isPending}>
+            {updateMutation.isPending ? "A guardar…" : "Guardar dados da empresa"}
+          </Button>
         </CardContent>
       </Card>
 

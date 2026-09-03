@@ -14,11 +14,13 @@ export function openDocumentPreview({ title, html }: DocumentPreviewOptions): bo
     return false;
   }
 
+  const safeTitle = escapeAttribute(title);
   const toolbar = `
     <div class="document-preview-toolbar" data-document-preview-toolbar>
-      <strong>${escapeAttribute(title)}</strong>
+      <strong>${safeTitle}</strong>
       <div class="document-preview-actions">
-        <button type="button" onclick="window.print()">Imprimir / guardar como PDF</button>
+        <button type="button" onclick="downloadDocumentPdf()">Descarregar PDF</button>
+        <button type="button" onclick="window.print()">Imprimir</button>
         <button type="button" onclick="window.close()">Fechar</button>
       </div>
     </div>
@@ -33,9 +35,35 @@ export function openDocumentPreview({ title, html }: DocumentPreviewOptions): bo
       @media print { .document-preview-toolbar { display:none !important; } }
     </style>
   `;
+  const pdfScript = `
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script>
+      async function downloadDocumentPdf() {
+        const content = document.querySelector('[data-document-preview-content]');
+        if (!content || typeof window.html2pdf !== 'function') {
+          window.alert('Não foi possível preparar o PDF. Verifica a ligação à internet e tenta novamente.');
+          return;
+        }
+        const toolbar = document.querySelector('[data-document-preview-toolbar]');
+        if (toolbar) toolbar.style.display = 'none';
+        try {
+          await window.html2pdf().set({
+            margin: 10,
+            filename: '${safeTitle.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '')}.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          }).from(content).save();
+        } finally {
+          if (toolbar) toolbar.style.display = '';
+        }
+      }
+    </script>
+  `;
   const documentWithToolbar = html
-    .replace(/<head([^>]*)>/i, `<head$1>${toolbarStyles}`)
-    .replace(/<body([^>]*)>/i, `<body$1>${toolbar}`);
+    .replace(/<head([^>]*)>/i, `<head$1>${toolbarStyles}${pdfScript}`)
+    .replace(/<body([^>]*)>/i, `<body$1>${toolbar}<div data-document-preview-content>`)
+    .replace(/<\/body>/i, '</div></body>');
 
   previewWindow.opener = null;
   previewWindow.document.write(documentWithToolbar);
