@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { AppLayout } from './components/AppLayout'
+import { AuthProvider } from './hooks/use-auth'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Clients from './pages/Clients'
@@ -64,8 +65,9 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Toaster position="top-right" />
-        <Routes>
+        <AuthProvider>
+          <Toaster position="top-right" />
+          <Routes>
           <Route
             path="/login"
             element={!isAuthenticated ? <Login /> : <Navigate to="/dashboard" />}
@@ -160,7 +162,8 @@ function App() {
             path="*"
             element={<NotFound />}
           />
-        </Routes>
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
   )

@@ -10,24 +10,24 @@ import fluxoIcon from "@/assets/fluxoconta-icon.svg";
 import { useAuth } from "@/hooks/use-auth";
 
 const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/clientes", icon: Users, label: "Clientes" },
-  { to: "/faturas", icon: FileText, label: "Faturas" },
-  { to: "/pagamentos", icon: CreditCard, label: "Pagamentos" },
-  { to: "/subscricoes", icon: RefreshCw, label: "Subscrições" },
-  { to: "/faturas-agendadas", icon: CalendarClock, label: "Faturas agendadas" },
-  { to: "/calendario", icon: CalendarDays, label: "Calendário" },
-  { to: "/servicos", icon: Package, label: "Serviços" },
-  { to: "/lixo", icon: Trash2, label: "Lixo" },
+  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/clients", icon: Users, label: "Clientes" },
+  { to: "/invoices", icon: FileText, label: "Faturas" },
+  { to: "/payments", icon: CreditCard, label: "Pagamentos" },
+  { to: "/subscriptions", icon: RefreshCw, label: "Subscrições" },
+  { to: "/scheduled-invoices", icon: CalendarClock, label: "Faturas agendadas" },
+  { to: "/calendar", icon: CalendarDays, label: "Calendário" },
+  { to: "/services", icon: Package, label: "Serviços" },
+  { to: "/trash", icon: Trash2, label: "Lixo" },
 ];
 
 // Atalhos compactos mostrados como linha de ícones por cima do botão
 // "Nova Fatura" — para páginas de gestão/admin que não precisam estar
 // no menu principal mas têm de ser facilmente alcançáveis.
 const shortcutItems = [
-  { to: "/configuracoes", icon: SettingsIcon, label: "Configurações" },
-  { to: "/membros", icon: UserCog, label: "Membros" },
-  { to: "/auditoria", icon: History, label: "Auditoria" },
+  { to: "/settings", icon: SettingsIcon, label: "Configurações" },
+  { to: "/members", icon: UserCog, label: "Membros" },
+  { to: "/audit", icon: History, label: "Auditoria" },
   { to: "/docs", icon: BookOpen, label: "Documentação" },
 ];
 
@@ -92,7 +92,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
       <div className="p-4 border-t border-sidebar-border space-y-2">
         <ShortcutRow showLabels={showLabels} onNavigate={onNavigate} />
-        <NavLink to="/faturas/nova" onClick={onNavigate}>
+        <NavLink to="/invoices/new" onClick={onNavigate}>
           <Button className={cn(
             "w-full gap-2 bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90",
             !showLabels && "px-2"
