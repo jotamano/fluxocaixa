@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import {
   DEFAULT_BILLING_ANCHOR_OFFSET_DAYS,
   useAppSettings,
@@ -60,7 +59,6 @@ export default function Settings() {
     bank_details: "",
     logo_url: "",
   });
-  const [logoUploading, setLogoUploading] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -113,40 +111,6 @@ export default function Settings() {
     });
   }, [settings]);
 
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Ficheiro inválido", description: "Escolhe uma imagem PNG, JPG ou SVG.", variant: "destructive" });
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      toast({ title: "Imagem demasiado grande", description: "O logótipo deve ter no máximo 2 MB.", variant: "destructive" });
-      return;
-    }
-    setLogoUploading(true);
-    try {
-      const extension = file.name.split(".").pop()?.toLowerCase() || "png";
-      const path = `issuer-logo/logo.${extension}`;
-      const { error: uploadError } = await supabase.storage.from("company-assets").upload(path, file, {
-        upsert: true,
-        contentType: file.type,
-        cacheControl: "3600",
-      });
-      if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from("company-assets").getPublicUrl(path);
-      const logoUrl = `${data.publicUrl}?v=${Date.now()}`;
-      await updateMutation.mutateAsync({ georgia_company_logo_url: logoUrl });
-      setIssuer(prev => ({ ...prev, logo_url: logoUrl }));
-      toast({ title: "Logótipo guardado", description: "Será incluído nas próximas Faturas Geórgia." });
-    } catch (err) {
-      toast({ title: "Erro no upload", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
-    } finally {
-      setLogoUploading(false);
-    }
-  };
-
   const handleSaveIssuer = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
     if (!issuer.name.trim() || !issuer.address.trim() || !issuer.tax_id.trim()) {
@@ -156,6 +120,16 @@ export default function Settings() {
         variant: "destructive",
       });
       return;
+    }
+
+    if (issuer.logo_url.trim()) {
+      try {
+        const url = new URL(issuer.logo_url.trim());
+        if (!['http:', 'https:'].includes(url.protocol)) throw new Error();
+      } catch {
+        toast({ title: "URL do logótipo inválida", description: "Introduz um link HTTPS direto para uma imagem.", variant: "destructive" });
+        return;
+      }
     }
 
     try {
@@ -168,6 +142,7 @@ export default function Settings() {
         georgia_company_phone: issuer.phone.trim(),
         georgia_company_registration_number: issuer.registration_number.trim(),
         georgia_company_bank_details: issuer.bank_details.trim(),
+        georgia_company_logo_url: issuer.logo_url.trim() || null,
       });
       toast({ title: "Dados da empresa guardados", description: "O perfil será usado nas próximas Faturas Geórgia." });
     } catch (err) {
@@ -404,12 +379,10 @@ export default function Settings() {
               />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="georgia-company-logo">Logótipo da empresa (opcional)</Label>
-              <div className="flex items-center gap-4 rounded-md border p-3">
-                {issuer.logo_url && <img src={issuer.logo_url} alt="Logótipo atual" className="h-14 w-14 object-contain" />}
-                <Input id="georgia-company-logo" type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={handleLogoUpload} disabled={isLoading || logoUploading || updateMutation.isPending} />
-              </div>
-              <p className="text-xs text-muted-foreground">PNG, JPG ou SVG, até 2 MB. Aparece no cabeçalho das novas faturas.</p>
+              <Label htmlFor="georgia-company-logo">Link do logótipo da empresa (opcional)</Label>
+              <Input id="georgia-company-logo" type="url" value={issuer.logo_url} onChange={e => setIssuer(prev => ({ ...prev, logo_url: e.target.value }))} placeholder="https://unbreakablesystems.pt/wp-content/uploads/2026/09/logo.png" disabled={isLoading || updateMutation.isPending} />
+              {issuer.logo_url && <img src={issuer.logo_url} alt="Pré-visualização do logótipo" className="h-16 max-w-[220px] object-contain" onError={e => { e.currentTarget.style.display = "none"; }} />}
+              <p className="text-xs text-muted-foreground">Introduz o URL público direto da imagem (HTTPS). O logótipo aparece no cabeçalho das novas faturas.</p>
             </div>
           </div>
           <Button type="submit" disabled={isLoading || updateMutation.isPending}>
