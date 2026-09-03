@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useInvoices } from '@/hooks/use-data';
+import { getClientLabel, getInvoiceTotalWithIva } from '@/lib/data';
 import { supabase } from '@/integrations/supabase/client';
 import GeorgiaInvoiceList from '../components/GeorgiaInvoiceList';
 import GeorgiaInvoiceForm from '../components/GeorgiaInvoiceForm';
@@ -8,7 +10,7 @@ import GeorgiaInvoicePreview from '../components/GeorgiaInvoicePreview';
 const georgiaSupabase = supabase as any;
 
 interface GeorgiaInvoice {
-  id: string;
+  id?: string;
   invoice_number: string;
   invoice_date: string;
   client_name: string;
@@ -20,7 +22,7 @@ interface GeorgiaInvoice {
   exchange_rate?: number;
   amount_gel?: number;
   status: string;
-  created_at: string;
+  created_at?: string;
 }
 
 interface DashboardStats {
@@ -36,6 +38,8 @@ export default function GeorgiaInvoicing() {
   const [editingInvoice, setEditingInvoice] = useState<GeorgiaInvoice | null>(null);
   const [previewInvoice, setPreviewInvoice] = useState<GeorgiaInvoice | null>(null);
   const [stats, setStats] = useState<DashboardStats>({ totalInvoices: 0, totalAmount: 0, monthAmount: 0 });
+  const [importInvoiceId, setImportInvoiceId] = useState('');
+  const { data: sourceInvoices = [], isLoading: sourceInvoicesLoading } = useInvoices();
 
   useEffect(() => {
     fetchInvoices();
@@ -77,7 +81,37 @@ export default function GeorgiaInvoicing() {
   }
 
   function handleCreateNew() {
+    setImportInvoiceId('');
     setEditingInvoice(null);
+    setShowForm(true);
+    setPreviewInvoice(null);
+  }
+
+  function handleImportInvoice(invoiceId: string) {
+    setImportInvoiceId(invoiceId);
+    if (!invoiceId) return;
+
+    const source = sourceInvoices.find((invoice) => invoice.id === invoiceId);
+    if (!source) return;
+
+    const year = new Date().getFullYear();
+    const nextNumber = `GE${year}${String(invoices.length + 1).padStart(3, '0')}`;
+    const description = (source.invoice_items ?? [])
+      .map((item) => `${item.quantity} × ${item.description}`)
+      .join('\n');
+
+    setEditingInvoice({
+      invoice_number: nextNumber,
+      invoice_date: source.issue_date,
+      client_name: getClientLabel(source, 'Sem cliente'),
+      client_nif: source.clients?.nif ?? '',
+      client_address: '',
+      service_description: description || source.notes || '',
+      amount: getInvoiceTotalWithIva(source.invoice_items ?? [], source),
+      currency: 'EUR',
+      exchange_rate: 2.75,
+      status: 'draft',
+    });
     setShowForm(true);
     setPreviewInvoice(null);
   }
@@ -133,13 +167,27 @@ export default function GeorgiaInvoicing() {
       </div>
 
       {/* Actions */}
-      <div className="mb-4">
+      <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
         <button
           onClick={handleCreateNew}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium"
         >
           + Nova Fatura
         </button>
+        <select
+          value={importInvoiceId}
+          onChange={(event) => handleImportInvoice(event.target.value)}
+          disabled={sourceInvoicesLoading}
+          className="border border-gray-300 rounded-md px-3 py-2 bg-white text-gray-800 min-w-[280px]"
+          aria-label="Importar fatura existente"
+        >
+          <option value="">Importar fatura existente…</option>
+          {sourceInvoices.map((source) => (
+            <option key={source.id} value={source.id}>
+              {source.number} — {getClientLabel(source, 'Sem cliente')}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Content */}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 interface GeorgiaInvoice {
-  id: string;
+  id?: string;
   invoice_number: string;
   invoice_date: string;
   client_name: string;
@@ -128,7 +128,7 @@ export default function GeorgiaInvoiceList({ invoices, loading, onEdit, onPrevie
                     <button onClick={() => onEdit(invoice)} className="text-indigo-600 hover:text-indigo-900 mr-3">
                       Editar
                     </button>
-                    <button onClick={() => onDelete(invoice.id)} className="text-red-600 hover:text-red-900">
+                    <button onClick={() => invoice.id && onDelete(invoice.id)} className="text-red-600 hover:text-red-900">
                       Eliminar
                     </button>
                   </td>
