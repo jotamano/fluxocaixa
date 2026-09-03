@@ -130,7 +130,7 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
           * { box-sizing: border-box; }
           :root { color-scheme: light; }
           body { margin: 0; background: #e9eef5; color: #172033; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .sheet { width: 794px; min-height: 1123px; margin: 24px auto; padding: 48px 52px 36px; background: #fff; box-shadow: 0 20px 60px rgba(15, 23, 42, .14); position: relative; overflow: hidden; }
+          .sheet { width: 210mm; height: 297mm; min-height: 0; margin: 24px auto; padding: 48px 52px 36px; background: #fff; box-shadow: 0 20px 60px rgba(15, 23, 42, .14); position: relative; overflow: hidden; break-after: avoid-page; page-break-after: avoid; }
           .sheet:before { content: ""; position: absolute; inset: 0 0 auto; height: 8px; background: linear-gradient(90deg, #183b73 0%, #2563a8 58%, #38b3a0 100%); }
           .topline { display: flex; justify-content: space-between; gap: 28px; align-items: flex-start; padding-top: 8px; }
           .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
@@ -186,7 +186,7 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
           .footer-right { text-align: right; }
           .footer strong { display: block; margin-bottom: 3px; color: #526078; font-size: 9px; }
           @media print { body { background: #fff; } .sheet { margin: 0; box-shadow: none; } }
-          @media (max-width: 820px) { .sheet { width: 100%; min-height: auto; margin: 0; padding: 38px 24px 28px; } .meta-grid { grid-template-columns: repeat(2, 1fr); } }
+          @media (max-width: 820px) { .sheet { width: 100%; height: auto; min-height: auto; margin: 0; padding: 38px 24px 28px; } .meta-grid { grid-template-columns: repeat(2, 1fr); } }
         </style>
       </head>
       <body>
