@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { GeorgiaCompanyProfile } from '@/lib/georgia';
 import { isGeorgiaCompanyProfileComplete } from '@/lib/georgia';
+import { fetchNbgEurRate } from '@/lib/nbg-currency';
 
 // A tabela georgia_invoices ainda não está incluída nos tipos gerados do projecto.
 const georgiaSupabase = supabase as any;
@@ -52,7 +53,7 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
     service_description: '',
     amount: 0,
     currency: 'EUR',
-    exchange_rate: 2.75,
+    exchange_rate: 0,
     due_date: '',
     service_period: '',
     tax_treatment_label: issuerProfile.invoice_tax_label ?? 'Tratamento de IVA a confirmar',
@@ -66,6 +67,9 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
   const defaultTaxNote = issuerProfile.invoice_tax_note ?? 'O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.';
   const defaultPaymentTerms = issuerProfile.invoice_payment_terms ?? 'Pagamento até 30 dias após a data de emissão.';
   const defaultFooterNote = issuerProfile.invoice_footer_note ?? 'Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.';
+  const [rateLoading, setRateLoading] = useState(false);
+  const [rateError, setRateError] = useState('');
+  const [rateDate, setRateDate] = useState<string | null>(null);
 
   useEffect(() => {
     if (invoice) {
@@ -84,19 +88,59 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
     }
   }, [invoice, defaultFooterNote, defaultPaymentTerms, defaultTaxLabel, defaultTaxNote]);
 
+  useEffect(() => {
+    if (invoice?.id || formData.currency !== 'EUR') return;
+
+    const controller = new AbortController();
+    setRateLoading(true);
+    setRateError('');
+    fetchNbgEurRate(controller.signal)
+      .then(({ rate, effectiveDate }) => {
+        setFormData(prev => prev.currency === 'EUR' ? { ...prev, exchange_rate: rate } : prev);
+        setRateDate(effectiveDate);
+      })
+      .catch(error => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        console.error('Erro ao obter a taxa EUR/GEL do NBG:', error);
+        setRateError('Não foi possível obter a taxa oficial. Podes introduzir a taxa manualmente.');
+      })
+      .finally(() => setRateLoading(false));
+
+    return () => controller.abort();
+  }, [invoice?.id, formData.currency]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    if (name === 'currency') {
+      setRateError('');
+      setRateDate(null);
+      setFormData(prev => ({
+        ...prev,
+        currency: value,
+        exchange_rate: value === 'GEL' ? 1 : value === 'USD' ? 2.70 : 0,
+      }));
+      return;
+    }
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'amount' ? parseFloat(value) || 0 : value,
+      [name]: name === 'amount' || name === 'exchange_rate' ? parseFloat(value) || 0 : value,
     }));
   };
+
+  const exchangeRate = Number(formData.exchange_rate) || 0;
+  const gelAmount = formData.currency === 'GEL'
+    ? Number(formData.amount) || 0
+    : (Number(formData.amount) || 0) * exchangeRate;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!isGeorgiaCompanyProfileComplete(issuerProfile)) {
       alert('Configura primeiro o nome legal, a morada e o NIF da empresa em Configurações.');
+      return;
+    }
+    if (formData.currency === 'EUR' && exchangeRate <= 0) {
+      alert('Indica uma taxa EUR → GEL válida antes de guardar a fatura.');
       return;
     }
 
@@ -120,7 +164,8 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
       service_description: formData.service_description,
       amount: Math.round(formData.amount * 100), // Store in cents
       currency: formData.currency,
-      exchange_rate: formData.exchange_rate || 1,
+      exchange_rate: exchangeRate || 1,
+      amount_gel: Math.round(gelAmount * 100),
       due_date: formData.due_date || null,
       service_period: formData.service_period || null,
       tax_treatment_label: formData.tax_treatment_label?.trim() || null,
@@ -330,18 +375,26 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
             </select>
           </div>
           
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Taxa de câmbio (para GEL)</label>
+              <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Taxa EUR → GEL</label>
             <input
               type="number"
               name="exchange_rate"
-              value={formData.exchange_rate}
+              value={formData.exchange_rate || ''}
               onChange={handleChange}
-              step="0.01"
+              step="0.0001"
               min="0"
               className="w-full border border-gray-300 rounded-md px-3 py-2"
             />
+            <p className="mt-1 text-xs text-gray-500">
+              {rateLoading ? 'A obter a taxa oficial do NBG…' : rateDate ? `Taxa oficial NBG, válida em ${rateDate}.` : 'Editável manualmente.'}
+            </p>
+            {rateError && <p className="mt-1 text-xs text-amber-700">{rateError}</p>}
           </div>
+        </div>
+
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          Valor convertido em GEL: <strong>{gelAmount.toFixed(2)} GEL</strong>
         </div>
 
         <div>
