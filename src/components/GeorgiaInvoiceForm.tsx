@@ -42,7 +42,9 @@ export default function GeorgiaInvoiceForm({ invoice, onSave, onCancel }: Props)
     if (invoice) {
       setFormData({
         ...invoice,
-        amount: invoice.amount / 100, // Convert from cents
+        // Existing Georgia invoices are stored in cents; imported source
+        // invoices are passed as a new draft and already use euros.
+        amount: invoice.id ? invoice.amount / 100 : invoice.amount,
       });
     }
   }, [invoice]);
@@ -100,8 +102,13 @@ export default function GeorgiaInvoiceForm({ invoice, onSave, onCancel }: Props)
   return (
     <div className="bg-white rounded-lg shadow p-6 mb-6">
       <h2 className="text-xl font-semibold mb-4">
-        {invoice ? 'Editar Fatura' : 'Nova Fatura GeÃ³rgia'}
+        {invoice?.id ? 'Editar Fatura' : 'Nova Fatura GeÃ³rgia'}
       </h2>
+      {invoice && !invoice.id && (
+        <p className="mb-4 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800">
+          Fatura importada como rascunho. Pode editar qualquer campo e os valores antes de guardar.
+        </p>
+      )}
       
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

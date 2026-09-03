@@ -9,6 +9,7 @@ import {
   formatInvoiceItemPeriod,
 } from "./data";
 import { BRAND_NAME, brandHeaderBlock } from "./branding";
+import { openDocumentPreview } from "./document-preview";
 
 const escapeHtml = (s: string) =>
   s
@@ -118,10 +119,8 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
     </html>
   `;
 
-  const printWindow = window.open("", "_blank");
-  if (printWindow) {
-    printWindow.document.write(html);
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 500);
-  }
+  openDocumentPreview({
+    title: `Fatura ${invoice.number}`,
+    html,
+  });
 }
