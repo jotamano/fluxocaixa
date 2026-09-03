@@ -40,7 +40,8 @@ export function openDocumentPreview({ title, html }: DocumentPreviewOptions): bo
     <script>
       async function downloadDocumentPdf() {
         const content = document.querySelector('[data-document-preview-content]');
-        if (!content || typeof window.html2pdf !== 'function') {
+        const page = content?.querySelector('[data-document-page]') || content;
+        if (!page || typeof window.html2pdf !== 'function') {
           window.alert('Não foi possível preparar o PDF. Verifica a ligação à internet e tenta novamente.');
           return;
         }
@@ -48,12 +49,12 @@ export function openDocumentPreview({ title, html }: DocumentPreviewOptions): bo
         if (toolbar) toolbar.style.display = 'none';
         try {
           await window.html2pdf().set({
-            margin: 10,
+            margin: 0,
             filename: '${safeTitle.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '')}.pdf',
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          }).from(content).save();
+          }).from(page).save();
         } finally {
           if (toolbar) toolbar.style.display = '';
         }

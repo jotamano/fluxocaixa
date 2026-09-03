@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Trash2, Pencil } from "lucide-react";
+import { ArrowLeft, Trash2, Pencil, FileDown } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useClients, useInvoices, usePayments, useDeletePayment, useUpdatePayment } from "@/hooks/use-data";
 import { formatCurrency, formatDecimalForInput, getInvoiceTotalWithIva, getEffectiveIvaPercentage, methodLabels, parseDecimal, type PaymentMethod } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
+import { generatePaymentReceipt } from "@/lib/payment-receipt";
 
 export default function PaymentDetail() {
   const navigate = useNavigate();
@@ -94,6 +95,9 @@ export default function PaymentDetail() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => generatePaymentReceipt(payment, client, invoice)}>
+            <FileDown className="h-4 w-4" /> Recibo PDF
+          </Button>
           <Button variant="outline" className="gap-2" onClick={openEdit}>
             <Pencil className="h-4 w-4" /> Editar
           </Button>

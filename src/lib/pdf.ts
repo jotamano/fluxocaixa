@@ -49,12 +49,13 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
       <title>Orçamento ${invoice.number}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1a1a2e; background: #fff; }
-        @media print { body { -webkit-print-color-adjust: exact; } }
+        @page { size: A4; margin: 0; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1a1a2e; background: #e9eef5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        @media print { body { background: #fff; } }
       </style>
     </head>
     <body>
-      <div style="max-width:800px;margin:0 auto;padding:40px;">
+      <div data-document-page style="width:794px;min-height:1123px;margin:0 auto;padding:40px;background:#fff;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;">
           ${brandHeaderBlock()}
           <div style="text-align:right;">

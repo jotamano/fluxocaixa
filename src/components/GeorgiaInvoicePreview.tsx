@@ -190,7 +190,7 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
         </style>
       </head>
       <body>
-        <main class="sheet">
+        <main class="sheet" data-document-page>
           <header class="topline">
             <div class="brand">
               ${issuerLogo}

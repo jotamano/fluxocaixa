@@ -8,6 +8,7 @@ import {
   methodLabels,
 } from "./data";
 import { BRAND_NAME, brandHeaderBlock } from "./branding";
+import { openDocumentPreview } from "./document-preview";
 
 export function generateClientStatement(
   client: Client,
@@ -70,12 +71,13 @@ export function generateClientStatement(
       <title>Extrato de Conta — ${client.company}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1a1a2e; background: #fff; }
-        @media print { body { -webkit-print-color-adjust: exact; } }
+        @page { size: A4; margin: 0; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1a1a2e; background: #e9eef5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        @media print { body { background: #fff; } }
       </style>
     </head>
     <body>
-      <div style="max-width:800px;margin:0 auto;padding:40px;">
+      <div data-document-page style="width:794px;min-height:1123px;margin:0 auto;padding:40px;background:#fff;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;">
           ${brandHeaderBlock()}
           <div style="text-align:right;">
@@ -115,7 +117,7 @@ export function generateClientStatement(
           </div>
         </div>
 
-        <h3 style="font-size:15px;font-weight:700;margin-bottom:12px;color:#1a1a2e;">Orçamentos</h3>
+        <h3 style="font-size:15px;font-weight:700;margin-bottom:12px;color:#1a1a2e;">Faturas</h3>
         <table style="width:100%;border-collapse:collapse;margin-bottom:30px;">
           <thead>
             <tr style="background:#1e40af;color:#fff;">
@@ -137,7 +139,7 @@ export function generateClientStatement(
           <thead>
             <tr style="background:#1e40af;color:#fff;">
               <th style="padding:8px 12px;text-align:left;font-size:12px;font-weight:600;">Data</th>
-              <th style="padding:8px 12px;text-align:center;font-size:12px;font-weight:600;">Orçamento</th>
+              <th style="padding:8px 12px;text-align:center;font-size:12px;font-weight:600;">Fatura</th>
               <th style="padding:8px 12px;text-align:center;font-size:12px;font-weight:600;">Método</th>
               <th style="padding:8px 12px;text-align:right;font-size:12px;font-weight:600;">Valor</th>
             </tr>
@@ -153,10 +155,8 @@ export function generateClientStatement(
     </html>
   `;
 
-  const printWindow = window.open("", "_blank");
-  if (printWindow) {
-    printWindow.document.write(html);
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 500);
-  }
+  openDocumentPreview({
+    title: `Extrato de Conta — ${client.company}`,
+    html,
+  });
 }
