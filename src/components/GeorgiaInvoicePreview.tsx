@@ -270,6 +270,7 @@ export default function GeorgiaInvoicePreview({ invoice, companyProfile, onClose
     openDocumentPreview({
       title: `Fatura Geórgia ${invoice.invoice_number}`,
       html,
+      singlePage: true,
     });
   };
 

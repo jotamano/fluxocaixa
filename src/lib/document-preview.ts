@@ -1,13 +1,14 @@
 interface DocumentPreviewOptions {
   title: string;
   html: string;
+  singlePage?: boolean;
 }
 
 /**
  * Opens a rendered document in a new tab. Printing is deliberately opt-in:
  * the user can use the native print dialog to print or choose "Save as PDF".
  */
-export function openDocumentPreview({ title, html }: DocumentPreviewOptions): boolean {
+export function openDocumentPreview({ title, html, singlePage = false }: DocumentPreviewOptions): boolean {
   const previewWindow = window.open("", "_blank");
   if (!previewWindow) {
     window.alert("Não foi possível abrir uma nova aba. Permita pop-ups para visualizar o PDF.");
@@ -35,7 +36,57 @@ export function openDocumentPreview({ title, html }: DocumentPreviewOptions): bo
       @media print { .document-preview-toolbar { display:none !important; } }
     </style>
   `;
-  const pdfScript = `
+  const pdfFilename = `${safeTitle.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '')}.pdf`;
+  const pdfScript = singlePage
+    ? `
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+      async function downloadDocumentPdf() {
+        const content = document.querySelector('[data-document-preview-content]');
+        const page = content?.querySelector('[data-document-page]') || content;
+        if (!page || typeof window.html2canvas !== 'function') {
+          window.alert('Não foi possível preparar o PDF. Verifica a ligação à internet e tenta novamente.');
+          return;
+        }
+        const toolbar = document.querySelector('[data-document-preview-toolbar]');
+        if (toolbar) toolbar.style.display = 'none';
+        try {
+          const canvas = await window.html2canvas(page, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#fff',
+            logging: false,
+          });
+          const JsPdf = window.jspdf?.jsPDF || window.jsPDF;
+          if (typeof JsPdf !== 'function') {
+            throw new Error('jsPDF não está disponível.');
+          }
+          const pdf = new JsPdf({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
+          const pageWidth = pdf.internal.pageSize.getWidth();
+          const pageHeight = pdf.internal.pageSize.getHeight();
+          const imageHeight = canvas.height * pageWidth / canvas.width;
+          pdf.addImage(
+            canvas.toDataURL('image/jpeg', 0.98),
+            'JPEG',
+            0,
+            0,
+            pageWidth,
+            Math.min(imageHeight, pageHeight),
+            undefined,
+            'FAST',
+          );
+          pdf.save('${pdfFilename}');
+        } catch (error) {
+          console.error(error);
+          window.alert('Não foi possível preparar o PDF. Tenta novamente.');
+        } finally {
+          if (toolbar) toolbar.style.display = '';
+        }
+      }
+    </script>
+  `
+    : `
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script>
       async function downloadDocumentPdf() {
@@ -50,7 +101,7 @@ export function openDocumentPreview({ title, html }: DocumentPreviewOptions): bo
         try {
           await window.html2pdf().set({
             margin: 0,
-            filename: '${safeTitle.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '')}.pdf',
+            filename: '${pdfFilename}',
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
