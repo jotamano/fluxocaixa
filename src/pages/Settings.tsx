@@ -109,7 +109,8 @@ export default function Settings() {
     });
   }, [settings]);
 
-  const handleSaveIssuer = async () => {
+  const handleSaveIssuer = async (e?: React.FormEvent<HTMLFormElement>) => {
+    e?.preventDefault();
     if (!issuer.name.trim() || !issuer.address.trim() || !issuer.tax_id.trim()) {
       toast({
         title: "Dados incompletos",
@@ -279,6 +280,7 @@ export default function Settings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 max-w-2xl">
+          <form onSubmit={handleSaveIssuer} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="georgia-company-name">Nome legal da empresa *</Label>
@@ -364,9 +366,10 @@ export default function Settings() {
               />
             </div>
           </div>
-          <Button onClick={handleSaveIssuer} disabled={isLoading || updateMutation.isPending}>
+          <Button type="submit" disabled={isLoading || updateMutation.isPending}>
             {updateMutation.isPending ? "A guardar…" : "Guardar dados da empresa"}
           </Button>
+          </form>
         </CardContent>
       </Card>
 

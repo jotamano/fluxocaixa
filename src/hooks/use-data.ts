@@ -58,8 +58,13 @@ export function useUpdateAppSettings() {
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq("id", 1)
         .select()
-        .single();
+        .maybeSingle();
       if (error) throw error;
+      if (!data) {
+        throw new Error(
+          "Não foi possível guardar as configurações: a linha global de configurações não existe ou não está acessível.",
+        );
+      }
       return data as AppSettings;
     },
     onSuccess: () => {
