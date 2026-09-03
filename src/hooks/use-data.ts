@@ -2422,11 +2422,16 @@ export function useAllSubscriptionItems() {
   return useQuery({
     queryKey: ["subscription_items", "all"],
     queryFn: async () => {
+      // subscription_items has no service_id column — keep the field for
+      // callers that filter by service, always null until a migration adds it.
       const { data, error } = await supabase
         .from("subscription_items")
-        .select("id, subscription_id, service_id, amount, description, kind");
+        .select("id, subscription_id, amount, description, kind");
       if (error) throw error;
-      return (data ?? []) as SubscriptionItemUsage[];
+      return (data ?? []).map((row) => ({
+        ...row,
+        service_id: null as string | null,
+      })) as SubscriptionItemUsage[];
     },
   });
 }
