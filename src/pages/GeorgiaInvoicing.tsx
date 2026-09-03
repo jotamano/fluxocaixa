@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
 import GeorgiaInvoiceList from '../components/GeorgiaInvoiceList';
 import GeorgiaInvoiceForm from '../components/GeorgiaInvoiceForm';
 import GeorgiaInvoicePreview from '../components/GeorgiaInvoicePreview';
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
+// A tabela georgia_invoices ainda não está incluída nos tipos gerados do projecto.
+const georgiaSupabase = supabase as any;
 
 interface GeorgiaInvoice {
   id: string;
@@ -42,7 +43,7 @@ export default function GeorgiaInvoicing() {
 
   async function fetchInvoices() {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await georgiaSupabase
         .from('georgia_invoices')
         .select('*')
         .is('deleted_at', null)
@@ -100,7 +101,7 @@ export default function GeorgiaInvoicing() {
 
   function handleDelete(id: string) {
     if (confirm('Tem a certeza que quer eliminar esta fatura?')) {
-      supabase
+      georgiaSupabase
         .from('georgia_invoices')
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', id)

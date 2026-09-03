@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
+// A tabela georgia_invoices ainda não está incluída nos tipos gerados do projecto.
+const georgiaSupabase = supabase as any;
 
 interface GeorgiaInvoice {
   id?: string;
@@ -57,7 +58,7 @@ export default function GeorgiaInvoiceForm({ invoice, onSave, onCancel }: Props)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const user = (await supabase.auth.getUser()).data.user;
+    const user = (await georgiaSupabase.auth.getUser()).data.user;
     if (!user) {
       alert('Erro: utilizador nÃ£o autenticado');
       return;
@@ -80,12 +81,12 @@ export default function GeorgiaInvoiceForm({ invoice, onSave, onCancel }: Props)
 
     try {
       if (invoice?.id) {
-        await supabase
+        await georgiaSupabase
           .from('georgia_invoices')
           .update(payload)
           .eq('id', invoice.id);
       } else {
-        await supabase
+        await georgiaSupabase
           .from('georgia_invoices')
           .insert([{ ...payload, created_at: new Date().toISOString() }]);
       }
