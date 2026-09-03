@@ -31,7 +31,7 @@ ALTER TABLE public.georgia_invoices ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view their own Georgia invoices"
   ON public.georgia_invoices
   FOR SELECT
-  USING (auth.uid() = user_id AND (deleted_at IS NULL OR deleted_at IS NOT NULL));
+  USING (auth.uid() = user_id AND (deleted_at IS NULL));
 
 CREATE POLICY "Users can insert their own Georgia invoices"
   ON public.georgia_invoices
