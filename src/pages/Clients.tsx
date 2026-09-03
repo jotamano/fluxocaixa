@@ -23,7 +23,7 @@ export default function Clients() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Tables<"clients"> | null>(null);
   const [form, setForm] = useState({
-    name: '', email: '', company: '', phone: '', nif: '',
+    name: '', email: '', company: '', address: '', phone: '', nif: '',
     has_iva: DEFAULT_HAS_IVA, iva_percentage: DEFAULT_IVA_PERCENTAGE,
   });
 
@@ -38,6 +38,7 @@ export default function Clients() {
         name: form.name,
         email: form.email,
         company: form.company,
+        address: form.address,
         phone: form.phone,
         nif: form.nif,
         has_iva: form.has_iva,
@@ -46,7 +47,7 @@ export default function Clients() {
       {
         onSuccess: () => {
           setForm({
-            name: '', email: '', company: '', phone: '', nif: '',
+            name: '', email: '', company: '', address: '', phone: '', nif: '',
             has_iva: DEFAULT_HAS_IVA, iva_percentage: DEFAULT_IVA_PERCENTAGE,
           });
           setDialogOpen(false);
@@ -75,6 +76,7 @@ export default function Clients() {
                 { key: 'name', label: 'Nome', placeholder: 'Nome completo' },
                 { key: 'email', label: 'Email', placeholder: 'email@exemplo.pt' },
                 { key: 'company', label: 'Empresa', placeholder: 'Nome da empresa' },
+                { key: 'address', label: 'Morada', placeholder: 'Rua, código postal, cidade e país' },
                 { key: 'phone', label: 'Telefone', placeholder: '+351 ...' },
                 { key: 'nif', label: 'NIF', placeholder: '509...' },
               ] as const).map(field => (

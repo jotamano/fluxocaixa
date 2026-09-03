@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import {
   DEFAULT_BILLING_ANCHOR_OFFSET_DAYS,
   useAppSettings,
@@ -57,7 +58,9 @@ export default function Settings() {
     phone: "",
     registration_number: "",
     bank_details: "",
+    logo_url: "",
   });
+  const [logoUploading, setLogoUploading] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -78,6 +81,7 @@ export default function Settings() {
       phone: settings.georgia_company_phone ?? "",
       registration_number: settings.georgia_company_registration_number ?? "",
       bank_details: settings.georgia_company_bank_details ?? "",
+      logo_url: settings.georgia_company_logo_url ?? "",
     });
   }, [settings]);
 
@@ -108,6 +112,40 @@ export default function Settings() {
       template: settings.whatsapp_message_template ?? DEFAULT_WA_TEMPLATE,
     });
   }, [settings]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Ficheiro inválido", description: "Escolhe uma imagem PNG, JPG ou SVG.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "Imagem demasiado grande", description: "O logótipo deve ter no máximo 2 MB.", variant: "destructive" });
+      return;
+    }
+    setLogoUploading(true);
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase() || "png";
+      const path = `issuer-logo/logo.${extension}`;
+      const { error: uploadError } = await supabase.storage.from("company-assets").upload(path, file, {
+        upsert: true,
+        contentType: file.type,
+        cacheControl: "3600",
+      });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("company-assets").getPublicUrl(path);
+      const logoUrl = `${data.publicUrl}?v=${Date.now()}`;
+      await updateMutation.mutateAsync({ georgia_company_logo_url: logoUrl });
+      setIssuer(prev => ({ ...prev, logo_url: logoUrl }));
+      toast({ title: "Logótipo guardado", description: "Será incluído nas próximas Faturas Geórgia." });
+    } catch (err) {
+      toast({ title: "Erro no upload", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   const handleSaveIssuer = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
@@ -364,6 +402,14 @@ export default function Settings() {
                 placeholder="IBAN, SWIFT/BIC ou instruções de pagamento"
                 disabled={isLoading || updateMutation.isPending}
               />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="georgia-company-logo">Logótipo da empresa (opcional)</Label>
+              <div className="flex items-center gap-4 rounded-md border p-3">
+                {issuer.logo_url && <img src={issuer.logo_url} alt="Logótipo atual" className="h-14 w-14 object-contain" />}
+                <Input id="georgia-company-logo" type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={handleLogoUpload} disabled={isLoading || logoUploading || updateMutation.isPending} />
+              </div>
+              <p className="text-xs text-muted-foreground">PNG, JPG ou SVG, até 2 MB. Aparece no cabeçalho das novas faturas.</p>
             </div>
           </div>
           <Button type="submit" disabled={isLoading || updateMutation.isPending}>

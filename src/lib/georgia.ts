@@ -7,6 +7,7 @@ export interface GeorgiaCompanyProfile {
   phone: string;
   registration_number: string;
   bank_details: string;
+  logo_url: string;
 }
 
 export function isGeorgiaCompanyProfileComplete(profile: GeorgiaCompanyProfile | null | undefined): boolean {

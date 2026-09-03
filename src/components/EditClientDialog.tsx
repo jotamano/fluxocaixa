@@ -37,12 +37,13 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-type FieldKey = "name" | "email" | "company" | "phone" | "nif";
+type FieldKey = "name" | "email" | "company" | "phone" | "nif" | "address";
 
 // `full` fields span both grid columns; the rest pair up on wider screens.
 const FIELDS: { key: FieldKey; label: string; placeholder: string; full?: boolean; type?: string }[] = [
   { key: "name", label: "Nome", placeholder: "Nome completo", full: true },
   { key: "company", label: "Empresa", placeholder: "Nome da empresa", full: true },
+  { key: "address", label: "Morada", placeholder: "Rua, código postal, cidade e país", full: true },
   { key: "email", label: "Email", placeholder: "email@exemplo.pt", type: "email" },
   { key: "phone", label: "Telefone", placeholder: "+351 ..." },
   { key: "nif", label: "NIF", placeholder: "509..." },
@@ -57,7 +58,8 @@ export function EditClientDialog({ client, open, onOpenChange }: Props) {
   const [form, setForm] = useState({
     name: "",
     email: "",
-    company: "",
+  company: "",
+    address: "",
     phone: "",
     nif: "",
     whatsapp_group_jid: "",
@@ -75,6 +77,7 @@ export function EditClientDialog({ client, open, onOpenChange }: Props) {
       name: client.name,
       email: client.email,
       company: client.company,
+      address: client.address || "",
       phone: client.phone || "",
       nif: client.nif || "",
       whatsapp_group_jid: client.whatsapp_group_jid || "",
@@ -113,6 +116,7 @@ export function EditClientDialog({ client, open, onOpenChange }: Props) {
           name: form.name,
           email: form.email,
           company: form.company,
+          address: form.address,
           phone: form.phone,
           nif: form.nif,
           whatsapp_group_jid: form.whatsapp_group_jid.trim() || null,

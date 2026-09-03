@@ -13,11 +13,16 @@ interface GeorgiaInvoice {
   client_name: string;
   client_nif?: string;
   client_address?: string;
+  client_email?: string;
+  client_phone?: string;
+  client_company?: string;
+  client_country?: string;
   service_description: string;
   amount: number;
   currency: string;
   exchange_rate?: number;
   status: string;
+  issuer_logo_url?: string | null;
 }
 
 interface Props {
@@ -34,6 +39,10 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
     client_name: '',
     client_nif: '',
     client_address: '',
+    client_email: '',
+    client_phone: '',
+    client_company: '',
+    client_country: 'Portugal',
     service_description: '',
     amount: 0,
     currency: 'EUR',
@@ -81,6 +90,10 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
       client_name: formData.client_name,
       client_nif: formData.client_nif || null,
       client_address: formData.client_address || null,
+      client_email: formData.client_email || null,
+      client_phone: formData.client_phone || null,
+      client_company: formData.client_company || null,
+      client_country: formData.client_country || null,
       service_description: formData.service_description,
       amount: Math.round(formData.amount * 100), // Store in cents
       currency: formData.currency,
@@ -97,6 +110,7 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
       issuer_phone: issuerProfile.phone.trim() || null,
       issuer_registration_number: issuerProfile.registration_number.trim() || null,
       issuer_bank_details: issuerProfile.bank_details.trim() || null,
+      issuer_logo_url: issuerProfile.logo_url.trim() || null,
     };
 
     try {
@@ -182,6 +196,7 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
               name="client_nif"
               value={formData.client_nif}
               onChange={handleChange}
+              required
               className="w-full border border-gray-300 rounded-md px-3 py-2"
               placeholder="PT123456789"
             />
@@ -194,9 +209,28 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
               name="client_address"
               value={formData.client_address}
               onChange={handleChange}
+              required
               className="w-full border border-gray-300 rounded-md px-3 py-2"
               placeholder="Rua Exemplo, Lisboa"
             />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Empresa do Cliente</label>
+            <input type="text" name="client_company" value={formData.client_company} onChange={handleChange} className="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="Empresa Lda" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">País do Cliente</label>
+            <input type="text" name="client_country" value={formData.client_country} onChange={handleChange} required className="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="Portugal" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email do Cliente</label>
+            <input type="email" name="client_email" value={formData.client_email} onChange={handleChange} className="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="email@cliente.com" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Telefone do Cliente</label>
+            <input type="text" name="client_phone" value={formData.client_phone} onChange={handleChange} className="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="+351 ..." />
           </div>
         </div>
 

@@ -30,10 +30,11 @@ interface Props {
   defaultName?: string;
 }
 
-const FIELDS: { key: "name" | "email" | "company" | "phone" | "nif"; label: string; placeholder: string }[] = [
+const FIELDS: { key: "name" | "email" | "company" | "phone" | "nif" | "address"; label: string; placeholder: string }[] = [
   { key: "name", label: "Nome", placeholder: "Nome completo" },
   { key: "email", label: "Email", placeholder: "email@exemplo.pt" },
   { key: "company", label: "Empresa", placeholder: "Nome da empresa" },
+  { key: "address", label: "Morada", placeholder: "Rua, código postal, cidade e país" },
   { key: "phone", label: "Telefone", placeholder: "+351 ..." },
   { key: "nif", label: "NIF", placeholder: "509..." },
 ];
@@ -45,6 +46,7 @@ export function QuickCreateClientDialog({ open, onOpenChange, onCreated, default
     name: defaultName,
     email: "",
     company: "",
+    address: "",
     phone: "",
     nif: "",
     has_iva: DEFAULT_HAS_IVA,
@@ -52,7 +54,7 @@ export function QuickCreateClientDialog({ open, onOpenChange, onCreated, default
   });
 
   const resetForm = () => setForm({
-    name: "", email: "", company: "", phone: "", nif: "",
+    name: "", email: "", company: "", address: "", phone: "", nif: "",
     has_iva: DEFAULT_HAS_IVA, iva_percentage: DEFAULT_IVA_PERCENTAGE,
   });
 
@@ -66,6 +68,7 @@ export function QuickCreateClientDialog({ open, onOpenChange, onCreated, default
         name: form.name,
         email: form.email,
         company: form.company,
+        address: form.address,
         phone: form.phone,
         nif: form.nif,
         has_iva: form.has_iva,

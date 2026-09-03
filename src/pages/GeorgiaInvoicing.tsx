@@ -17,6 +17,10 @@ interface GeorgiaInvoice {
   client_name: string;
   client_nif?: string;
   client_address?: string;
+  client_email?: string;
+  client_phone?: string;
+  client_company?: string;
+  client_country?: string;
   service_description: string;
   amount: number;
   currency: string;
@@ -30,6 +34,7 @@ interface GeorgiaInvoice {
   issuer_phone?: string | null;
   issuer_registration_number?: string | null;
   issuer_bank_details?: string | null;
+  issuer_logo_url?: string | null;
   status: string;
   created_at?: string;
 }
@@ -59,6 +64,7 @@ export default function GeorgiaInvoicing() {
     phone: settings?.georgia_company_phone ?? '',
     registration_number: settings?.georgia_company_registration_number ?? '',
     bank_details: settings?.georgia_company_bank_details ?? '',
+    logo_url: settings?.georgia_company_logo_url ?? '',
   };
 
   useEffect(() => {
@@ -125,7 +131,11 @@ export default function GeorgiaInvoicing() {
       invoice_date: source.issue_date,
       client_name: getClientLabel(source, 'Sem cliente'),
       client_nif: source.clients?.nif ?? '',
-      client_address: '',
+      client_address: source.clients?.address ?? '',
+      client_email: source.clients?.email ?? '',
+      client_phone: source.clients?.phone ?? '',
+      client_company: source.clients?.company ?? '',
+      client_country: 'Portugal',
       service_description: description || source.notes || '',
       amount: getInvoiceTotalWithIva(source.invoice_items ?? [], source),
       currency: 'EUR',

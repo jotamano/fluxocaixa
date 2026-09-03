@@ -26,6 +26,7 @@ export type Database = {
           georgia_company_phone: string
           georgia_company_registration_number: string
           georgia_company_bank_details: string
+          georgia_company_logo_url: string | null
           whatsapp_enabled: boolean
           whatsapp_hub_url: string | null
           whatsapp_api_key: string | null
@@ -46,6 +47,7 @@ export type Database = {
           georgia_company_phone?: string
           georgia_company_registration_number?: string
           georgia_company_bank_details?: string
+          georgia_company_logo_url?: string | null
           whatsapp_enabled?: boolean
           whatsapp_hub_url?: string | null
           whatsapp_api_key?: string | null
@@ -66,6 +68,7 @@ export type Database = {
           georgia_company_phone?: string
           georgia_company_registration_number?: string
           georgia_company_bank_details?: string
+          georgia_company_logo_url?: string | null
           whatsapp_enabled?: boolean
           whatsapp_hub_url?: string | null
           whatsapp_api_key?: string | null
@@ -115,6 +118,7 @@ export type Database = {
       }
       clients: {
         Row: {
+          address: string
           company: string
           created_at: string
           deleted_at: string | null
@@ -128,6 +132,7 @@ export type Database = {
           whatsapp_group_jid: string | null
         }
         Insert: {
+          address?: string
           company: string
           created_at?: string
           deleted_at?: string | null
@@ -141,6 +146,7 @@ export type Database = {
           whatsapp_group_jid?: string | null
         }
         Update: {
+          address?: string
           company?: string
           created_at?: string
           deleted_at?: string | null

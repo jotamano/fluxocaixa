@@ -8,6 +8,10 @@ interface GeorgiaInvoice {
   client_name: string;
   client_nif?: string;
   client_address?: string;
+  client_email?: string;
+  client_phone?: string;
+  client_company?: string;
+  client_country?: string;
   service_description: string;
   amount: number;
   currency: string;
@@ -21,6 +25,7 @@ interface GeorgiaInvoice {
   issuer_phone?: string | null;
   issuer_registration_number?: string | null;
   issuer_bank_details?: string | null;
+  issuer_logo_url?: string | null;
 }
 
 interface Props {
@@ -48,11 +53,15 @@ function getIssuerProfile(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompan
     phone: invoice.issuer_phone?.trim() || companyProfile.phone,
     registration_number: invoice.issuer_registration_number?.trim() || companyProfile.registration_number,
     bank_details: invoice.issuer_bank_details?.trim() || companyProfile.bank_details,
+    logo_url: invoice.issuer_logo_url?.trim() || companyProfile.logo_url,
   };
 }
 
 function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompanyProfile): string {
   const issuer = getIssuerProfile(invoice, companyProfile);
+  const issuerLogo = issuer.logo_url
+    ? `<img src="${escapeHtml(issuer.logo_url)}" alt="Logótipo" style="max-height:72px;max-width:180px;object-fit:contain;margin-bottom:12px;" />`
+    : '';
   const description = escapeHtml(invoice.service_description).replace(/\n/g, '<br/>');
   const issuerAddress = escapeHtml(issuer.address).replace(/\n/g, '<br/>');
   const issuerBankDetails = issuer.bank_details
@@ -114,6 +123,7 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
           </div>
           <div class="section">
             <p class="section-title">Fornecedor:</p>
+            ${issuerLogo}
             <p>${escapeHtml(issuer.name)}</p>
             <p>${issuerAddress}</p>
             <p>NIF: ${escapeHtml(issuer.tax_id)}</p>
@@ -126,8 +136,12 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
           <div class="section">
             <p class="section-title">Cliente:</p>
             <p>${escapeHtml(invoice.client_name)}</p>
+            ${invoice.client_company ? `<p>${escapeHtml(invoice.client_company)}</p>` : ''}
             ${clientNif}
             ${clientAddress}
+            ${invoice.client_country ? `<p style="font-size:13px;color:#4b5563;">${escapeHtml(invoice.client_country)}</p>` : ''}
+            ${invoice.client_email ? `<p style="font-size:13px;color:#4b5563;">${escapeHtml(invoice.client_email)}</p>` : ''}
+            ${invoice.client_phone ? `<p style="font-size:13px;color:#4b5563;">${escapeHtml(invoice.client_phone)}</p>` : ''}
           </div>
           <div class="section">
             <p class="section-title">Descrição dos Serviços:</p>
@@ -193,6 +207,7 @@ export default function GeorgiaInvoicePreview({ invoice, companyProfile, onClose
 
         <div className="mb-8">
           <h3 className="font-semibold mb-2">Fornecedor:</h3>
+          {issuer.logo_url && <img src={issuer.logo_url} alt="Logótipo" className="mb-3 h-16 max-w-[180px] object-contain" />}
           <p className="text-sm text-gray-700">{issuer.name}</p>
           <p className="text-sm text-gray-700 whitespace-pre-line">{issuer.address}</p>
           <p className="text-sm text-gray-700">NIF: {issuer.tax_id}</p>
@@ -206,8 +221,12 @@ export default function GeorgiaInvoicePreview({ invoice, companyProfile, onClose
         <div className="mb-8">
           <h3 className="font-semibold mb-2">Cliente:</h3>
           <p className="text-sm text-gray-700">{invoice.client_name}</p>
+          {invoice.client_company && <p className="text-sm text-gray-700">{invoice.client_company}</p>}
           {invoice.client_nif && <p className="text-sm text-gray-700">NIF: {invoice.client_nif}</p>}
           {invoice.client_address && <p className="text-sm text-gray-700">{invoice.client_address}</p>}
+          {invoice.client_country && <p className="text-sm text-gray-700">{invoice.client_country}</p>}
+          {invoice.client_email && <p className="text-sm text-gray-700">{invoice.client_email}</p>}
+          {invoice.client_phone && <p className="text-sm text-gray-700">{invoice.client_phone}</p>}
         </div>
 
         <div className="mb-8">
