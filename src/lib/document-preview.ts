@@ -42,6 +42,44 @@ export function openDocumentPreview({ title, html, singlePage = false }: Documen
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script>
+      function waitForImages(root) {
+        const images = Array.from(root.querySelectorAll('img'));
+        return Promise.all(images.map(image => new Promise(resolve => {
+          if (image.complete) {
+            resolve();
+            return;
+          }
+          image.addEventListener('load', resolve, { once: true });
+          image.addEventListener('error', resolve, { once: true });
+        })));
+      }
+
+      async function prepareImagesForPdf(root) {
+        const images = Array.from(root.querySelectorAll('img'));
+        await Promise.all(images.map(image => {
+          const source = image.currentSrc || image.src;
+          if (!source || source.startsWith('data:') || source.startsWith('blob:')) return Promise.resolve();
+          let imageUrl;
+          try {
+            imageUrl = new URL(source, document.baseURI);
+          } catch {
+            return Promise.resolve();
+          }
+          if (imageUrl.origin === window.location.origin) return Promise.resolve();
+          return new Promise(resolve => {
+            const proxiedImage = new Image();
+            proxiedImage.crossOrigin = 'anonymous';
+            proxiedImage.onload = () => {
+              image.src = proxiedImage.src;
+              resolve();
+            };
+            proxiedImage.onerror = () => resolve();
+            proxiedImage.src = 'https://images.weserv.nl/?url=' + encodeURIComponent(imageUrl.href);
+          });
+        }));
+        await waitForImages(root);
+      }
+
       async function downloadDocumentPdf() {
         const content = document.querySelector('[data-document-preview-content]');
         const page = content?.querySelector('[data-document-page]') || content;
@@ -52,6 +90,7 @@ export function openDocumentPreview({ title, html, singlePage = false }: Documen
         const toolbar = document.querySelector('[data-document-preview-toolbar]');
         if (toolbar) toolbar.style.display = 'none';
         try {
+          await prepareImagesForPdf(page);
           const canvas = await window.html2canvas(page, {
             scale: 2,
             useCORS: true,
