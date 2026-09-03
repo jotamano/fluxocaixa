@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { AppLayout } from './components/AppLayout'
 import { AuthProvider } from './hooks/use-auth'
+import { TooltipProvider } from './components/ui/tooltip'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Clients from './pages/Clients'
@@ -66,8 +67,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <Toaster position="top-right" />
-          <Routes>
+          <TooltipProvider>
+            <Toaster position="top-right" />
+            <Routes>
           <Route
             path="/login"
             element={!isAuthenticated ? <Login /> : <Navigate to="/dashboard" />}
@@ -181,7 +183,8 @@ function App() {
             path="*"
             element={<NotFound />}
           />
-          </Routes>
+            </Routes>
+          </TooltipProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
