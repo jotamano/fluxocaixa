@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/integrations/supabase/client'
+import { AppLayout } from './components/AppLayout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Clients from './pages/Clients'
@@ -69,10 +70,11 @@ function App() {
             path="/login"
             element={!isAuthenticated ? <Login /> : <Navigate to="/dashboard" />}
           />
-          <Route
-            path="/dashboard"
-            element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />}
-          />
+          <Route element={<AppLayout />}>
+            <Route
+              path="/dashboard"
+              element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />}
+            />
           <Route
             path="/clients"
             element={isAuthenticated ? <Clients /> : <Navigate to="/login" />}
@@ -153,6 +155,7 @@ function App() {
             path="/"
             element={<Navigate to="/dashboard" />}
           />
+          </Route>
           <Route
             path="*"
             element={<NotFound />}
