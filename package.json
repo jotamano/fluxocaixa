@@ -57,9 +57,8 @@
     "react-hook-form": "^7.54.2",
     "react-hot-toast": "^2.5.2",
     "react-resizable-panels": "^2.1.7",
-
     "react-router-dom": "^7.1.1",
-    "react-to-print": "^3.5.1",
+    "react-to-print": "^3.3.0",
     "recharts": "^2.15.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.6.2",
