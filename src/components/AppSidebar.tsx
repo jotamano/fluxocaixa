@@ -13,6 +13,7 @@ const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/clients", icon: Users, label: "Clientes" },
   { to: "/invoices", icon: FileText, label: "Faturas" },
+  { to: "/georgia-invoices", icon: FileText, label: "Faturas Geórgia" },
   { to: "/payments", icon: CreditCard, label: "Pagamentos" },
   { to: "/subscriptions", icon: RefreshCw, label: "Subscrições" },
   { to: "/scheduled-invoices", icon: CalendarClock, label: "Faturas agendadas" },

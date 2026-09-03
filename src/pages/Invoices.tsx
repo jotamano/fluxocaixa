@@ -211,7 +211,7 @@ export default function Invoices() {
           <h1 className="text-2xl sm:text-3xl font-bold font-display text-foreground">Faturas</h1>
           <p className="mt-1 text-muted-foreground">{invoices.length} faturas emitidas</p>
         </div>
-        <Link to="/faturas/nova" className="shrink-0">
+        <Link to="/invoices/new" className="shrink-0">
           <Button className="gap-2"><FileText className="h-4 w-4" /> Nova Fatura</Button>
         </Link>
       </div>

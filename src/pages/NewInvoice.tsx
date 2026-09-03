@@ -363,7 +363,7 @@ export default function NewInvoice() {
         }
       }
 
-      navigate("/faturas");
+      navigate("/invoices");
     } catch (err) {
       toast({
         title: "Erro",

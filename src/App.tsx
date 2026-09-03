@@ -157,6 +157,25 @@ function App() {
             path="/"
             element={<Navigate to="/dashboard" />}
           />
+
+          {/* Backwards-compatible Portuguese routes still used by older links. */}
+          <Route path="/clientes" element={isAuthenticated ? <Clients /> : <Navigate to="/login" />} />
+          <Route path="/clientes/:id" element={isAuthenticated ? <ClientDetail /> : <Navigate to="/login" />} />
+          <Route path="/faturas" element={isAuthenticated ? <Invoices /> : <Navigate to="/login" />} />
+          <Route path="/faturas/:id" element={isAuthenticated ? <InvoiceDetail /> : <Navigate to="/login" />} />
+          <Route path="/faturas/nova" element={isAuthenticated ? <NewInvoice /> : <Navigate to="/login" />} />
+          <Route path="/pagamentos" element={isAuthenticated ? <Payments /> : <Navigate to="/login" />} />
+          <Route path="/pagamentos/:id" element={isAuthenticated ? <PaymentDetail /> : <Navigate to="/login" />} />
+          <Route path="/subscricoes" element={isAuthenticated ? <Subscriptions /> : <Navigate to="/login" />} />
+          <Route path="/subscricoes/:id" element={isAuthenticated ? <SubscriptionDetail /> : <Navigate to="/login" />} />
+          <Route path="/faturas-agendadas" element={isAuthenticated ? <ScheduledInvoices /> : <Navigate to="/login" />} />
+          <Route path="/calendario" element={isAuthenticated ? <Calendar /> : <Navigate to="/login" />} />
+          <Route path="/servicos" element={isAuthenticated ? <Services /> : <Navigate to="/login" />} />
+          <Route path="/servicos/:id" element={isAuthenticated ? <ServiceDetail /> : <Navigate to="/login" />} />
+          <Route path="/lixo" element={isAuthenticated ? <Trash /> : <Navigate to="/login" />} />
+          <Route path="/configuracoes" element={isAuthenticated ? <Settings /> : <Navigate to="/login" />} />
+          <Route path="/membros" element={isAuthenticated ? <Members /> : <Navigate to="/login" />} />
+          <Route path="/auditoria" element={isAuthenticated ? <Audit /> : <Navigate to="/login" />} />
           </Route>
           <Route
             path="*"
