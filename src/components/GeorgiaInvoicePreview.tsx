@@ -1,4 +1,5 @@
 import { openDocumentPreview } from '@/lib/document-preview';
+import type { GeorgiaCompanyProfile } from '@/lib/georgia';
 
 interface GeorgiaInvoice {
   id?: string;
@@ -12,10 +13,19 @@ interface GeorgiaInvoice {
   currency: string;
   exchange_rate?: number;
   amount_gel?: number;
+  issuer_name?: string | null;
+  issuer_address?: string | null;
+  issuer_tax_id?: string | null;
+  issuer_country?: string | null;
+  issuer_email?: string | null;
+  issuer_phone?: string | null;
+  issuer_registration_number?: string | null;
+  issuer_bank_details?: string | null;
 }
 
 interface Props {
   invoice: GeorgiaInvoice;
+  companyProfile: GeorgiaCompanyProfile;
   onClose: () => void;
 }
 
@@ -28,8 +38,31 @@ const escapeHtml = (value: string) => value
 
 const formatAmount = (value: number, currency: string) => `${(value / 100).toFixed(2)} ${currency}`;
 
-function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice): string {
+function getIssuerProfile(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompanyProfile): GeorgiaCompanyProfile {
+  return {
+    name: invoice.issuer_name?.trim() || companyProfile.name,
+    address: invoice.issuer_address?.trim() || companyProfile.address,
+    tax_id: invoice.issuer_tax_id?.trim() || companyProfile.tax_id,
+    country: invoice.issuer_country?.trim() || companyProfile.country,
+    email: invoice.issuer_email?.trim() || companyProfile.email,
+    phone: invoice.issuer_phone?.trim() || companyProfile.phone,
+    registration_number: invoice.issuer_registration_number?.trim() || companyProfile.registration_number,
+    bank_details: invoice.issuer_bank_details?.trim() || companyProfile.bank_details,
+  };
+}
+
+function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompanyProfile): string {
+  const issuer = getIssuerProfile(invoice, companyProfile);
   const description = escapeHtml(invoice.service_description).replace(/\n/g, '<br/>');
+  const issuerAddress = escapeHtml(issuer.address).replace(/\n/g, '<br/>');
+  const issuerBankDetails = issuer.bank_details
+    ? `<p style="font-size:13px;color:#4b5563;white-space:pre-line;">${escapeHtml(issuer.bank_details)}</p>`
+    : '';
+  const issuerEmail = issuer.email ? `<p style="font-size:13px;color:#4b5563;">${escapeHtml(issuer.email)}</p>` : '';
+  const issuerPhone = issuer.phone ? `<p style="font-size:13px;color:#4b5563;">${escapeHtml(issuer.phone)}</p>` : '';
+  const issuerRegistration = issuer.registration_number
+    ? `<p style="font-size:13px;color:#4b5563;">Registo comercial: ${escapeHtml(issuer.registration_number)}</p>`
+    : '';
   const clientAddress = invoice.client_address
     ? `<p style="font-size:13px;color:#4b5563;">${escapeHtml(invoice.client_address)}</p>`
     : '';
@@ -53,7 +86,6 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice): string {
           .page { max-width: 800px; margin: 0 auto; padding: 44px; }
           .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 36px; }
           h1 { margin: 0; font-size: 24px; }
-          h2 { margin: 0; font-size: 18px; }
           .muted { color: #6b7280; }
           .section { margin-bottom: 28px; }
           .section-title { margin: 0 0 8px; font-weight: 700; }
@@ -82,9 +114,14 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice): string {
           </div>
           <div class="section">
             <p class="section-title">Fornecedor:</p>
-            <p>[Seu Nome/Empresa]</p>
-            <p>[Sua Morada na Geórgia]</p>
-            <p>NIF: [Seu NIF Georgiano]</p>
+            <p>${escapeHtml(issuer.name)}</p>
+            <p>${issuerAddress}</p>
+            <p>NIF: ${escapeHtml(issuer.tax_id)}</p>
+            <p>${escapeHtml(issuer.country)}</p>
+            ${issuerRegistration}
+            ${issuerEmail}
+            ${issuerPhone}
+            ${issuerBankDetails}
           </div>
           <div class="section">
             <p class="section-title">Cliente:</p>
@@ -113,11 +150,13 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice): string {
   `;
 }
 
-export default function GeorgiaInvoicePreview({ invoice, onClose }: Props) {
+export default function GeorgiaInvoicePreview({ invoice, companyProfile, onClose }: Props) {
+  const issuer = getIssuerProfile(invoice, companyProfile);
+
   const handleOpenPdf = () => {
     openDocumentPreview({
       title: `Fatura Geórgia ${invoice.invoice_number}`,
-      html: buildGeorgiaInvoiceHtml(invoice),
+      html: buildGeorgiaInvoiceHtml(invoice, companyProfile),
     });
   };
 
@@ -154,9 +193,14 @@ export default function GeorgiaInvoicePreview({ invoice, onClose }: Props) {
 
         <div className="mb-8">
           <h3 className="font-semibold mb-2">Fornecedor:</h3>
-          <p className="text-sm text-gray-700">[Seu Nome/Empresa]</p>
-          <p className="text-sm text-gray-700">[Sua Morada na Geórgia]</p>
-          <p className="text-sm text-gray-700">NIF: [Seu NIF Georgiano]</p>
+          <p className="text-sm text-gray-700">{issuer.name}</p>
+          <p className="text-sm text-gray-700 whitespace-pre-line">{issuer.address}</p>
+          <p className="text-sm text-gray-700">NIF: {issuer.tax_id}</p>
+          <p className="text-sm text-gray-700">{issuer.country}</p>
+          {issuer.registration_number && <p className="text-sm text-gray-700">Registo comercial: {issuer.registration_number}</p>}
+          {issuer.email && <p className="text-sm text-gray-700">{issuer.email}</p>}
+          {issuer.phone && <p className="text-sm text-gray-700">{issuer.phone}</p>}
+          {issuer.bank_details && <p className="text-sm text-gray-700 whitespace-pre-line">{issuer.bank_details}</p>}
         </div>
 
         <div className="mb-8">

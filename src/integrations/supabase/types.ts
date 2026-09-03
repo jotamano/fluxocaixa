@@ -18,6 +18,14 @@ export type Database = {
         Row: {
           id: number
           billing_anchor_offset_days: number
+          georgia_company_name: string
+          georgia_company_address: string
+          georgia_company_tax_id: string
+          georgia_company_country: string
+          georgia_company_email: string
+          georgia_company_phone: string
+          georgia_company_registration_number: string
+          georgia_company_bank_details: string
           whatsapp_enabled: boolean
           whatsapp_hub_url: string | null
           whatsapp_api_key: string | null
@@ -30,6 +38,14 @@ export type Database = {
         Insert: {
           id?: number
           billing_anchor_offset_days?: number
+          georgia_company_name?: string
+          georgia_company_address?: string
+          georgia_company_tax_id?: string
+          georgia_company_country?: string
+          georgia_company_email?: string
+          georgia_company_phone?: string
+          georgia_company_registration_number?: string
+          georgia_company_bank_details?: string
           whatsapp_enabled?: boolean
           whatsapp_hub_url?: string | null
           whatsapp_api_key?: string | null
@@ -42,6 +58,14 @@ export type Database = {
         Update: {
           id?: number
           billing_anchor_offset_days?: number
+          georgia_company_name?: string
+          georgia_company_address?: string
+          georgia_company_tax_id?: string
+          georgia_company_country?: string
+          georgia_company_email?: string
+          georgia_company_phone?: string
+          georgia_company_registration_number?: string
+          georgia_company_bank_details?: string
           whatsapp_enabled?: boolean
           whatsapp_hub_url?: string | null
           whatsapp_api_key?: string | null
