@@ -27,6 +27,10 @@ export type Database = {
           georgia_company_registration_number: string
           georgia_company_bank_details: string
           georgia_company_logo_url: string | null
+          georgia_invoice_tax_label: string
+          georgia_invoice_tax_note: string
+          georgia_invoice_payment_terms: string
+          georgia_invoice_footer_note: string
           whatsapp_enabled: boolean
           whatsapp_hub_url: string | null
           whatsapp_api_key: string | null
@@ -48,6 +52,10 @@ export type Database = {
           georgia_company_registration_number?: string
           georgia_company_bank_details?: string
           georgia_company_logo_url?: string | null
+          georgia_invoice_tax_label?: string
+          georgia_invoice_tax_note?: string
+          georgia_invoice_payment_terms?: string
+          georgia_invoice_footer_note?: string
           whatsapp_enabled?: boolean
           whatsapp_hub_url?: string | null
           whatsapp_api_key?: string | null
@@ -69,6 +77,10 @@ export type Database = {
           georgia_company_registration_number?: string
           georgia_company_bank_details?: string
           georgia_company_logo_url?: string | null
+          georgia_invoice_tax_label?: string
+          georgia_invoice_tax_note?: string
+          georgia_invoice_payment_terms?: string
+          georgia_invoice_footer_note?: string
           whatsapp_enabled?: boolean
           whatsapp_hub_url?: string | null
           whatsapp_api_key?: string | null

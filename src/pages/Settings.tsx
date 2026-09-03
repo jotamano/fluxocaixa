@@ -58,6 +58,10 @@ export default function Settings() {
     registration_number: "",
     bank_details: "",
     logo_url: "",
+    invoice_tax_label: "Tratamento de IVA a confirmar",
+    invoice_tax_note: "O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.",
+    invoice_payment_terms: "Pagamento até 30 dias após a data de emissão.",
+    invoice_footer_note: "Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.",
   });
 
   useEffect(() => {
@@ -80,6 +84,10 @@ export default function Settings() {
       registration_number: settings.georgia_company_registration_number ?? "",
       bank_details: settings.georgia_company_bank_details ?? "",
       logo_url: settings.georgia_company_logo_url ?? "",
+      invoice_tax_label: settings.georgia_invoice_tax_label ?? "Tratamento de IVA a confirmar",
+      invoice_tax_note: settings.georgia_invoice_tax_note ?? "O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.",
+      invoice_payment_terms: settings.georgia_invoice_payment_terms ?? "Pagamento até 30 dias após a data de emissão.",
+      invoice_footer_note: settings.georgia_invoice_footer_note ?? "Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.",
     });
   }, [settings]);
 
@@ -143,6 +151,10 @@ export default function Settings() {
         georgia_company_registration_number: issuer.registration_number.trim(),
         georgia_company_bank_details: issuer.bank_details.trim(),
         georgia_company_logo_url: issuer.logo_url.trim() || null,
+        georgia_invoice_tax_label: issuer.invoice_tax_label.trim(),
+        georgia_invoice_tax_note: issuer.invoice_tax_note.trim(),
+        georgia_invoice_payment_terms: issuer.invoice_payment_terms.trim(),
+        georgia_invoice_footer_note: issuer.invoice_footer_note.trim(),
       });
       toast({ title: "Dados da empresa guardados", description: "O perfil será usado nas próximas Faturas Geórgia." });
     } catch (err) {
@@ -383,6 +395,49 @@ export default function Settings() {
               <Input id="georgia-company-logo" type="url" value={issuer.logo_url} onChange={e => setIssuer(prev => ({ ...prev, logo_url: e.target.value }))} placeholder="https://unbreakablesystems.pt/wp-content/uploads/2026/09/logo.png" disabled={isLoading || updateMutation.isPending} />
               {issuer.logo_url && <img src={issuer.logo_url} alt="Pré-visualização do logótipo" className="h-16 max-w-[220px] object-contain" onError={e => { e.currentTarget.style.display = "none"; }} />}
               <p className="text-xs text-muted-foreground">Introduz o URL público direto da imagem (HTTPS). O logótipo aparece no cabeçalho das novas faturas.</p>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="georgia-invoice-tax-label">Título do tratamento fiscal</Label>
+              <Input
+                id="georgia-invoice-tax-label"
+                value={issuer.invoice_tax_label}
+                onChange={e => setIssuer(prev => ({ ...prev, invoice_tax_label: e.target.value }))}
+                placeholder="Tratamento de IVA a confirmar"
+                disabled={isLoading || updateMutation.isPending}
+              />
+              <p className="text-xs text-muted-foreground">Evita texto fixo como “Reverse Charge”; usa aqui o título adequado ao teu enquadramento, depois de o validares.</p>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="georgia-invoice-tax-note">Nota fiscal apresentada na fatura</Label>
+              <Textarea
+                id="georgia-invoice-tax-note"
+                rows={3}
+                value={issuer.invoice_tax_note}
+                onChange={e => setIssuer(prev => ({ ...prev, invoice_tax_note: e.target.value }))}
+                placeholder="Texto fiscal configurável…"
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="georgia-invoice-payment-terms">Condições de pagamento</Label>
+              <Input
+                id="georgia-invoice-payment-terms"
+                value={issuer.invoice_payment_terms}
+                onChange={e => setIssuer(prev => ({ ...prev, invoice_payment_terms: e.target.value }))}
+                placeholder="Pagamento até 30 dias após a data de emissão."
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="georgia-invoice-footer-note">Nota de rodapé</Label>
+              <Textarea
+                id="georgia-invoice-footer-note"
+                rows={2}
+                value={issuer.invoice_footer_note}
+                onChange={e => setIssuer(prev => ({ ...prev, invoice_footer_note: e.target.value }))}
+                placeholder="Nota final do documento…"
+                disabled={isLoading || updateMutation.isPending}
+              />
             </div>
           </div>
           <Button type="submit" disabled={isLoading || updateMutation.isPending}>

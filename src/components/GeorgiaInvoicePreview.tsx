@@ -5,6 +5,8 @@ interface GeorgiaInvoice {
   id?: string;
   invoice_number: string;
   invoice_date: string;
+  due_date?: string | null;
+  service_period?: string | null;
   client_name: string;
   client_nif?: string;
   client_address?: string;
@@ -17,6 +19,10 @@ interface GeorgiaInvoice {
   currency: string;
   exchange_rate?: number;
   amount_gel?: number;
+  tax_treatment_label?: string | null;
+  tax_treatment_note?: string | null;
+  payment_terms?: string | null;
+  footer_note?: string | null;
   issuer_name?: string | null;
   issuer_address?: string | null;
   issuer_tax_id?: string | null;
@@ -26,6 +32,7 @@ interface GeorgiaInvoice {
   issuer_registration_number?: string | null;
   issuer_bank_details?: string | null;
   issuer_logo_url?: string | null;
+  status?: string;
 }
 
 interface Props {
@@ -34,6 +41,11 @@ interface Props {
   onClose: () => void;
 }
 
+const DEFAULT_TAX_LABEL = 'Tratamento de IVA a confirmar';
+const DEFAULT_TAX_NOTE = 'O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.';
+const DEFAULT_PAYMENT_TERMS = 'Pagamento até 30 dias após a data de emissão.';
+const DEFAULT_FOOTER_NOTE = 'Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.';
+
 const escapeHtml = (value: string) => value
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -41,7 +53,35 @@ const escapeHtml = (value: string) => value
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#039;');
 
-const formatAmount = (value: number, currency: string) => `${(value / 100).toFixed(2)} ${currency}`;
+const text = (value?: string | null) => escapeHtml(value?.trim() || '—');
+const withBreaks = (value?: string | null) => text(value).replace(/\n/g, '<br/>');
+
+function formatMoneyInHtml(valueInCents: number, currency: string) {
+  const amount = (valueInCents || 0) / 100;
+  try {
+    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency, minimumFractionDigits: 2 }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${currency}`;
+  }
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return '—';
+  const date = new Date(`${value.slice(0, 10)}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('pt-PT');
+}
+
+function statusLabel(status?: string) {
+  if (status === 'issued') return 'Emitida';
+  if (status === 'sent') return 'Enviada';
+  return 'Rascunho';
+}
+
+function statusColor(status?: string) {
+  if (status === 'issued') return { background: '#dcfce7', color: '#166534' };
+  if (status === 'sent') return { background: '#dbeafe', color: '#1d4ed8' };
+  return { background: '#fef3c7', color: '#92400e' };
+}
 
 function getIssuerProfile(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompanyProfile): GeorgiaCompanyProfile {
   return {
@@ -54,214 +94,200 @@ function getIssuerProfile(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompan
     registration_number: invoice.issuer_registration_number?.trim() || companyProfile.registration_number,
     bank_details: invoice.issuer_bank_details?.trim() || companyProfile.bank_details,
     logo_url: invoice.issuer_logo_url?.trim() || companyProfile.logo_url,
+    invoice_tax_label: invoice.tax_treatment_label?.trim() || companyProfile.invoice_tax_label,
+    invoice_tax_note: invoice.tax_treatment_note?.trim() || companyProfile.invoice_tax_note,
+    invoice_payment_terms: invoice.payment_terms?.trim() || companyProfile.invoice_payment_terms,
+    invoice_footer_note: invoice.footer_note?.trim() || companyProfile.invoice_footer_note,
   };
 }
 
 function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompanyProfile): string {
   const issuer = getIssuerProfile(invoice, companyProfile);
+  const status = statusColor(invoice.status);
+  const taxLabel = issuer.invoice_tax_label || DEFAULT_TAX_LABEL;
+  const taxNote = issuer.invoice_tax_note || DEFAULT_TAX_NOTE;
+  const paymentTerms = issuer.invoice_payment_terms || DEFAULT_PAYMENT_TERMS;
+  const footerNote = issuer.invoice_footer_note || DEFAULT_FOOTER_NOTE;
+  const description = withBreaks(invoice.service_description);
+  const amount = formatMoneyInHtml(invoice.amount, invoice.currency);
+  const gelAmount = invoice.amount_gel && invoice.currency !== 'GEL'
+    ? formatMoneyInHtml(invoice.amount_gel, 'GEL')
+    : '';
   const issuerLogo = issuer.logo_url
-    ? `<img src="${escapeHtml(issuer.logo_url)}" alt="Logótipo" style="max-height:72px;max-width:180px;object-fit:contain;margin-bottom:12px;" />`
-    : '';
-  const description = escapeHtml(invoice.service_description).replace(/\n/g, '<br/>');
-  const issuerAddress = escapeHtml(issuer.address).replace(/\n/g, '<br/>');
-  const issuerBankDetails = issuer.bank_details
-    ? `<p style="font-size:13px;color:#4b5563;white-space:pre-line;">${escapeHtml(issuer.bank_details)}</p>`
-    : '';
-  const issuerEmail = issuer.email ? `<p style="font-size:13px;color:#4b5563;">${escapeHtml(issuer.email)}</p>` : '';
-  const issuerPhone = issuer.phone ? `<p style="font-size:13px;color:#4b5563;">${escapeHtml(issuer.phone)}</p>` : '';
-  const issuerRegistration = issuer.registration_number
-    ? `<p style="font-size:13px;color:#4b5563;">Registo comercial: ${escapeHtml(issuer.registration_number)}</p>`
-    : '';
-  const clientAddress = invoice.client_address
-    ? `<p style="font-size:13px;color:#4b5563;">${escapeHtml(invoice.client_address)}</p>`
-    : '';
-  const clientNif = invoice.client_nif
-    ? `<p style="font-size:13px;color:#4b5563;">NIF: ${escapeHtml(invoice.client_nif)}</p>`
-    : '';
+    ? `<img src="${text(issuer.logo_url)}" alt="Logótipo" class="brand-logo" />`
+    : `<div class="brand-mark">F</div>`;
+  const issuerContact = [issuer.email, issuer.phone].filter(Boolean).map(item => `<span>${text(item)}</span>`).join('');
+  const clientContact = [invoice.client_email, invoice.client_phone].filter(Boolean).map(item => `<span>${text(item)}</span>`).join('');
 
   return `
     <!DOCTYPE html>
     <html lang="pt-PT">
       <head>
         <meta charset="utf-8" />
-        <title>Fatura ${escapeHtml(invoice.invoice_number)}</title>
+        <title>Fatura ${text(invoice.invoice_number)}</title>
         <style>
+          @page { size: A4; margin: 0; }
           * { box-sizing: border-box; }
-          body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; color: #1f2937; background: #fff; }
-          .document-preview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; background: #111827; color: #fff; position: sticky; top: 0; z-index: 2; }
-          .document-preview-actions { display: flex; gap: 8px; }
-          .document-preview-actions button { border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; background: #2563eb; color: #fff; font-weight: 600; }
-          .document-preview-actions button:last-child { background: #374151; }
-          .page { max-width: 800px; margin: 0 auto; padding: 44px; }
-          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 36px; }
-          h1 { margin: 0; font-size: 24px; }
-          .muted { color: #6b7280; }
-          .section { margin-bottom: 28px; }
-          .section-title { margin: 0 0 8px; font-weight: 700; }
-          .section p { margin: 3px 0; }
-          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-          th, td { padding: 12px 8px; border-bottom: 1px solid #e5e7eb; }
-          th { text-align: left; color: #4b5563; font-size: 13px; }
+          :root { color-scheme: light; }
+          body { margin: 0; background: #e9eef5; color: #172033; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .sheet { width: 794px; min-height: 1123px; margin: 24px auto; padding: 48px 52px 36px; background: #fff; box-shadow: 0 20px 60px rgba(15, 23, 42, .14); position: relative; overflow: hidden; }
+          .sheet:before { content: ""; position: absolute; inset: 0 0 auto; height: 8px; background: linear-gradient(90deg, #183b73 0%, #2563a8 58%, #38b3a0 100%); }
+          .topline { display: flex; justify-content: space-between; gap: 28px; align-items: flex-start; padding-top: 8px; }
+          .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+          .brand-logo { width: 178px; max-height: 66px; object-fit: contain; object-position: left center; }
+          .brand-mark { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 15px; background: #183b73; color: #fff; font-size: 28px; font-weight: 800; letter-spacing: -.08em; }
+          .brand-name { margin: 0; font-size: 16px; line-height: 1.25; font-weight: 800; letter-spacing: -.01em; color: #102a52; }
+          .brand-country { margin: 4px 0 0; color: #6b7890; font-size: 10px; text-transform: uppercase; letter-spacing: .12em; }
+          .invoice-heading { text-align: right; }
+          .invoice-kicker { margin: 0; color: #6b7890; font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+          .invoice-title { margin: 4px 0 4px; color: #102a52; font-size: 30px; line-height: 1; font-weight: 850; letter-spacing: -.04em; }
+          .invoice-number { margin: 0; color: #2e6da4; font-size: 13px; font-weight: 700; }
+          .status { display: inline-block; margin-top: 12px; border-radius: 999px; padding: 6px 11px; color: ${status.color}; background: ${status.background}; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+          .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 34px; }
+          .meta-card { min-height: 66px; padding: 12px 13px; border: 1px solid #e3eaf3; border-radius: 12px; background: #f8fafc; }
+          .meta-label { color: #7b879a; font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+          .meta-value { margin-top: 7px; color: #172033; font-size: 12px; font-weight: 750; line-height: 1.3; }
+          .party-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 28px; }
+          .party-card { min-height: 140px; padding: 17px 18px; border: 1px solid #e3eaf3; border-radius: 14px; }
+          .party-card.client { border-color: #cfe4e3; background: linear-gradient(145deg, #f8fdfd, #eff8f7); }
+          .section-label { margin: 0 0 12px; color: #748197; font-size: 9px; font-weight: 850; letter-spacing: .13em; text-transform: uppercase; }
+          .party-name { margin: 0 0 5px; color: #102a52; font-size: 14px; font-weight: 800; }
+          .party-line { margin: 3px 0; color: #536175; font-size: 10.5px; line-height: 1.45; }
+          .party-line strong { color: #2a3548; font-weight: 700; }
+          .contact-row { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 7px; color: #718096; font-size: 9.5px; }
+          .services { margin-top: 30px; }
+          .services-heading { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 10px; }
+          .services-title { margin: 0; color: #102a52; font-size: 14px; font-weight: 800; }
+          .services-caption { color: #8a95a7; font-size: 9.5px; }
+          table { width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid #e3eaf3; border-radius: 12px; }
+          th { padding: 11px 13px; background: #183b73; color: #fff; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-align: left; text-transform: uppercase; }
+          td { padding: 15px 13px; border-top: 1px solid #e8edf4; color: #435167; font-size: 10.5px; vertical-align: top; }
+          td:first-child { width: 57%; color: #172033; font-weight: 700; }
           td:last-child, th:last-child { text-align: right; }
-          .notice { padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; }
-          .footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #6b7280; }
-          @media print {
-            .document-preview-toolbar { display: none !important; }
-            .page { padding: 0; }
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          }
+          .line-description { line-height: 1.55; }
+          .line-period { margin-top: 6px; color: #8a95a7; font-size: 9px; font-weight: 500; }
+          .summary-grid { display: grid; grid-template-columns: 1fr 250px; gap: 28px; align-items: start; margin-top: 18px; }
+          .currency-note { padding: 14px 16px; border-radius: 12px; background: #f2f8f8; color: #406568; font-size: 10px; line-height: 1.5; }
+          .currency-note strong { display: block; margin-bottom: 4px; color: #1f5d63; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
+          .totals { padding: 15px 16px; border: 1px solid #e3eaf3; border-radius: 12px; }
+          .total-row { display: flex; justify-content: space-between; gap: 15px; padding: 6px 0; color: #68768a; font-size: 10.5px; }
+          .total-row + .total-row { border-top: 1px solid #edf1f6; }
+          .total-row strong { color: #172033; font-weight: 750; }
+          .total-row.grand { margin: 8px -16px -15px; padding: 14px 16px; border-top: 1px solid #d4dfed; border-radius: 0 0 12px 12px; background: #f6f9fc; color: #183b73; font-size: 12px; }
+          .total-row.grand strong { color: #183b73; font-size: 17px; }
+          .note-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 26px; }
+          .note-card { padding: 15px 16px; border-radius: 12px; border: 1px solid #e3eaf3; background: #fbfcfe; }
+          .note-card.tax { border-color: #f0dfba; background: #fffaf0; }
+          .note-title { margin: 0 0 7px; color: #21304a; font-size: 10px; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
+          .note-card.tax .note-title { color: #8a5a13; }
+          .note-body { margin: 0; color: #66748a; font-size: 9.5px; line-height: 1.55; white-space: pre-line; }
+          .footer { display: flex; justify-content: space-between; gap: 22px; margin-top: 42px; padding-top: 16px; border-top: 1px solid #dfe7f0; color: #8793a5; font-size: 8.5px; line-height: 1.5; }
+          .footer-left { max-width: 62%; }
+          .footer-right { text-align: right; }
+          .footer strong { display: block; margin-bottom: 3px; color: #526078; font-size: 9px; }
+          @media print { body { background: #fff; } .sheet { margin: 0; box-shadow: none; } }
+          @media (max-width: 820px) { .sheet { width: 100%; min-height: auto; margin: 0; padding: 38px 24px 28px; } .meta-grid { grid-template-columns: repeat(2, 1fr); } }
         </style>
       </head>
       <body>
-        <div class="page">
-          <div class="header">
-            <div>
-              <h1>INVOICE / FATURA</h1>
-              <p class="muted">${escapeHtml(invoice.invoice_number)}</p>
+        <main class="sheet">
+          <header class="topline">
+            <div class="brand">
+              ${issuerLogo}
+              <div><p class="brand-name">${text(issuer.name)}</p><p class="brand-country">${text(issuer.country)}</p></div>
             </div>
-            <p class="muted">Data: ${new Date(invoice.invoice_date).toLocaleDateString('pt-PT')}</p>
-          </div>
-          <div class="section">
-            <p class="section-title">Fornecedor:</p>
-            ${issuerLogo}
-            <p>${escapeHtml(issuer.name)}</p>
-            <p>${issuerAddress}</p>
-            <p>NIF: ${escapeHtml(issuer.tax_id)}</p>
-            <p>${escapeHtml(issuer.country)}</p>
-            ${issuerRegistration}
-            ${issuerEmail}
-            ${issuerPhone}
-            ${issuerBankDetails}
-          </div>
-          <div class="section">
-            <p class="section-title">Cliente:</p>
-            <p>${escapeHtml(invoice.client_name)}</p>
-            ${invoice.client_company ? `<p>${escapeHtml(invoice.client_company)}</p>` : ''}
-            ${clientNif}
-            ${clientAddress}
-            ${invoice.client_country ? `<p style="font-size:13px;color:#4b5563;">${escapeHtml(invoice.client_country)}</p>` : ''}
-            ${invoice.client_email ? `<p style="font-size:13px;color:#4b5563;">${escapeHtml(invoice.client_email)}</p>` : ''}
-            ${invoice.client_phone ? `<p style="font-size:13px;color:#4b5563;">${escapeHtml(invoice.client_phone)}</p>` : ''}
-          </div>
-          <div class="section">
-            <p class="section-title">Descrição dos Serviços:</p>
-            <p>${description}</p>
-          </div>
-          <div class="section">
+            <div class="invoice-heading">
+              <p class="invoice-kicker">Invoice · Fatura</p>
+              <h1 class="invoice-title">FATURA</h1>
+              <p class="invoice-number">${text(invoice.invoice_number)}</p>
+              <span class="status">${statusLabel(invoice.status)}</span>
+            </div>
+          </header>
+
+          <section class="meta-grid">
+            <div class="meta-card"><div class="meta-label">Data de emissão</div><div class="meta-value">${formatDate(invoice.invoice_date)}</div></div>
+            <div class="meta-card"><div class="meta-label">Vencimento</div><div class="meta-value">${formatDate(invoice.due_date)}</div></div>
+            <div class="meta-card"><div class="meta-label">Período do serviço</div><div class="meta-value">${text(invoice.service_period)}</div></div>
+            <div class="meta-card"><div class="meta-label">Moeda</div><div class="meta-value">${text(invoice.currency)}</div></div>
+          </section>
+
+          <section class="party-grid">
+            <div class="party-card">
+              <p class="section-label">Emitente · Issuer</p>
+              <p class="party-name">${text(issuer.name)}</p>
+              <p class="party-line">${withBreaks(issuer.address)}</p>
+              <p class="party-line"><strong>NIF / Tax ID:</strong> ${text(issuer.tax_id)}</p>
+              ${issuer.registration_number ? `<p class="party-line"><strong>Registo:</strong> ${text(issuer.registration_number)}</p>` : ''}
+              ${issuerContact ? `<div class="contact-row">${issuerContact}</div>` : ''}
+            </div>
+            <div class="party-card client">
+              <p class="section-label">Cliente · Bill to</p>
+              <p class="party-name">${text(invoice.client_company || invoice.client_name)}</p>
+              ${invoice.client_company && invoice.client_name !== invoice.client_company ? `<p class="party-line">${text(invoice.client_name)}</p>` : ''}
+              ${invoice.client_nif ? `<p class="party-line"><strong>NIF / Tax ID:</strong> ${text(invoice.client_nif)}</p>` : ''}
+              ${invoice.client_address ? `<p class="party-line">${withBreaks(invoice.client_address)}</p>` : ''}
+              ${invoice.client_country ? `<p class="party-line">${text(invoice.client_country)}</p>` : ''}
+              ${clientContact ? `<div class="contact-row">${clientContact}</div>` : ''}
+            </div>
+          </section>
+
+          <section class="services">
+            <div class="services-heading"><h2 class="services-title">Serviços prestados</h2><span class="services-caption">Descrição detalhada e valor faturado</span></div>
             <table>
-              <thead><tr><th>Descrição</th><th>Valor</th></tr></thead>
-              <tbody><tr><td>Serviços prestados</td><td>${formatAmount(invoice.amount, invoice.currency)}</td></tr></tbody>
+              <thead><tr><th>Descrição</th><th>Qtd.</th><th>Preço unitário</th><th>Total</th></tr></thead>
+              <tbody><tr><td><div class="line-description">${description}</div>${invoice.service_period ? `<div class="line-period">Período: ${text(invoice.service_period)}</div>` : ''}</td><td>1</td><td>${amount}</td><td><strong>${amount}</strong></td></tr></tbody>
             </table>
-          </div>
-          <div class="notice">
-            <strong>IVA — Autoliquidação (Reverse Charge)</strong>
-            <p class="muted">Serviços prestados por empresa não residente em Portugal, fora do âmbito de aplicação do IVA em Portugal. O IVA é devido pelo cliente nos termos do artigo 2.º do Decreto-Lei n.º 198/90.</p>
-          </div>
-          <div class="footer">Esta fatura não inclui IVA ao abrigo do regime de reverse charge.</div>
-        </div>
+          </section>
+
+          <section class="summary-grid">
+            <div>${gelAmount ? `<div class="currency-note"><strong>Referência em GEL</strong>${gelAmount} · taxa de câmbio: 1 ${text(invoice.currency)} = ${Number(invoice.exchange_rate || 0).toFixed(4)} GEL.</div>` : ''}</div>
+            <div class="totals">
+              <div class="total-row"><span>Subtotal</span><strong>${amount}</strong></div>
+              <div class="total-row"><span>IVA / VAT</span><strong>—</strong></div>
+              <div class="total-row grand"><span>Total a pagar</span><strong>${amount}</strong></div>
+            </div>
+          </section>
+
+          <section class="note-grid">
+            <div class="note-card tax"><h3 class="note-title">${text(taxLabel)}</h3><p class="note-body">${withBreaks(taxNote)}</p></div>
+            <div class="note-card"><h3 class="note-title">Pagamento</h3><p class="note-body">${withBreaks(paymentTerms)}${issuer.bank_details ? `<br/><br/><strong>Dados bancários</strong><br/>${withBreaks(issuer.bank_details)}` : ''}</p></div>
+          </section>
+
+          <footer class="footer">
+            <div class="footer-left"><strong>${text(footerNote)}</strong>${issuer.email ? text(issuer.email) : ''}${issuer.email && issuer.phone ? ' · ' : ''}${issuer.phone ? text(issuer.phone) : ''}</div>
+            <div class="footer-right"><strong>${text(invoice.invoice_number)}</strong>Documento gerado pela aplicação<br/>Invoice · Fatura</div>
+          </footer>
+        </main>
       </body>
     </html>
   `;
 }
 
 export default function GeorgiaInvoicePreview({ invoice, companyProfile, onClose }: Props) {
-  const issuer = getIssuerProfile(invoice, companyProfile);
+  const html = buildGeorgiaInvoiceHtml(invoice, companyProfile);
 
   const handleOpenPdf = () => {
     openDocumentPreview({
       title: `Fatura Geórgia ${invoice.invoice_number}`,
-      html: buildGeorgiaInvoiceHtml(invoice, companyProfile),
+      html,
     });
   };
 
   return (
-    <div className="bg-white rounded-lg shadow">
-      <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-        <h2 className="text-xl font-semibold">Visualizar Fatura</h2>
-        <div className="flex gap-3">
-          <button
-            onClick={handleOpenPdf}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md font-medium"
-          >
-            Abrir PDF
-          </button>
-          <button
-            onClick={onClose}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md font-medium"
-          >
-            Fechar
-          </button>
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-xl">
+      <div className="flex flex-col gap-3 border-b border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Pré-visualização</p>
+          <h2 className="mt-1 text-lg font-bold text-slate-900">Fatura {invoice.invoice_number}</h2>
+          <p className="mt-1 text-sm text-slate-500">Documento em formato A4, pronto para abrir e imprimir.</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={handleOpenPdf} className="rounded-lg bg-[#183b73] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#102a52]">Abrir documento</button>
+          <button onClick={onClose} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Fechar</button>
         </div>
       </div>
-
-      <div className="p-8">
-        <div className="flex justify-between items-start mb-8">
-          <div>
-            <h1 className="text-2xl font-bold">INVOICE / FATURA</h1>
-            <p className="text-gray-600">{invoice.invoice_number}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-600">Data: {new Date(invoice.invoice_date).toLocaleDateString('pt-PT')}</p>
-          </div>
-        </div>
-
-        <div className="mb-8">
-          <h3 className="font-semibold mb-2">Fornecedor:</h3>
-          {issuer.logo_url && <img src={issuer.logo_url} alt="Logótipo" className="mb-3 h-16 max-w-[180px] object-contain" />}
-          <p className="text-sm text-gray-700">{issuer.name}</p>
-          <p className="text-sm text-gray-700 whitespace-pre-line">{issuer.address}</p>
-          <p className="text-sm text-gray-700">NIF: {issuer.tax_id}</p>
-          <p className="text-sm text-gray-700">{issuer.country}</p>
-          {issuer.registration_number && <p className="text-sm text-gray-700">Registo comercial: {issuer.registration_number}</p>}
-          {issuer.email && <p className="text-sm text-gray-700">{issuer.email}</p>}
-          {issuer.phone && <p className="text-sm text-gray-700">{issuer.phone}</p>}
-          {issuer.bank_details && <p className="text-sm text-gray-700 whitespace-pre-line">{issuer.bank_details}</p>}
-        </div>
-
-        <div className="mb-8">
-          <h3 className="font-semibold mb-2">Cliente:</h3>
-          <p className="text-sm text-gray-700">{invoice.client_name}</p>
-          {invoice.client_company && <p className="text-sm text-gray-700">{invoice.client_company}</p>}
-          {invoice.client_nif && <p className="text-sm text-gray-700">NIF: {invoice.client_nif}</p>}
-          {invoice.client_address && <p className="text-sm text-gray-700">{invoice.client_address}</p>}
-          {invoice.client_country && <p className="text-sm text-gray-700">{invoice.client_country}</p>}
-          {invoice.client_email && <p className="text-sm text-gray-700">{invoice.client_email}</p>}
-          {invoice.client_phone && <p className="text-sm text-gray-700">{invoice.client_phone}</p>}
-        </div>
-
-        <div className="mb-8">
-          <h3 className="font-semibold mb-2">Descrição dos Serviços:</h3>
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">{invoice.service_description}</p>
-        </div>
-
-        <div className="mb-8">
-          <table className="min-w-full">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left py-2 text-sm font-medium text-gray-700">Descrição</th>
-                <th className="text-right py-2 text-sm font-medium text-gray-700">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="py-3 text-sm text-gray-900">Serviços prestados</td>
-                <td className="py-3 text-right text-sm font-medium text-gray-900">{formatAmount(invoice.amount, invoice.currency)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-8 p-4 bg-gray-50 border border-gray-200 rounded">
-          <p className="text-sm text-gray-700 font-medium">IVA — Autoliquidação (Reverse Charge)</p>
-          <p className="text-xs text-gray-600 mt-1">
-            Serviços prestados por empresa não residente em Portugal, fora do âmbito de aplicação do IVA em Portugal.
-            O IVA é devido pelo cliente nos termos do artigo 2.º do Decreto-Lei n.º 198/90.
-          </p>
-        </div>
-
-        <div className="mt-12 pt-4 border-t text-center text-xs text-gray-500">
-          <p>Esta fatura não inclui IVA ao abrigo do regime de reverse charge.</p>
-        </div>
+      <div className="p-3 sm:p-6">
+        <iframe title={`Pré-visualização da fatura ${invoice.invoice_number}`} srcDoc={html} className="h-[1120px] w-full rounded-xl border border-slate-200 bg-white shadow-lg" />
       </div>
     </div>
   );

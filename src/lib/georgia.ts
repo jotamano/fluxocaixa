@@ -8,6 +8,10 @@ export interface GeorgiaCompanyProfile {
   registration_number: string;
   bank_details: string;
   logo_url: string;
+  invoice_tax_label?: string;
+  invoice_tax_note?: string;
+  invoice_payment_terms?: string;
+  invoice_footer_note?: string;
 }
 
 export function isGeorgiaCompanyProfileComplete(profile: GeorgiaCompanyProfile | null | undefined): boolean {

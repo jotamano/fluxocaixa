@@ -23,6 +23,12 @@ interface GeorgiaInvoice {
   exchange_rate?: number;
   status: string;
   issuer_logo_url?: string | null;
+  due_date?: string | null;
+  service_period?: string | null;
+  tax_treatment_label?: string | null;
+  tax_treatment_note?: string | null;
+  payment_terms?: string | null;
+  footer_note?: string | null;
 }
 
 interface Props {
@@ -47,19 +53,36 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
     amount: 0,
     currency: 'EUR',
     exchange_rate: 2.75,
+    due_date: '',
+    service_period: '',
+    tax_treatment_label: issuerProfile.invoice_tax_label ?? 'Tratamento de IVA a confirmar',
+    tax_treatment_note: issuerProfile.invoice_tax_note ?? 'O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.',
+    payment_terms: issuerProfile.invoice_payment_terms ?? 'Pagamento até 30 dias após a data de emissão.',
+    footer_note: issuerProfile.invoice_footer_note ?? 'Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.',
     status: 'draft',
   });
+
+  const defaultTaxLabel = issuerProfile.invoice_tax_label ?? 'Tratamento de IVA a confirmar';
+  const defaultTaxNote = issuerProfile.invoice_tax_note ?? 'O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.';
+  const defaultPaymentTerms = issuerProfile.invoice_payment_terms ?? 'Pagamento até 30 dias após a data de emissão.';
+  const defaultFooterNote = issuerProfile.invoice_footer_note ?? 'Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.';
 
   useEffect(() => {
     if (invoice) {
       setFormData({
         ...invoice,
+        due_date: invoice.due_date ?? '',
+        service_period: invoice.service_period ?? '',
+        tax_treatment_label: invoice.tax_treatment_label ?? defaultTaxLabel,
+        tax_treatment_note: invoice.tax_treatment_note ?? defaultTaxNote,
+        payment_terms: invoice.payment_terms ?? defaultPaymentTerms,
+        footer_note: invoice.footer_note ?? defaultFooterNote,
         // Existing Georgia invoices are stored in cents; imported source
         // invoices are passed as a new draft and already use euros.
         amount: invoice.id ? invoice.amount / 100 : invoice.amount,
       });
     }
-  }, [invoice]);
+  }, [invoice, defaultFooterNote, defaultPaymentTerms, defaultTaxLabel, defaultTaxNote]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -79,7 +102,7 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
 
     const user = (await georgiaSupabase.auth.getUser()).data.user;
     if (!user) {
-      alert('Erro: utilizador nÃ£o autenticado');
+      alert('Erro: utilizador não autenticado');
       return;
     }
 
@@ -98,6 +121,12 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
       amount: Math.round(formData.amount * 100), // Store in cents
       currency: formData.currency,
       exchange_rate: formData.exchange_rate || 1,
+      due_date: formData.due_date || null,
+      service_period: formData.service_period || null,
+      tax_treatment_label: formData.tax_treatment_label?.trim() || null,
+      tax_treatment_note: formData.tax_treatment_note?.trim() || null,
+      payment_terms: formData.payment_terms?.trim() || null,
+      footer_note: formData.footer_note?.trim() || null,
       status: formData.status,
       updated_at: new Date().toISOString(),
     };
@@ -134,7 +163,7 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
   return (
     <div className="bg-white rounded-lg shadow p-6 mb-6">
       <h2 className="text-xl font-semibold mb-4">
-        {invoice?.id ? 'Editar Fatura' : 'Nova Fatura GeÃ³rgia'}
+        {invoice?.id ? 'Editar Fatura' : 'Nova Fatura Geórgia'}
       </h2>
       {invoice && !invoice.id && (
         <p className="mb-4 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800">
@@ -150,7 +179,7 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">NÂº Fatura</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nº Fatura</label>
             <input
               type="text"
               name="invoice_number"
@@ -171,6 +200,30 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
               onChange={handleChange}
               required
               className="w-full border border-gray-300 rounded-md px-3 py-2"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Data de vencimento (opcional)</label>
+            <input
+              type="date"
+              name="due_date"
+              value={formData.due_date ?? ''}
+              onChange={handleChange}
+              className="w-full border border-gray-300 rounded-md px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Período do serviço (opcional)</label>
+            <input
+              type="text"
+              name="service_period"
+              value={formData.service_period ?? ''}
+              onChange={handleChange}
+              className="w-full border border-gray-300 rounded-md px-3 py-2"
+              placeholder="Ex.: setembro de 2026"
             />
           </div>
         </div>
@@ -235,7 +288,7 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">DescriÃ§Ã£o do ServiÃ§o</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Descrição do Serviço</label>
           <textarea
             name="service_description"
             value={formData.service_description}
@@ -243,7 +296,7 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
             required
             rows={3}
             className="w-full border border-gray-300 rounded-md px-3 py-2"
-            placeholder="ServiÃ§os de desenvolvimento web..."
+            placeholder="Serviços de desenvolvimento web..."
           />
         </div>
 
@@ -271,14 +324,14 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
               onChange={handleChange}
               className="w-full border border-gray-300 rounded-md px-3 py-2"
             >
-              <option value="EUR">EUR (â§¬)</option>
+              <option value="EUR">EUR (€)</option>
               <option value="USD">USD ($)</option>
-              <option value="GEL">GEL (â§¾)</option>
+              <option value="GEL">GEL (₾)</option>
             </select>
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Taxa CÃ¢mbio (para GEL)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Taxa de câmbio (para GEL)</label>
             <input
               type="number"
               name="exchange_rate"

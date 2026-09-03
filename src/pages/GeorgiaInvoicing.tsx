@@ -35,6 +35,12 @@ interface GeorgiaInvoice {
   issuer_registration_number?: string | null;
   issuer_bank_details?: string | null;
   issuer_logo_url?: string | null;
+  due_date?: string | null;
+  service_period?: string | null;
+  tax_treatment_label?: string | null;
+  tax_treatment_note?: string | null;
+  payment_terms?: string | null;
+  footer_note?: string | null;
   status: string;
   created_at?: string;
 }
@@ -65,6 +71,10 @@ export default function GeorgiaInvoicing() {
     registration_number: settings?.georgia_company_registration_number ?? '',
     bank_details: settings?.georgia_company_bank_details ?? '',
     logo_url: settings?.georgia_company_logo_url ?? '',
+    invoice_tax_label: settings?.georgia_invoice_tax_label ?? 'Tratamento de IVA a confirmar',
+    invoice_tax_note: settings?.georgia_invoice_tax_note ?? 'O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.',
+    invoice_payment_terms: settings?.georgia_invoice_payment_terms ?? 'Pagamento até 30 dias após a data de emissão.',
+    invoice_footer_note: settings?.georgia_invoice_footer_note ?? 'Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.',
   };
 
   useEffect(() => {
@@ -176,8 +186,8 @@ export default function GeorgiaInvoicing() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Faturamento Geó§§»rgia</h1>
-        <p className="text-gray-600 mt-1">Emita faturas para clientes internacionais (reverse charge)</p>
+        <h1 className="text-3xl font-bold text-gray-900">Faturação Geórgia</h1>
+        <p className="text-gray-600 mt-1">Cria documentos comerciais para clientes internacionais com tratamento fiscal configurável.</p>
       </div>
 
       {/* Dashboard */}
@@ -187,7 +197,7 @@ export default function GeorgiaInvoicing() {
           <div className="text-2xl font-bold text-gray-900">{stats.totalInvoices}</div>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-600">Faturado (Mêªªs)</div>
+          <div className="text-sm text-gray-600">Faturado (mês)</div>
           <div className="text-2xl font-bold text-gray-900">{(stats.monthAmount / 100).toFixed(2)} GEL</div>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
