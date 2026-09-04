@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Settings as SettingsIcon, MessageCircle, CalendarClock, ArrowRight, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -63,6 +63,7 @@ export default function Settings() {
     invoice_payment_terms: "Pagamento até 30 dias após a data de emissão.",
     invoice_footer_note: "Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.",
   });
+  const issuerLoaded = useRef(false);
 
   useEffect(() => {
     if (settings) {
@@ -73,7 +74,8 @@ export default function Settings() {
   }, [settings, isLoading, error]);
 
   useEffect(() => {
-    if (!settings) return;
+    if (!settings || issuerLoaded.current) return;
+    issuerLoaded.current = true;
     setIssuer({
       name: settings.georgia_company_name ?? "",
       address: settings.georgia_company_address ?? "",
