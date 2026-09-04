@@ -143,6 +143,7 @@ export function openDocumentPreview({ title, html, singlePage = false }: Documen
             filename: '${pdfFilename}',
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true },
+            pagebreak: { mode: ['css', 'legacy'] },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
           }).from(page).save();
         } finally {

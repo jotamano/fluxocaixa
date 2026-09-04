@@ -72,12 +72,12 @@ export function generateClientStatement(
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         @page { size: A4; margin: 0; }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1a1a2e; background: #e9eef5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; color: #1a1a2e; background: #e9eef5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         @media print { body { background: #fff; } }
       </style>
     </head>
     <body>
-      <div data-document-page style="width:794px;min-height:1123px;margin:0 auto;padding:40px;background:#fff;">
+      <div data-document-page style="width:210mm;min-height:297mm;margin:0 auto;padding:40px;background:#fff;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;">
           ${brandHeaderBlock()}
           <div style="text-align:right;">

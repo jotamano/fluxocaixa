@@ -25,8 +25,8 @@ export function generatePaymentReceipt(payment: Payment, client?: Client, invoic
         <style>
           @page { size: A4; margin: 0; }
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Segoe UI', system-ui, sans-serif; color: #172033; background: #e9eef5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .page { width: 794px; min-height: 1123px; margin: 0 auto; padding: 48px 52px 40px; background: #fff; position: relative; overflow: hidden; }
+          body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; color: #172033; background: #e9eef5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .page { width: 210mm; height: 297mm; margin: 0 auto; padding: 48px 52px 40px; background: #fff; position: relative; overflow: hidden; }
           .page:before { content: ''; position: absolute; inset: 0 0 auto; height: 8px; background: linear-gradient(90deg, #183b73, #2563a8 58%, #38b3a0); }
           .header { display: flex; justify-content: space-between; gap: 30px; align-items: flex-start; padding-top: 8px; }
           .header-right { text-align: right; }
@@ -51,7 +51,7 @@ export function generatePaymentReceipt(payment: Payment, client?: Client, invoic
           .notes p { margin-top: 7px; color: #66748a; font-size: 10.5px; line-height: 1.55; white-space: pre-line; }
           .footer { margin-top: 70px; padding-top: 18px; border-top: 1px solid #dfe7f0; color: #8793a5; font-size: 9px; line-height: 1.5; text-align: center; }
           .footer strong { display: block; color: #526078; font-size: 10px; }
-          @media print { body { background: #fff; } }
+          @media print { body { background: #fff; } .page { break-after: avoid-page; page-break-after: avoid; } }
         </style>
       </head>
       <body>
