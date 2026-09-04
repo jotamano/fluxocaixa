@@ -44,6 +44,7 @@ export interface GeorgiaInvoice {
 interface Props {
   invoice: GeorgiaInvoice | null;
   issuerProfile: GeorgiaCompanyProfile;
+  initialInvoiceNumber: string;
   onSave: () => void;
   onCancel: () => void;
 }
@@ -65,13 +66,13 @@ function normalizeItems(invoice: GeorgiaInvoice | null): GeorgiaServiceItem[] {
   return [makeBlankItem()];
 }
 
-export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onCancel }: Props) {
+export default function GeorgiaInvoiceForm({ invoice, issuerProfile, initialInvoiceNumber, onSave, onCancel }: Props) {
   const defaultTaxLabel = issuerProfile.invoice_tax_label ?? 'Tratamento de IVA a confirmar';
   const defaultTaxNote = issuerProfile.invoice_tax_note ?? 'O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.';
   const defaultPaymentTerms = issuerProfile.invoice_payment_terms ?? 'Pagamento até 30 dias após a data de emissão.';
   const defaultFooterNote = issuerProfile.invoice_footer_note ?? 'Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.';
   const [formData, setFormData] = useState<GeorgiaInvoice>({
-    invoice_number: '', invoice_date: new Date().toISOString().split('T')[0], client_name: '', client_nif: '', client_address: '',
+    invoice_number: initialInvoiceNumber, invoice_date: new Date().toISOString().split('T')[0], client_name: '', client_nif: '', client_address: '',
     client_email: '', client_phone: '', client_company: '', client_country: 'Portugal', service_description: '', service_items: [makeBlankItem()],
     amount: 0, currency: 'EUR', exchange_rate: 0, due_date: '', service_period: '', tax_treatment_label: defaultTaxLabel,
     tax_treatment_note: defaultTaxNote, payment_terms: defaultPaymentTerms, footer_note: defaultFooterNote, status: 'draft',
@@ -169,7 +170,7 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
   return (
     <div className="bg-white rounded-lg shadow p-6 mb-6">
       <h2 className="text-xl font-semibold mb-4">{invoice?.id ? 'Editar Fatura' : 'Nova Fatura Geórgia'}</h2>
-      {invoice && !invoice.id && <p className="mb-4 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800">Fatura importada como rascunho. Pode editar qualquer campo e os valores antes de guardar.</p>}
+      {invoice && !invoice.id && invoice.source_invoice_id && <p className="mb-4 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800">Fatura importada como rascunho. Pode editar qualquer campo e os valores antes de guardar.</p>}
       {!isGeorgiaCompanyProfileComplete(issuerProfile) && <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">Para guardar uma Fatura Geórgia válida, configura o nome legal, a morada e o NIF da empresa em <a className="font-semibold underline" href="/settings">Configurações</a>.</p>}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppSettings, useInvoices } from '@/hooks/use-data';
-import type { GeorgiaCompanyProfile } from '@/lib/georgia';
+import { getNextGeorgiaInvoiceNumber, type GeorgiaCompanyProfile } from '@/lib/georgia';
 import { formatInvoiceItemPeriod, getClientLabel, getInvoiceTotalWithIva } from '@/lib/data';
 import type { GeorgiaInvoice, GeorgiaServiceItem } from '../components/GeorgiaInvoiceForm';
 import { supabase } from '@/integrations/supabase/client';
@@ -30,6 +30,7 @@ export default function GeorgiaInvoicing() {
   const [showForm, setShowForm] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<GeorgiaInvoice | null>(null);
   const [previewInvoice, setPreviewInvoice] = useState<GeorgiaInvoice | null>(null);
+  const [nextInvoiceNumber, setNextInvoiceNumber] = useState('');
   const [stats, setStats] = useState<DashboardStats>({ totalInvoices: 0, totalAmount: 0, monthAmount: 0 });
   const [importInvoiceId, setImportInvoiceId] = useState('');
   const { data: sourceInvoices = [], isLoading: sourceInvoicesLoading } = useInvoices();
@@ -91,22 +92,32 @@ export default function GeorgiaInvoicing() {
     setStats({ totalInvoices, totalAmount, monthAmount });
   }
 
-  function handleCreateNew() {
+  async function getNextInvoiceNumber() {
+    const { data, error } = await georgiaSupabase.rpc('next_georgia_invoice_number');
+    if (!error && typeof data === 'string' && data.trim()) return data;
+
+    // Fallback for local environments before the migration is applied.
+    if (error) console.error('Não foi possível obter o número sequencial Georgianna:', error);
+    return getNextGeorgiaInvoiceNumber(invoices.map((invoice) => invoice.invoice_number));
+  }
+
+  async function handleCreateNew() {
+    const number = await getNextInvoiceNumber();
     setImportInvoiceId('');
+    setNextInvoiceNumber(number);
     setEditingInvoice(null);
     setShowForm(true);
     setPreviewInvoice(null);
   }
 
-  function handleImportInvoice(invoiceId: string) {
+  async function handleImportInvoice(invoiceId: string) {
     setImportInvoiceId(invoiceId);
     if (!invoiceId) return;
 
     const source = sourceInvoices.find((invoice) => invoice.id === invoiceId);
     if (!source) return;
 
-    const year = new Date().getFullYear();
-    const nextNumber = `GE${year}${String(invoices.length + 1).padStart(3, '0')}`;
+    const nextNumber = await getNextInvoiceNumber();
     const items: GeorgiaServiceItem[] = (source.invoice_items ?? []).map((item) => ({
       description: item.description,
       quantity: Number(item.quantity) || 1,
@@ -155,14 +166,22 @@ export default function GeorgiaInvoicing() {
     fetchInvoices();
   }
 
-  function handleDelete(id: string) {
-    if (confirm('Tem a certeza que quer eliminar esta fatura?')) {
-      georgiaSupabase
-        .from('georgia_invoices')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id)
-        .then(() => fetchInvoices());
+  async function handleDelete(id: string) {
+    if (!confirm('Tem a certeza que quer eliminar esta fatura?')) return;
+
+    const { error } = await georgiaSupabase
+      .from('georgia_invoices')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Erro ao eliminar fatura Georgianna:', error);
+      alert('Não foi possível eliminar a fatura. Tenta novamente.');
+      return;
     }
+
+    if (previewInvoice?.id === id) setPreviewInvoice(null);
+    await fetchInvoices();
   }
 
   return (
@@ -220,6 +239,7 @@ export default function GeorgiaInvoicing() {
         <GeorgiaInvoiceForm
           invoice={editingInvoice}
           issuerProfile={companyProfile}
+          initialInvoiceNumber={nextInvoiceNumber}
           onSave={handleSaveSuccess}
           onCancel={() => setShowForm(false)}
         />
