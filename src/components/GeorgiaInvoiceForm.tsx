@@ -102,7 +102,7 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, initialInvo
       setRateError('Não foi possível obter a taxa oficial. Podes introduzir a taxa manualmente.');
     }).finally(() => setRateLoading(false));
     return () => controller.abort();
-  }, [invoice?.id, invoice?.invoice_number, formData.currency]);
+  }, [invoice?.id, invoice?.invoice_number, invoice?.source_invoice_id, formData.currency]);
 
   const items = formData.service_items ?? [makeBlankItem()];
   const subtotal = items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0), 0);
