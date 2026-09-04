@@ -169,14 +169,18 @@ export default function GeorgiaInvoicing() {
   async function handleDelete(id: string) {
     if (!confirm('Tem a certeza que quer eliminar esta fatura?')) return;
 
-    const { error } = await georgiaSupabase
-      .from('georgia_invoices')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', id);
+    const { data: deleted, error } = await georgiaSupabase
+      .rpc('soft_delete_georgia_invoice', { p_invoice_id: id });
 
     if (error) {
       console.error('Erro ao eliminar fatura Georgianna:', error);
       alert('Não foi possível eliminar a fatura. Tenta novamente.');
+      return;
+    }
+
+    if (!deleted) {
+      alert('A fatura não foi encontrada ou já foi eliminada.');
+      await fetchInvoices();
       return;
     }
 
