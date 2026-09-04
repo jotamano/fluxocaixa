@@ -120,5 +120,6 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
   openDocumentPreview({
     title: `Fatura ${invoice.number}`,
     html,
+    singlePage: true,
   });
 }

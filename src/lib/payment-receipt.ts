@@ -69,5 +69,5 @@ export function generatePaymentReceipt(payment: Payment, client?: Client, invoic
       </body>
     </html>
   `;
-  openDocumentPreview({ title: `Recibo de pagamento — ${clientName}`, html });
+  openDocumentPreview({ title: `Recibo de pagamento — ${clientName}`, html, singlePage: true });
 }

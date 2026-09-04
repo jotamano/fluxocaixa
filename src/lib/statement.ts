@@ -77,7 +77,7 @@ export function generateClientStatement(
       </style>
     </head>
     <body>
-      <div data-document-page style="width:210mm;min-height:297mm;margin:0 auto;padding:40px;background:#fff;">
+      <div data-document-page style="width:210mm;margin:0 auto;padding:40px;background:#fff;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;">
           ${brandHeaderBlock()}
           <div style="text-align:right;">
