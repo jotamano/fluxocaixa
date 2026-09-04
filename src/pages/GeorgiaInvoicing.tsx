@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAppSettings, useInvoices } from '@/hooks/use-data';
 import type { GeorgiaCompanyProfile } from '@/lib/georgia';
 import { formatInvoiceItemPeriod, getClientLabel, getInvoiceTotalWithIva } from '@/lib/data';
+import type { GeorgiaInvoice, GeorgiaServiceItem } from '../components/GeorgiaInvoiceForm';
 import { supabase } from '@/integrations/supabase/client';
 import GeorgiaInvoiceList from '../components/GeorgiaInvoiceList';
 import GeorgiaInvoiceForm from '../components/GeorgiaInvoiceForm';
@@ -9,41 +10,6 @@ import GeorgiaInvoicePreview from '../components/GeorgiaInvoicePreview';
 
 // A tabela georgia_invoices ainda não está incluída nos tipos gerados do projecto.
 const georgiaSupabase = supabase as any;
-
-interface GeorgiaInvoice {
-  id?: string;
-  invoice_number: string;
-  invoice_date: string;
-  client_name: string;
-  client_nif?: string;
-  client_address?: string;
-  client_email?: string;
-  client_phone?: string;
-  client_company?: string;
-  client_country?: string;
-  service_description: string;
-  amount: number;
-  currency: string;
-  exchange_rate?: number;
-  amount_gel?: number;
-  issuer_name?: string | null;
-  issuer_address?: string | null;
-  issuer_tax_id?: string | null;
-  issuer_country?: string | null;
-  issuer_email?: string | null;
-  issuer_phone?: string | null;
-  issuer_registration_number?: string | null;
-  issuer_bank_details?: string | null;
-  issuer_logo_url?: string | null;
-  due_date?: string | null;
-  service_period?: string | null;
-  tax_treatment_label?: string | null;
-  tax_treatment_note?: string | null;
-  payment_terms?: string | null;
-  footer_note?: string | null;
-  status: string;
-  created_at?: string;
-}
 
 interface DashboardStats {
   totalInvoices: number;
@@ -139,17 +105,13 @@ export default function GeorgiaInvoicing() {
 
     const year = new Date().getFullYear();
     const nextNumber = `GE${year}${String(invoices.length + 1).padStart(3, '0')}`;
-    const items = source.invoice_items ?? [];
-    const itemPeriods = items
-      .map((item) => formatInvoiceItemPeriod(item.service_start_date, item.service_end_date))
-      .filter((period): period is string => Boolean(period));
-    const description = items
-      .map((item) => {
-        const period = formatInvoiceItemPeriod(item.service_start_date, item.service_end_date);
-        return `${item.quantity} × ${item.description}${period ? `\nPeríodo: ${period}` : ''}`;
-      })
-      .join('\n');
-    const servicePeriod = itemPeriods.length > 0 ? [...new Set(itemPeriods)].join('; ') : '';
+    const items: GeorgiaServiceItem[] = (source.invoice_items ?? []).map((item) => ({
+      description: item.description,
+      quantity: Number(item.quantity) || 1,
+      unit_price: Number(item.unit_price) || 0,
+      service_period: formatInvoiceItemPeriod(item.service_start_date, item.service_end_date) ?? '',
+    }));
+    const description = items.map((item) => `${item.quantity} × ${item.description}`).join('\n');
 
     setEditingInvoice({
       invoice_number: nextNumber,
@@ -162,11 +124,11 @@ export default function GeorgiaInvoicing() {
       client_company: source.clients?.company ?? '',
       client_country: 'Portugal',
       service_description: description || source.notes || '',
+      service_items: items,
       due_date: addDaysToDate(source.issue_date, 7),
-      service_period: servicePeriod,
       amount: getInvoiceTotalWithIva(source.invoice_items ?? [], source),
       currency: 'EUR',
-      exchange_rate: 2.75,
+      exchange_rate: 0,
       status: 'draft',
     });
     setShowForm(true);

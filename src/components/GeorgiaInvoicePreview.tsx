@@ -15,6 +15,7 @@ interface GeorgiaInvoice {
   client_company?: string;
   client_country?: string;
   service_description: string;
+  service_items?: { description: string; quantity: number; unit_price: number; service_period?: string | null }[] | null;
   amount: number;
   currency: string;
   exchange_rate?: number;
@@ -108,7 +109,9 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
   const taxNote = issuer.invoice_tax_note || DEFAULT_TAX_NOTE;
   const paymentTerms = issuer.invoice_payment_terms || DEFAULT_PAYMENT_TERMS;
   const footerNote = issuer.invoice_footer_note || DEFAULT_FOOTER_NOTE;
-  const description = withBreaks(invoice.service_description);
+  const serviceItems = invoice.service_items?.length
+    ? invoice.service_items
+    : [{ description: invoice.service_description, quantity: 1, unit_price: (invoice.amount || 0) / 100, service_period: invoice.service_period }];
   const amount = formatMoneyInHtml(invoice.amount, invoice.currency);
   const gelAmount = invoice.amount_gel && invoice.currency !== 'GEL'
     ? formatMoneyInHtml(invoice.amount_gel, 'GEL')
@@ -207,7 +210,7 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
           <section class="meta-grid">
             <div class="meta-card"><div class="meta-label">Data de emissão</div><div class="meta-value">${formatDate(invoice.invoice_date)}</div></div>
             <div class="meta-card"><div class="meta-label">Vencimento</div><div class="meta-value">${formatDate(invoice.due_date)}</div></div>
-            <div class="meta-card"><div class="meta-label">Período do serviço</div><div class="meta-value">${text(invoice.service_period)}</div></div>
+            <div class="meta-card"><div class="meta-label">Itens de serviço</div><div class="meta-value">${serviceItems.length}</div></div>
             <div class="meta-card"><div class="meta-label">Moeda</div><div class="meta-value">${text(invoice.currency)}</div></div>
           </section>
 
@@ -235,7 +238,11 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
             <div class="services-heading"><h2 class="services-title">Serviços prestados</h2><span class="services-caption">Descrição detalhada e valor faturado</span></div>
             <table>
               <thead><tr><th>Descrição</th><th>Qtd.</th><th>Preço unitário</th><th>Total</th></tr></thead>
-              <tbody><tr><td><div class="line-description">${description}</div>${invoice.service_period ? `<div class="line-period">Período: ${text(invoice.service_period)}</div>` : ''}</td><td>1</td><td>${amount}</td><td><strong>${amount}</strong></td></tr></tbody>
+              <tbody>${serviceItems.map(item => {
+                const lineTotal = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
+                const lineAmount = Math.round(lineTotal * 100);
+                return `<tr><td><div class="line-description">${withBreaks(item.description)}</div>${item.service_period ? `<div class="line-period">Período: ${text(item.service_period)}</div>` : ''}</td><td>${item.quantity}</td><td>${formatMoneyInHtml(Math.round((Number(item.unit_price) || 0) * 100), invoice.currency)}</td><td><strong>${formatMoneyInHtml(lineAmount, invoice.currency)}</strong></td></tr>`;
+              }).join('')}</tbody>
             </table>
           </section>
 
