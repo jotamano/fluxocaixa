@@ -34,6 +34,8 @@ export default function GeorgiaInvoicing() {
   const [importInvoiceId, setImportInvoiceId] = useState('');
   const { data: sourceInvoices = [], isLoading: sourceInvoicesLoading } = useInvoices();
   const { data: settings } = useAppSettings();
+  const importedSourceIds = new Set(invoices.map(invoice => invoice.source_invoice_id).filter((id): id is string => Boolean(id)));
+  const availableSourceInvoices = sourceInvoices.filter(source => !importedSourceIds.has(source.id));
   const companyProfile: GeorgiaCompanyProfile = {
     name: settings?.georgia_company_name ?? '',
     address: settings?.georgia_company_address ?? '',
@@ -114,6 +116,7 @@ export default function GeorgiaInvoicing() {
     const description = items.map((item) => `${item.quantity} × ${item.description}`).join('\n');
 
     setEditingInvoice({
+      source_invoice_id: source.id,
       invoice_number: nextNumber,
       invoice_date: source.issue_date,
       client_name: getClientLabel(source, 'Sem cliente'),
@@ -201,11 +204,14 @@ export default function GeorgiaInvoicing() {
           aria-label="Importar fatura existente"
         >
           <option value="">Importar fatura existente…</option>
-          {sourceInvoices.map((source) => (
+          {availableSourceInvoices.map((source) => (
             <option key={source.id} value={source.id}>
               {source.number} — {getClientLabel(source, 'Sem cliente')}
             </option>
           ))}
+          {availableSourceInvoices.length === 0 && !sourceInvoicesLoading && (
+            <option value="" disabled>Não existem faturas disponíveis para importar</option>
+          )}
         </select>
       </div>
 

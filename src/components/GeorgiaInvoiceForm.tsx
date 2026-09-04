@@ -15,6 +15,7 @@ export interface GeorgiaServiceItem {
 
 export interface GeorgiaInvoice {
   id?: string;
+  source_invoice_id?: string | null;
   invoice_number: string;
   invoice_date: string;
   client_name: string;
@@ -126,14 +127,17 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isGeorgiaCompanyProfileComplete(issuerProfile)) { alert('Configura primeiro o nome legal, a morada e o NIF da empresa em Configurações.'); return; }
+    if (!formData.invoice_number.trim() || !formData.invoice_date || !formData.due_date) { alert('Preenche o número, a data de emissão e a data de vencimento.'); return; }
+    if (!formData.client_name.trim() || !formData.client_nif?.trim() || !formData.client_address?.trim() || !formData.client_country?.trim()) { alert('Preenche o nome, NIF, morada e país do cliente.'); return; }
     if (formData.currency === 'EUR' && exchangeRate <= 0) { alert('Indica uma taxa EUR → GEL válida antes de guardar a fatura.'); return; }
     const user = (await georgiaSupabase.auth.getUser()).data.user;
     if (!user) { alert('Erro: utilizador não autenticado'); return; }
     const cleanItems = items.filter(item => item.description.trim()).map(item => ({ ...item, quantity: Number(item.quantity) || 1, unit_price: Number(item.unit_price) || 0 }));
     if (cleanItems.length === 0) { alert('Adiciona pelo menos um item de serviço.'); return; }
+    if (cleanItems.some(item => item.quantity <= 0 || item.unit_price < 0)) { alert('Cada item deve ter uma quantidade válida e um preço unitário não negativo.'); return; }
     const description = cleanItems.map(item => `${item.quantity} × ${item.description}`).join('\n');
     const payload = {
-      user_id: user.id, invoice_number: formData.invoice_number, invoice_date: formData.invoice_date, client_name: formData.client_name,
+      user_id: user.id, source_invoice_id: formData.source_invoice_id || null, invoice_number: formData.invoice_number, invoice_date: formData.invoice_date, client_name: formData.client_name,
       client_nif: formData.client_nif || null, client_address: formData.client_address || null, client_email: formData.client_email || null,
       client_phone: formData.client_phone || null, client_company: formData.client_company || null, client_country: formData.client_country || null,
       service_description: description, service_items: cleanItems, amount: Math.round(subtotal * 100), currency: formData.currency,
@@ -152,7 +156,14 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
         if (error) throw error;
       }
       onSave();
-    } catch (err) { console.error('Error saving invoice:', err); alert('Erro ao guardar fatura'); }
+    } catch (err) {
+      console.error('Error saving invoice:', err);
+      if (err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === '23505' && formData.source_invoice_id) {
+        alert('Esta fatura original já foi importada para uma Fatura Geórgia. Escolhe outra fatura.');
+      } else {
+        alert('Erro ao guardar fatura');
+      }
+    }
   };
 
   return (
