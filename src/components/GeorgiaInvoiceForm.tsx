@@ -189,14 +189,16 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
 
     try {
       if (invoice?.id) {
-        await georgiaSupabase
+        const { error } = await georgiaSupabase
           .from('georgia_invoices')
           .update(payload)
           .eq('id', invoice.id);
+        if (error) throw error;
       } else {
-        await georgiaSupabase
+        const { error } = await georgiaSupabase
           .from('georgia_invoices')
           .insert([{ ...payload, ...issuerSnapshot, created_at: new Date().toISOString() }]);
+        if (error) throw error;
       }
       onSave();
     } catch (err) {
@@ -251,7 +253,7 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Data de vencimento (opcional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Data de vencimento</label>
             <input
               type="date"
               name="due_date"
@@ -261,7 +263,7 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, onSave, onC
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Período do serviço (opcional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Período do serviço</label>
             <input
               type="text"
               name="service_period"

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAppSettings, useInvoices } from '@/hooks/use-data';
 import type { GeorgiaCompanyProfile } from '@/lib/georgia';
-import { getClientLabel, getInvoiceTotalWithIva } from '@/lib/data';
+import { formatInvoiceItemPeriod, getClientLabel, getInvoiceTotalWithIva } from '@/lib/data';
 import { supabase } from '@/integrations/supabase/client';
 import GeorgiaInvoiceList from '../components/GeorgiaInvoiceList';
 import GeorgiaInvoiceForm from '../components/GeorgiaInvoiceForm';
@@ -49,6 +49,13 @@ interface DashboardStats {
   totalInvoices: number;
   totalAmount: number;
   monthAmount: number;
+}
+
+function addDaysToDate(date: string, days: number): string {
+  const value = new Date(`${date.slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(value.getTime())) return '';
+  value.setDate(value.getDate() + days);
+  return value.toISOString().slice(0, 10);
 }
 
 export default function GeorgiaInvoicing() {
@@ -132,9 +139,17 @@ export default function GeorgiaInvoicing() {
 
     const year = new Date().getFullYear();
     const nextNumber = `GE${year}${String(invoices.length + 1).padStart(3, '0')}`;
-    const description = (source.invoice_items ?? [])
-      .map((item) => `${item.quantity} × ${item.description}`)
+    const items = source.invoice_items ?? [];
+    const itemPeriods = items
+      .map((item) => formatInvoiceItemPeriod(item.service_start_date, item.service_end_date))
+      .filter((period): period is string => Boolean(period));
+    const description = items
+      .map((item) => {
+        const period = formatInvoiceItemPeriod(item.service_start_date, item.service_end_date);
+        return `${item.quantity} × ${item.description}${period ? `\nPeríodo: ${period}` : ''}`;
+      })
       .join('\n');
+    const servicePeriod = itemPeriods.length > 0 ? [...new Set(itemPeriods)].join('; ') : '';
 
     setEditingInvoice({
       invoice_number: nextNumber,
@@ -147,6 +162,8 @@ export default function GeorgiaInvoicing() {
       client_company: source.clients?.company ?? '',
       client_country: 'Portugal',
       service_description: description || source.notes || '',
+      due_date: addDaysToDate(source.issue_date, 7),
+      service_period: servicePeriod,
       amount: getInvoiceTotalWithIva(source.invoice_items ?? [], source),
       currency: 'EUR',
       exchange_rate: 2.75,
