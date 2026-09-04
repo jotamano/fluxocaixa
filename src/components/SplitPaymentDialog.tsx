@@ -68,7 +68,7 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
     const buckets = new Map<string, { client: { id: string; label: string }; invoices: Invoice[] }>();
     for (const inv of visibleInvoices) {
       const id = inv.client_id;
-      const label = getClientLabel(inv, "Sem cliente");
+      const label = inv.clients?.name || "Sem cliente";
       if (!buckets.has(id)) buckets.set(id, { client: { id, label }, invoices: [] });
       buckets.get(id)!.invoices.push(inv);
     }
@@ -340,7 +340,7 @@ export function SplitPaymentDialog({ open, onOpenChange, invoices, clientId }: S
               {distribution.map(({ invoice, amount }) => (
                 <div key={invoice.id} className="flex justify-between text-sm">
                   <span className="text-card-foreground truncate pr-2">
-                    {invoice.number} · {getClientLabel(invoice, "—")}
+                    {invoice.number} · {invoice.clients?.name || "—"}
                   </span>
                   <span className="font-semibold text-card-foreground shrink-0">{formatCurrency(amount)}</span>
                 </div>

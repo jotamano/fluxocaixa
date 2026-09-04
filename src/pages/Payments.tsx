@@ -96,7 +96,6 @@ export default function Payments() {
               <tr key={client.id} className="cursor-pointer hover:bg-muted/20 transition-colors" onClick={() => navigate(`/clientes/${client.id}`)}>
                 <td className="px-4 md:px-6 py-4">
                   <p className="font-medium text-card-foreground">{client.name}</p>
-                  <p className="text-xs text-muted-foreground">{client.company}</p>
                 </td>
                 <td className="text-right px-4 md:px-6 py-4 text-card-foreground hidden sm:table-cell">{formatCurrency(totalBilled)}</td>
                 <td className="text-right px-4 md:px-6 py-4 text-card-foreground hidden sm:table-cell">{formatCurrency(totalPaid)}</td>
@@ -129,7 +128,7 @@ export default function Payments() {
                   onClick={() => navigate(`/pagamentos/${payment.id}`)}
                 >
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-card-foreground">{client?.company || client?.name || "Sem cliente"} — {invoice?.number}</p>
+                    <p className="text-sm font-medium text-card-foreground">{client?.name || "Sem cliente"} — {invoice?.number}</p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(payment.date).toLocaleDateString('pt-PT')} · {methodLabels[payment.method]}
                       {payment.notes && ` · ${payment.notes}`}

@@ -69,10 +69,7 @@ export function generateInvoicePDF(invoice: Invoice, client: Client) {
 
         <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin-bottom:30px;">
           <p style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:8px;">Proposta para</p>
-          <p style="font-size:16px;font-weight:700;">${client.company}</p>
-          <p style="font-size:13px;color:#4b5563;margin-top:4px;">${client.name}</p>
-          <p style="font-size:13px;color:#4b5563;">${client.email}${client.phone ? ` · ${client.phone}` : ""}</p>
-          ${client.nif ? `<p style="font-size:13px;color:#4b5563;">NIF: ${client.nif}</p>` : ""}
+          <p style="font-size:16px;font-weight:700;">${client.name}</p>
         </div>
 
         <table style="width:100%;border-collapse:collapse;margin-bottom:30px;">

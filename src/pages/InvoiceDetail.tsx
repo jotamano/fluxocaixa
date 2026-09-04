@@ -408,7 +408,7 @@ export default function InvoiceDetail() {
             </div>
             <p className="mt-1 flex items-center gap-1 text-muted-foreground">
               <span>
-                Cliente: <Link to={`/clientes/${invoice.client_id}`} className="font-medium text-primary hover:underline">{getClientLabel(invoice)}</Link>
+                Cliente: <Link to={`/clientes/${invoice.client_id}`} className="font-medium text-primary hover:underline">{invoice.clients?.name || "Sem cliente"}</Link>
               </span>
               {invoice.client_id && (
                 <Tooltip>

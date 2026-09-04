@@ -364,10 +364,7 @@ export default function Invoices() {
                     </span>
                   </td>
                   <td className="px-4 py-4">
-                    <p className="text-sm font-medium text-card-foreground">{getClientLabel(invoice)}</p>
-                    {invoice.clients?.name && invoice.clients?.company
-                      ? <p className="text-xs text-muted-foreground">{invoice.clients.name}</p>
-                      : null}
+                    <p className="text-sm font-medium text-card-foreground">{invoice.clients?.name || "Sem cliente"}</p>
                   </td>
                   <td className="px-4 py-4 text-sm text-muted-foreground">{new Date(invoice.issue_date).toLocaleDateString('pt-PT')}</td>
                   <td className="px-4 py-4 text-sm text-muted-foreground">{new Date(invoice.due_date).toLocaleDateString('pt-PT')}</td>

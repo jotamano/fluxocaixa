@@ -15,7 +15,7 @@ const date = (value?: string | null) => value ? new Date(`${value.slice(0, 10)}T
 
 export function generatePaymentReceipt(payment: Payment, client?: Client, invoice?: Invoice) {
   const amount = formatCurrency(Number(payment.amount));
-  const clientName = client?.company || client?.name || "Cliente";
+  const clientName = client?.name || "Cliente";
   const html = `
     <!DOCTYPE html>
     <html lang="pt-PT">
@@ -60,7 +60,7 @@ export function generatePaymentReceipt(payment: Payment, client?: Client, invoic
             <div>${brandHeaderBlock()}</div>
             <div class="header-right"><p class="kicker">Comprovativo</p><h1>RECIBO</h1><p class="date">Emitido em ${date(payment.date)}</p></div>
           </header>
-          <section class="card"><p class="card-label">Recebido de</p><p class="client-name">${safe(clientName)}</p>${client?.name && client.company ? `<p class="line">${safe(client.name)}</p>` : ""}${client?.nif ? `<p class="line">NIF: ${safe(client.nif)}</p>` : ""}${client?.email ? `<p class="line">${safe(client.email)}</p>` : ""}</section>
+          <section class="card"><p class="card-label">Recebido de</p><p class="client-name">${safe(clientName)}</p></section>
           <section class="summary"><div class="summary-card amount"><p class="card-label">Montante recebido</p><p class="summary-value">${amount}</p></div><div class="summary-card"><p class="card-label">Método de pagamento</p><p class="summary-value">${safe(methodLabels[payment.method])}</p></div></section>
           <section class="details"><div class="detail-row"><span class="detail-label">Data do pagamento</span><span class="detail-value">${date(payment.date)}</span></div><div class="detail-row"><span class="detail-label">Fatura associada</span><span class="detail-value">${safe(invoice?.number || "Pagamento avulso")}</span></div><div class="detail-row"><span class="detail-label">Identificador do registo</span><span class="detail-value">${safe(payment.id)}</span></div></section>
           ${payment.notes ? `<section class="notes"><p class="card-label">Notas</p><p>${safe(payment.notes)}</p></section>` : ""}

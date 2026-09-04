@@ -172,7 +172,7 @@ export function PaymentDialog({
                   const outstanding = outstandingByInvoice.get(invoice.id) ?? 0;
                   return (
                     <SelectItem key={invoice.id} value={invoice.id}>
-                      {invoice.number} — {getClientLabel(invoice)} ({formatCurrency(outstanding)})
+                      {invoice.number} — {invoice.clients?.name || "Sem cliente"} ({formatCurrency(outstanding)})
                     </SelectItem>
                   );
                 })}
