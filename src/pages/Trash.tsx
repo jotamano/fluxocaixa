@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Trash2, RotateCcw, Users, FileText, RefreshCw, CreditCard } from "lucide-react";
+import { Trash2, RotateCcw, Users, FileText, RefreshCw, CreditCard, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,7 +20,52 @@ import {
 import { formatCurrency, frequencyLabels, getInvoiceTotalWithIva, getAmountWithIva } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+const georgiaSupabase = supabase as any;
+
+function useTrashedGeorgiaInvoices() {
+  return useQuery({
+    queryKey: ["georgia_invoices", "trashed"],
+    queryFn: async () => {
+      const { data, error } = await georgiaSupabase.rpc("list_trashed_georgia_invoices");
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id: string;
+        invoice_number: string;
+        client_name: string;
+        amount: number;
+        currency: string;
+        amount_gel?: number | null;
+        deleted_at: string | null;
+      }>;
+    },
+  });
+}
+
+function useRestoreGeorgiaInvoice() {
+  const qc = useQueryClient();
+  return {
+    mutateAsync: async (id: string) => {
+      const { data, error } = await georgiaSupabase.rpc("restore_georgia_invoice", { p_invoice_id: id });
+      if (error) throw error;
+      if (!data) throw new Error("A fatura georgiana não foi encontrada.");
+      qc.invalidateQueries({ queryKey: ["georgia_invoices"] });
+    },
+  };
+}
+
+function usePurgeGeorgiaInvoice() {
+  const qc = useQueryClient();
+  return {
+    mutateAsync: async (id: string) => {
+      const { data, error } = await georgiaSupabase.rpc("purge_georgia_invoice", { p_invoice_id: id });
+      if (error) throw error;
+      if (!data) throw new Error("A fatura georgiana não foi encontrada no lixo.");
+      qc.invalidateQueries({ queryKey: ["georgia_invoices"] });
+    },
+  };
+}
 
 // Restoring a payment is symmetric to restoring any other table; we
 // implement it inline here to avoid bloating use-data.ts with a fifth
@@ -76,7 +121,7 @@ function daysUntilAutoPurge(iso: string | null | undefined): number | null {
 }
 
 interface PendingPurge {
-  kind: "client" | "invoice" | "subscription" | "payment";
+  kind: "client" | "invoice" | "georgia-invoice" | "subscription" | "payment";
   id: string;
   label: string;
 }
@@ -88,6 +133,7 @@ export default function Trash() {
   const { data: invoices = [] } = useTrashedInvoices();
   const { data: subscriptions = [] } = useTrashedSubscriptions();
   const { data: payments = [] } = useTrashedPayments();
+  const { data: georgiaInvoices = [] } = useTrashedGeorgiaInvoices();
 
   const restoreClient = useRestoreClient();
   const restoreInvoice = useRestoreInvoice();
@@ -98,15 +144,18 @@ export default function Trash() {
   const purgeInvoice = usePurgeInvoice();
   const purgeSubscription = usePurgeSubscription();
   const purgePayment = usePurgePayment();
+  const restoreGeorgiaInvoice = useRestoreGeorgiaInvoice();
+  const purgeGeorgiaInvoice = usePurgeGeorgiaInvoice();
 
   const [pendingPurge, setPendingPurge] = useState<PendingPurge | null>(null);
 
-  const totalTrashed = clients.length + invoices.length + subscriptions.length + payments.length;
+  const totalTrashed = clients.length + invoices.length + georgiaInvoices.length + subscriptions.length + payments.length;
 
   const handleRestore = async (kind: PendingPurge["kind"], id: string, label: string) => {
     try {
       if (kind === "client") await restoreClient.mutateAsync(id);
       else if (kind === "invoice") await restoreInvoice.mutateAsync(id);
+      else if (kind === "georgia-invoice") await restoreGeorgiaInvoice.mutateAsync(id);
       else if (kind === "subscription") await restoreSubscription.mutateAsync(id);
       else if (kind === "payment") await restorePayment.mutateAsync(id);
       toast({ title: "Restaurado", description: label });
@@ -125,6 +174,7 @@ export default function Trash() {
     try {
       if (kind === "client") await purgeClient.mutateAsync(id);
       else if (kind === "invoice") await purgeInvoice.mutateAsync(id);
+      else if (kind === "georgia-invoice") await purgeGeorgiaInvoice.mutateAsync(id);
       else if (kind === "subscription") await purgeSubscription.mutateAsync(id);
       else if (kind === "payment") await purgePayment.mutateAsync(id);
       toast({ title: "Eliminado definitivamente", description: label });
@@ -164,6 +214,10 @@ export default function Trash() {
             <FileText className="h-4 w-4" /> Faturas
             {invoices.length > 0 && <Badge variant="secondary">{invoices.length}</Badge>}
           </TabsTrigger>
+          <TabsTrigger value="georgia-invoices" className="gap-2">
+            <ReceiptText className="h-4 w-4" /> Faturas Geórgia
+            {georgiaInvoices.length > 0 && <Badge variant="secondary">{georgiaInvoices.length}</Badge>}
+          </TabsTrigger>
           <TabsTrigger value="subscriptions" className="gap-2">
             <RefreshCw className="h-4 w-4" /> Subscrições
             {subscriptions.length > 0 && <Badge variant="secondary">{subscriptions.length}</Badge>}
@@ -199,6 +253,20 @@ export default function Trash() {
             }))}
             onRestore={item => handleRestore("invoice", item.id, item.title)}
             onPurge={item => setPendingPurge({ kind: "invoice", id: item.id, label: item.title })}
+          />
+        </TabsContent>
+
+        <TabsContent value="georgia-invoices">
+          <TrashList
+            empty="Sem faturas Geórgia eliminadas."
+            items={georgiaInvoices.map(invoice => ({
+              id: invoice.id,
+              title: invoice.invoice_number,
+              subtitle: `${invoice.client_name || "—"} · ${(Number(invoice.amount ?? 0) / 100).toFixed(2)} ${invoice.currency}${invoice.amount_gel ? ` · ${(Number(invoice.amount_gel) / 100).toFixed(2)} GEL` : ""}`,
+              deletedAt: invoice.deleted_at,
+            }))}
+            onRestore={item => handleRestore("georgia-invoice", item.id, item.title)}
+            onPurge={item => setPendingPurge({ kind: "georgia-invoice", id: item.id, label: item.title })}
           />
         </TabsContent>
 
