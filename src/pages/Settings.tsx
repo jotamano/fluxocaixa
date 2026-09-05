@@ -400,9 +400,8 @@ export default function Settings() {
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="georgia-invoice-tax-label">Título do tratamento fiscal</Label>
-              <Textarea
+              <Input
                 id="georgia-invoice-tax-label"
-                rows={2}
                 value={issuer.invoice_tax_label}
                 onChange={e => setIssuer(prev => ({ ...prev, invoice_tax_label: e.target.value }))}
                 placeholder="Tratamento de IVA a confirmar"
