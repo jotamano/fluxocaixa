@@ -67,10 +67,10 @@ function normalizeItems(invoice: GeorgiaInvoice | null): GeorgiaServiceItem[] {
 }
 
 export default function GeorgiaInvoiceForm({ invoice, issuerProfile, initialInvoiceNumber, onSave, onCancel }: Props) {
-  const defaultTaxLabel = 'IVA 0%';
-  const defaultTaxNote = 'IVA 0% — sem imposto liquidado nesta fatura.';
+  const defaultTaxLabel = issuerProfile.invoice_tax_label ?? 'Tratamento de IVA a confirmar';
+  const defaultTaxNote = issuerProfile.invoice_tax_note ?? 'O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.';
   const defaultPaymentTerms = issuerProfile.invoice_payment_terms ?? 'Pagamento até 30 dias após a data de emissão.';
-  const defaultFooterNote = 'Documento emitido eletronicamente.';
+  const defaultFooterNote = issuerProfile.invoice_footer_note ?? 'Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.';
   const [formData, setFormData] = useState<GeorgiaInvoice>({
     invoice_number: initialInvoiceNumber, invoice_date: new Date().toISOString().split('T')[0], client_name: '', client_nif: '', client_address: '',
     client_email: '', client_phone: '', client_company: '', client_country: 'Portugal', service_description: '', service_items: [makeBlankItem()],
@@ -143,8 +143,8 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, initialInvo
       client_phone: formData.client_phone || null, client_company: formData.client_company || null, client_country: formData.client_country || null,
       service_description: description, service_items: cleanItems, amount: Math.round(subtotal * 100), currency: formData.currency,
       exchange_rate: exchangeRate || 1, amount_gel: Math.round(gelAmount * 100), due_date: formData.due_date || null, service_period: null,
-      tax_treatment_label: 'IVA 0%', tax_treatment_note: 'IVA 0% — sem imposto liquidado nesta fatura.',
-      payment_terms: formData.payment_terms?.trim() || null, footer_note: 'Documento emitido eletronicamente.', status: formData.status,
+      tax_treatment_label: formData.tax_treatment_label?.trim() || null, tax_treatment_note: formData.tax_treatment_note?.trim() || null,
+      payment_terms: formData.payment_terms?.trim() || null, footer_note: formData.footer_note?.trim() || null, status: formData.status,
       updated_at: new Date().toISOString(),
     };
     const issuerSnapshot = { issuer_name: issuerProfile.name.trim(), issuer_address: issuerProfile.address.trim(), issuer_tax_id: issuerProfile.tax_id.trim(), issuer_country: issuerProfile.country.trim() || 'Portugal', issuer_email: issuerProfile.email.trim() || null, issuer_phone: issuerProfile.phone.trim() || null, issuer_registration_number: issuerProfile.registration_number.trim() || null, issuer_bank_details: issuerProfile.bank_details.trim() || null, issuer_logo_url: issuerProfile.logo_url.trim() || null };

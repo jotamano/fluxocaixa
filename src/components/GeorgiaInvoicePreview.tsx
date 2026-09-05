@@ -42,10 +42,10 @@ interface Props {
   onClose: () => void;
 }
 
-const DEFAULT_TAX_LABEL = 'IVA 0%';
-const DEFAULT_TAX_NOTE = 'IVA 0% — sem imposto liquidado nesta fatura.';
+const DEFAULT_TAX_LABEL = 'Tratamento de IVA a confirmar';
+const DEFAULT_TAX_NOTE = 'O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.';
 const DEFAULT_PAYMENT_TERMS = 'Pagamento até 30 dias após a data de emissão.';
-const DEFAULT_FOOTER_NOTE = 'Documento emitido eletronicamente.';
+const DEFAULT_FOOTER_NOTE = 'Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.';
 
 const escapeHtml = (value: string) => value
   .replace(/&/g, '&amp;')
@@ -105,10 +105,10 @@ function getIssuerProfile(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompan
 function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompanyProfile): string {
   const issuer = getIssuerProfile(invoice, companyProfile);
   const status = statusColor(invoice.status);
-  const taxLabel = DEFAULT_TAX_LABEL;
-  const taxNote = DEFAULT_TAX_NOTE;
+  const taxLabel = issuer.invoice_tax_label || DEFAULT_TAX_LABEL;
+  const taxNote = issuer.invoice_tax_note || DEFAULT_TAX_NOTE;
   const paymentTerms = issuer.invoice_payment_terms || DEFAULT_PAYMENT_TERMS;
-  const footerNote = DEFAULT_FOOTER_NOTE;
+  const footerNote = issuer.invoice_footer_note || DEFAULT_FOOTER_NOTE;
   const clientTaxId = formatGeorgiaClientTaxId(invoice.client_nif, invoice.client_country);
   const invoiceVersion = getGeorgiaInvoiceVersion(invoice.client_country);
   const serviceItems = invoice.service_items?.length
@@ -264,7 +264,7 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
 
           <footer class="footer">
             <div class="footer-left"><strong>${text(footerNote)}</strong>${issuer.email ? text(issuer.email) : ''}${issuer.email && issuer.phone ? ' · ' : ''}${issuer.phone ? text(issuer.phone) : ''}</div>
-            <div class="footer-right"><strong>${text(invoice.invoice_number)}</strong>Documento emitido eletronicamente.<br/>Invoice · Fatura</div>
+            <div class="footer-right"><strong>${text(invoice.invoice_number)}</strong>Invoice · Fatura</div>
           </footer>
         </main>
       </body>
