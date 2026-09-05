@@ -1,5 +1,5 @@
 import { openDocumentPreview } from '@/lib/document-preview';
-import type { GeorgiaCompanyProfile } from '@/lib/georgia';
+import { formatGeorgiaClientTaxId, getGeorgiaInvoiceVersion, type GeorgiaCompanyProfile } from '@/lib/georgia';
 
 interface GeorgiaInvoice {
   id?: string;
@@ -42,10 +42,10 @@ interface Props {
   onClose: () => void;
 }
 
-const DEFAULT_TAX_LABEL = 'Tratamento de IVA a confirmar';
-const DEFAULT_TAX_NOTE = 'O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.';
+const DEFAULT_TAX_LABEL = 'IVA 0%';
+const DEFAULT_TAX_NOTE = 'IVA 0% — sem imposto liquidado nesta fatura.';
 const DEFAULT_PAYMENT_TERMS = 'Pagamento até 30 dias após a data de emissão.';
-const DEFAULT_FOOTER_NOTE = 'Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.';
+const DEFAULT_FOOTER_NOTE = 'Documento emitido eletronicamente.';
 
 const escapeHtml = (value: string) => value
   .replace(/&/g, '&amp;')
@@ -105,10 +105,12 @@ function getIssuerProfile(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompan
 function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompanyProfile): string {
   const issuer = getIssuerProfile(invoice, companyProfile);
   const status = statusColor(invoice.status);
-  const taxLabel = issuer.invoice_tax_label || DEFAULT_TAX_LABEL;
-  const taxNote = issuer.invoice_tax_note || DEFAULT_TAX_NOTE;
+  const taxLabel = DEFAULT_TAX_LABEL;
+  const taxNote = DEFAULT_TAX_NOTE;
   const paymentTerms = issuer.invoice_payment_terms || DEFAULT_PAYMENT_TERMS;
-  const footerNote = issuer.invoice_footer_note || DEFAULT_FOOTER_NOTE;
+  const footerNote = DEFAULT_FOOTER_NOTE;
+  const clientTaxId = formatGeorgiaClientTaxId(invoice.client_nif, invoice.client_country);
+  const invoiceVersion = getGeorgiaInvoiceVersion(invoice.client_country);
   const serviceItems = invoice.service_items?.length
     ? invoice.service_items
     : [{ description: invoice.service_description, quantity: 1, unit_price: (invoice.amount || 0) / 100, service_period: invoice.service_period }];
@@ -211,7 +213,7 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
             <div class="meta-card"><div class="meta-label">Data de emissão</div><div class="meta-value">${formatDate(invoice.invoice_date)}</div></div>
             <div class="meta-card"><div class="meta-label">Vencimento</div><div class="meta-value">${formatDate(invoice.due_date)}</div></div>
             <div class="meta-card"><div class="meta-label">Itens de serviço</div><div class="meta-value">${serviceItems.length}</div></div>
-            <div class="meta-card"><div class="meta-label">Moeda</div><div class="meta-value">${text(invoice.currency)}</div></div>
+            <div class="meta-card"><div class="meta-label">Moeda · Versão</div><div class="meta-value">${text(invoice.currency)} · ${text(invoiceVersion)}</div></div>
           </section>
 
           <section class="party-grid">
@@ -227,7 +229,7 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
               <p class="section-label">Cliente · Bill to</p>
               <p class="party-name">${text(invoice.client_company || invoice.client_name)}</p>
               ${invoice.client_company && invoice.client_name !== invoice.client_company ? `<p class="party-line">${text(invoice.client_name)}</p>` : ''}
-              ${invoice.client_nif ? `<p class="party-line"><strong>NIF / Tax ID:</strong> ${text(invoice.client_nif)}</p>` : ''}
+              ${clientTaxId ? `<p class="party-line"><strong>NIF / Tax ID:</strong> ${text(clientTaxId)}</p>` : ''}
               ${invoice.client_address ? `<p class="party-line">${withBreaks(invoice.client_address)}</p>` : ''}
               ${invoice.client_country ? `<p class="party-line">${text(invoice.client_country)}</p>` : ''}
               ${clientContact ? `<div class="contact-row">${clientContact}</div>` : ''}
@@ -250,7 +252,7 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
             <div>${gelAmount ? `<div class="currency-note"><strong>Referência em GEL</strong>${gelAmount} · taxa de câmbio: 1 ${text(invoice.currency)} = ${Number(invoice.exchange_rate || 0).toFixed(4)} GEL.</div>` : ''}</div>
             <div class="totals">
               <div class="total-row"><span>Subtotal</span><strong>${amount}</strong></div>
-              <div class="total-row"><span>IVA / VAT</span><strong>—</strong></div>
+              <div class="total-row"><span>IVA / VAT</span><strong>0%</strong></div>
               <div class="total-row grand"><span>Total a pagar</span><strong>${amount}</strong></div>
             </div>
           </section>
@@ -262,7 +264,7 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
 
           <footer class="footer">
             <div class="footer-left"><strong>${text(footerNote)}</strong>${issuer.email ? text(issuer.email) : ''}${issuer.email && issuer.phone ? ' · ' : ''}${issuer.phone ? text(issuer.phone) : ''}</div>
-            <div class="footer-right"><strong>${text(invoice.invoice_number)}</strong>Documento gerado pela aplicação<br/>Invoice · Fatura</div>
+            <div class="footer-right"><strong>${text(invoice.invoice_number)}</strong>Documento emitido eletronicamente.<br/>Invoice · Fatura</div>
           </footer>
         </main>
       </body>
