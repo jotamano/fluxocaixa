@@ -18,6 +18,25 @@ export function isGeorgiaCompanyProfileComplete(profile: GeorgiaCompanyProfile |
   return Boolean(profile?.name.trim() && profile.address.trim() && profile.tax_id.trim());
 }
 
+export function getGeorgiaClientTaxPrefix(country?: string | null): string {
+  const normalized = country?.trim().toLowerCase();
+  if (normalized === 'portugal' || normalized === 'pt') return 'PT';
+  if (normalized === 'georgia' || normalized === 'geórgia' || normalized === 'ge') return 'GE';
+  const letters = country?.replace(/[^a-z]/gi, '').slice(0, 2).toUpperCase();
+  return letters && letters.length === 2 ? letters : 'PT';
+}
+
+export function formatGeorgiaClientTaxId(taxId?: string | null, country?: string | null): string {
+  const value = taxId?.trim() ?? '';
+  if (!value) return '';
+  const withoutPrefix = /^[A-Za-z]{2}/.test(value) ? value.slice(2) : value;
+  return `${getGeorgiaClientTaxPrefix(country)}${withoutPrefix}`;
+}
+
+export function getGeorgiaInvoiceVersion(country?: string | null): string {
+  return getGeorgiaClientTaxPrefix(country) === 'PT' ? 'Versão portuguesa' : 'PT';
+}
+
 /**
  * Generates the next Georgia invoice number. Existing numbers keep their
  * current GE + year prefix; the numeric sequence starts at 70.
