@@ -24,6 +24,10 @@ interface GeorgiaInvoice {
   tax_treatment_note?: string | null;
   payment_terms?: string | null;
   footer_note?: string | null;
+  tax_treatment_label_en?: string | null;
+  tax_treatment_note_en?: string | null;
+  payment_terms_en?: string | null;
+  footer_note_en?: string | null;
   issuer_name?: string | null;
   issuer_address?: string | null;
   issuer_tax_id?: string | null;
@@ -98,17 +102,28 @@ function getIssuerProfile(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompan
     invoice_tax_label: invoice.tax_treatment_label?.trim() || companyProfile.invoice_tax_label,
     invoice_tax_note: invoice.tax_treatment_note?.trim() || companyProfile.invoice_tax_note,
     invoice_payment_terms: invoice.payment_terms?.trim() || companyProfile.invoice_payment_terms,
-    invoice_footer_note: invoice.footer_note?.trim() || companyProfile.invoice_footer_note,
+        invoice_footer_note: invoice.footer_note?.trim() || companyProfile.invoice_footer_note,
+    invoice_en_tax_label: invoice.tax_treatment_label_en?.trim() || companyProfile.invoice_en_tax_label,
+    invoice_en_tax_note: invoice.tax_treatment_note_en?.trim() || companyProfile.invoice_en_tax_note,
+    invoice_en_payment_terms: invoice.payment_terms_en?.trim() || companyProfile.invoice_en_payment_terms,
+    invoice_en_footer_note: invoice.footer_note_en?.trim() || companyProfile.invoice_en_footer_note,
   };
 }
 
-function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompanyProfile): string {
+type InvoiceLanguage = 'pt' | 'en';
+
+function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompanyProfile, language: InvoiceLanguage = 'pt'): string {
   const issuer = getIssuerProfile(invoice, companyProfile);
   const status = statusColor(invoice.status);
   const taxLabel = issuer.invoice_tax_label || DEFAULT_TAX_LABEL;
   const taxNote = issuer.invoice_tax_note || DEFAULT_TAX_NOTE;
   const paymentTerms = issuer.invoice_payment_terms || DEFAULT_PAYMENT_TERMS;
-  const footerNote = issuer.invoice_footer_note || DEFAULT_FOOTER_NOTE;
+  const footerNote = language === 'en' ? (issuer.invoice_en_footer_note || 'Commercial document. Confirm the applicable tax treatment before final issuance.') : (issuer.invoice_footer_note || DEFAULT_FOOTER_NOTE);
+  const copy = language === 'en' ? {
+    htmlLang: 'en', kicker: 'Invoice', title: 'INVOICE', issued: 'Issue date', due: 'Due date', items: 'Service items', currencyVersion: 'Currency · Version', version: 'English version', issuer: 'Issuer', billTo: 'Bill to', services: 'Services provided', caption: 'Detailed description and billed amount', description: 'Description', quantity: 'Qty.', unitPrice: 'Unit price', total: 'Total', gelReference: 'GEL reference', exchangeRate: 'exchange rate', subtotal: 'Subtotal', vat: 'VAT', totalDue: 'Total due', payment: 'Payment', bank: 'Bank details', status: invoice.status === 'issued' ? 'Issued' : invoice.status === 'sent' ? 'Sent' : 'Draft', register: 'Registration', period: 'Period', footerInvoice: 'Invoice', taxLabel: issuer.invoice_en_tax_label || 'VAT treatment to be confirmed', taxNote: issuer.invoice_en_tax_note || "The VAT treatment must be confirmed according to the type of service, the customer's tax status and the applicable place of taxation.", paymentTerms: issuer.invoice_en_payment_terms || 'Payment due within 30 days from the issue date.',
+  } : {
+    htmlLang: 'pt-PT', kicker: 'Invoice · Fatura', title: 'FATURA', issued: 'Data de emissão', due: 'Vencimento', items: 'Itens de serviço', currencyVersion: 'Moeda · Versão', version: 'Versão portuguesa', issuer: 'Emitente · Issuer', billTo: 'Cliente · Bill to', services: 'Serviços prestados', caption: 'Descrição detalhada e valor faturado', description: 'Descrição', quantity: 'Qtd.', unitPrice: 'Preço unitário', total: 'Total', gelReference: 'Referência em GEL', exchangeRate: 'taxa de câmbio', subtotal: 'Subtotal', vat: 'IVA / VAT', totalDue: 'Total a pagar', payment: 'Pagamento', bank: 'Dados bancários', status: statusLabel(invoice.status), register: 'Registo', period: 'Período', footerInvoice: 'Invoice · Fatura', taxLabel, taxNote, paymentTerms,
+  };
   const clientTaxId = formatGeorgiaClientTaxId(invoice.client_nif, invoice.client_country);
   const invoiceVersion = getGeorgiaInvoiceVersion(invoice.client_country);
   const serviceItems = invoice.service_items?.length
@@ -126,10 +141,10 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
 
   return `
     <!DOCTYPE html>
-    <html lang="pt-PT">
+    <html lang="${copy.htmlLang}">
       <head>
         <meta charset="utf-8" />
-        <title>Fatura ${text(invoice.invoice_number)}</title>
+        <title>${copy.title} ${text(invoice.invoice_number)}</title>
         <style>
           @page { size: A4; margin: 0; }
           * { box-sizing: border-box; }
@@ -202,31 +217,31 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
               <div><p class="brand-name">${text(issuer.name)}</p><p class="brand-country">${text(issuer.country)}</p></div>
             </div>
             <div class="invoice-heading">
-              <p class="invoice-kicker">Invoice · Fatura</p>
-              <h1 class="invoice-title">FATURA</h1>
+              <p class="invoice-kicker">${copy.kicker}</p>
+              <h1 class="invoice-title">${copy.title}</h1>
               <p class="invoice-number">${text(invoice.invoice_number)}</p>
-              <span class="status">${statusLabel(invoice.status)}</span>
+              <span class="status">${copy.status}</span>
             </div>
           </header>
 
           <section class="meta-grid">
-            <div class="meta-card"><div class="meta-label">Data de emissão</div><div class="meta-value">${formatDate(invoice.invoice_date)}</div></div>
-            <div class="meta-card"><div class="meta-label">Vencimento</div><div class="meta-value">${formatDate(invoice.due_date)}</div></div>
-            <div class="meta-card"><div class="meta-label">Itens de serviço</div><div class="meta-value">${serviceItems.length}</div></div>
-            <div class="meta-card"><div class="meta-label">Moeda · Versão</div><div class="meta-value">${text(invoice.currency)} · ${text(invoiceVersion)}</div></div>
+            <div class="meta-card"><div class="meta-label">${copy.issued}</div><div class="meta-value">${formatDate(invoice.invoice_date)}</div></div>
+            <div class="meta-card"><div class="meta-label">${copy.due}</div><div class="meta-value">${formatDate(invoice.due_date)}</div></div>
+            <div class="meta-card"><div class="meta-label">${copy.items}</div><div class="meta-value">${serviceItems.length}</div></div>
+            <div class="meta-card"><div class="meta-label">${copy.currencyVersion}</div><div class="meta-value">${text(invoice.currency)} · ${text(copy.version)}</div></div>
           </section>
 
           <section class="party-grid">
             <div class="party-card">
-              <p class="section-label">Emitente · Issuer</p>
+              <p class="section-label">${copy.issuer}</p>
               <p class="party-name">${text(issuer.name)}</p>
               <p class="party-line">${withBreaks(issuer.address)}</p>
               <p class="party-line"><strong>NIF / Tax ID:</strong> ${text(issuer.tax_id)}</p>
-              ${issuer.registration_number ? `<p class="party-line"><strong>Registo:</strong> ${text(issuer.registration_number)}</p>` : ''}
+              ${issuer.registration_number ? `              <p class="party-line"><strong>${copy.register}:</strong> ${text(issuer.registration_number)}</p>` : ''}
               ${issuerContact ? `<div class="contact-row">${issuerContact}</div>` : ''}
             </div>
             <div class="party-card client">
-              <p class="section-label">Cliente · Bill to</p>
+              <p class="section-label">${copy.billTo}</p>
               <p class="party-name">${text(invoice.client_company || invoice.client_name)}</p>
               ${invoice.client_company && invoice.client_name !== invoice.client_company ? `<p class="party-line">${text(invoice.client_name)}</p>` : ''}
               ${clientTaxId ? `<p class="party-line"><strong>NIF / Tax ID:</strong> ${text(clientTaxId)}</p>` : ''}
@@ -237,34 +252,34 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
           </section>
 
           <section class="services">
-            <div class="services-heading"><h2 class="services-title">Serviços prestados</h2><span class="services-caption">Descrição detalhada e valor faturado</span></div>
+            <div class="services-heading"><h2 class="services-title">${copy.services}</h2><span class="services-caption">${copy.caption}</span></div>
             <table>
-              <thead><tr><th>Descrição</th><th>Qtd.</th><th>Preço unitário</th><th>Total</th></tr></thead>
+              <thead><tr><th>${copy.description}</th><th>${copy.quantity}</th><th>${copy.unitPrice}</th><th>${copy.total}</th></tr></thead>
               <tbody>${serviceItems.map(item => {
                 const lineTotal = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
                 const lineAmount = Math.round(lineTotal * 100);
-                return `<tr><td><div class="line-description">${withBreaks(item.description)}</div>${item.service_period ? `<div class="line-period">Período: ${text(item.service_period)}</div>` : ''}</td><td>${item.quantity}</td><td>${formatMoneyInHtml(Math.round((Number(item.unit_price) || 0) * 100), invoice.currency)}</td><td><strong>${formatMoneyInHtml(lineAmount, invoice.currency)}</strong></td></tr>`;
+                return `<tr><td><div class="line-description">${withBreaks(item.description)}</div>${item.service_period ? `<div class="line-period">${copy.period}: ${text(item.service_period)}</div>` : ''}</td><td>${item.quantity}</td><td>${formatMoneyInHtml(Math.round((Number(item.unit_price) || 0) * 100), invoice.currency)}</td><td><strong>${formatMoneyInHtml(lineAmount, invoice.currency)}</strong></td></tr>`;
               }).join('')}</tbody>
             </table>
           </section>
 
           <section class="summary-grid">
-            <div>${gelAmount ? `<div class="currency-note"><strong>Referência em GEL</strong>${gelAmount} · taxa de câmbio: 1 ${text(invoice.currency)} = ${Number(invoice.exchange_rate || 0).toFixed(4)} GEL.</div>` : ''}</div>
+            <div>${gelAmount ? `<div class="currency-note"><strong>${copy.gelReference}</strong>${gelAmount} · ${copy.exchangeRate}: 1 ${text(invoice.currency)} = ${Number(invoice.exchange_rate || 0).toFixed(4)} GEL.</div>` : ''}</div>
             <div class="totals">
-              <div class="total-row"><span>Subtotal</span><strong>${amount}</strong></div>
-              <div class="total-row"><span>IVA / VAT</span><strong>0%</strong></div>
-              <div class="total-row grand"><span>Total a pagar</span><strong>${amount}</strong></div>
+              <div class="total-row"><span>${copy.subtotal}</span><strong>${amount}</strong></div>
+              <div class="total-row"><span>${copy.vat}</span><strong>0%</strong></div>
+              <div class="total-row grand"><span>${copy.totalDue}</span><strong>${amount}</strong></div>
             </div>
           </section>
 
           <section class="note-grid">
-            <div class="note-card tax"><h3 class="note-title">${text(taxLabel)}</h3><p class="note-body">${withBreaks(taxNote)}</p></div>
-            <div class="note-card"><h3 class="note-title">Pagamento</h3><p class="note-body">${withBreaks(paymentTerms)}${issuer.bank_details ? `<br/><br/><strong>Dados bancários</strong><br/>${withBreaks(issuer.bank_details)}` : ''}</p></div>
+            <div class="note-card tax"><h3 class="note-title">${text(copy.taxLabel)}</h3><p class="note-body">${withBreaks(copy.taxNote)}</p></div>
+            <div class="note-card"><h3 class="note-title">${copy.payment}</h3><p class="note-body">${withBreaks(copy.paymentTerms)}${issuer.bank_details ? `<br/><br/><strong>${copy.bank}</strong><br/>${withBreaks(issuer.bank_details)}` : ''}</p></div>
           </section>
 
           <footer class="footer">
             <div class="footer-left"><strong>${text(footerNote)}</strong>${issuer.email ? text(issuer.email) : ''}${issuer.email && issuer.phone ? ' · ' : ''}${issuer.phone ? text(issuer.phone) : ''}</div>
-            <div class="footer-right"><strong>${text(invoice.invoice_number)}</strong>Invoice · Fatura</div>
+            <div class="footer-right"><strong>${text(invoice.invoice_number)}</strong>${copy.footerInvoice}</div>
           </footer>
         </main>
       </body>
@@ -282,6 +297,13 @@ export default function GeorgiaInvoicePreview({ invoice, companyProfile, onClose
       singlePage: true,
     });
   };
+  const handleOpenEnglishPdf = () => {
+    openDocumentPreview({
+      title: `Georgia Invoice ${invoice.invoice_number} - EN`,
+      html: buildGeorgiaInvoiceHtml(invoice, companyProfile, 'en'),
+      singlePage: true,
+    });
+  };
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-xl">
@@ -292,7 +314,8 @@ export default function GeorgiaInvoicePreview({ invoice, companyProfile, onClose
           <p className="mt-1 text-sm text-slate-500">Documento em formato A4, pronto para abrir e imprimir.</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleOpenPdf} className="rounded-lg bg-[#183b73] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#102a52]">Abrir documento</button>
+          <button onClick={handleOpenPdf} className="rounded-lg bg-[#183b73] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#102a52]">Descarregar PT</button>
+          <button onClick={handleOpenEnglishPdf} className="rounded-lg bg-[#2f7d70] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#246458]">Download EN</button>
           <button onClick={onClose} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Fechar</button>
         </div>
       </div>

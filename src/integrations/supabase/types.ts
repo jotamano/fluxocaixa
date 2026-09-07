@@ -31,6 +31,10 @@ export type Database = {
           georgia_invoice_tax_note: string
           georgia_invoice_payment_terms: string
           georgia_invoice_footer_note: string
+          georgia_invoice_en_tax_label: string
+          georgia_invoice_en_tax_note: string
+          georgia_invoice_en_payment_terms: string
+          georgia_invoice_en_footer_note: string
           whatsapp_enabled: boolean
           whatsapp_hub_url: string | null
           whatsapp_api_key: string | null
@@ -56,6 +60,10 @@ export type Database = {
           georgia_invoice_tax_note?: string
           georgia_invoice_payment_terms?: string
           georgia_invoice_footer_note?: string
+          georgia_invoice_en_tax_label?: string
+          georgia_invoice_en_tax_note?: string
+          georgia_invoice_en_payment_terms?: string
+          georgia_invoice_en_footer_note?: string
           whatsapp_enabled?: boolean
           whatsapp_hub_url?: string | null
           whatsapp_api_key?: string | null
@@ -81,6 +89,10 @@ export type Database = {
           georgia_invoice_tax_note?: string
           georgia_invoice_payment_terms?: string
           georgia_invoice_footer_note?: string
+          georgia_invoice_en_tax_label?: string
+          georgia_invoice_en_tax_note?: string
+          georgia_invoice_en_payment_terms?: string
+          georgia_invoice_en_footer_note?: string
           whatsapp_enabled?: boolean
           whatsapp_hub_url?: string | null
           whatsapp_api_key?: string | null

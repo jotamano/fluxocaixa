@@ -12,6 +12,10 @@ export interface GeorgiaCompanyProfile {
   invoice_tax_note?: string;
   invoice_payment_terms?: string;
   invoice_footer_note?: string;
+  invoice_en_tax_label?: string;
+  invoice_en_tax_note?: string;
+  invoice_en_payment_terms?: string;
+  invoice_en_footer_note?: string;
 }
 
 export function isGeorgiaCompanyProfileComplete(profile: GeorgiaCompanyProfile | null | undefined): boolean {
