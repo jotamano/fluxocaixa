@@ -39,6 +39,10 @@ export interface GeorgiaInvoice {
   tax_treatment_note?: string | null;
   payment_terms?: string | null;
   footer_note?: string | null;
+  tax_treatment_label_en?: string | null;
+  tax_treatment_note_en?: string | null;
+  payment_terms_en?: string | null;
+  footer_note_en?: string | null;
 }
 
 interface Props {
@@ -71,11 +75,16 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, initialInvo
   const defaultTaxNote = issuerProfile.invoice_tax_note ?? 'O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.';
   const defaultPaymentTerms = issuerProfile.invoice_payment_terms ?? 'Pagamento até 30 dias após a data de emissão.';
   const defaultFooterNote = issuerProfile.invoice_footer_note ?? 'Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.';
+  const defaultEnTaxLabel = issuerProfile.invoice_en_tax_label ?? 'VAT treatment to be confirmed';
+  const defaultEnTaxNote = issuerProfile.invoice_en_tax_note ?? "The VAT treatment must be confirmed according to the type of service, the customer's tax status and the applicable place of taxation.";
+  const defaultEnPaymentTerms = issuerProfile.invoice_en_payment_terms ?? 'Payment due within 30 days from the issue date.';
+  const defaultEnFooterNote = issuerProfile.invoice_en_footer_note ?? 'Commercial document. Confirm the applicable tax treatment before final issuance.';
   const [formData, setFormData] = useState<GeorgiaInvoice>({
     invoice_number: initialInvoiceNumber, invoice_date: new Date().toISOString().split('T')[0], client_name: '', client_nif: '', client_address: '',
     client_email: '', client_phone: '', client_company: '', client_country: 'Portugal', service_description: '', service_items: [makeBlankItem()],
     amount: 0, currency: 'EUR', exchange_rate: 0, due_date: '', service_period: '', tax_treatment_label: defaultTaxLabel,
-    tax_treatment_note: defaultTaxNote, payment_terms: defaultPaymentTerms, footer_note: defaultFooterNote, status: 'draft',
+    tax_treatment_note: defaultTaxNote, payment_terms: defaultPaymentTerms, footer_note: defaultFooterNote,
+    tax_treatment_label_en: defaultEnTaxLabel, tax_treatment_note_en: defaultEnTaxNote, payment_terms_en: defaultEnPaymentTerms, footer_note_en: defaultEnFooterNote, status: 'draft',
   });
   const [rateLoading, setRateLoading] = useState(false);
   const [rateError, setRateError] = useState('');
@@ -86,6 +95,8 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, initialInvo
     setFormData({ ...invoice, service_items: normalizeItems(invoice), due_date: invoice.due_date ?? '', service_period: invoice.service_period ?? '',
       tax_treatment_label: invoice.tax_treatment_label ?? defaultTaxLabel, tax_treatment_note: invoice.tax_treatment_note ?? defaultTaxNote,
       payment_terms: invoice.payment_terms ?? defaultPaymentTerms, footer_note: invoice.footer_note ?? defaultFooterNote,
+      tax_treatment_label_en: invoice.tax_treatment_label_en ?? defaultEnTaxLabel, tax_treatment_note_en: invoice.tax_treatment_note_en ?? defaultEnTaxNote,
+      payment_terms_en: invoice.payment_terms_en ?? defaultEnPaymentTerms, footer_note_en: invoice.footer_note_en ?? defaultEnFooterNote,
       amount: invoice.id ? invoice.amount / 100 : invoice.amount, exchange_rate: invoice.exchange_rate ?? 0 });
   }, [invoice, defaultFooterNote, defaultPaymentTerms, defaultTaxLabel, defaultTaxNote]);
 
@@ -144,10 +155,12 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, initialInvo
       service_description: description, service_items: cleanItems, amount: Math.round(subtotal * 100), currency: formData.currency,
       exchange_rate: exchangeRate || 1, amount_gel: Math.round(gelAmount * 100), due_date: formData.due_date || null, service_period: null,
       tax_treatment_label: formData.tax_treatment_label?.trim() || null, tax_treatment_note: formData.tax_treatment_note?.trim() || null,
-      payment_terms: formData.payment_terms?.trim() || null, footer_note: formData.footer_note?.trim() || null, status: formData.status,
+      payment_terms: formData.payment_terms?.trim() || null, footer_note: formData.footer_note?.trim() || null,
+      tax_treatment_label_en: formData.tax_treatment_label_en?.trim() || null, tax_treatment_note_en: formData.tax_treatment_note_en?.trim() || null,
+      payment_terms_en: formData.payment_terms_en?.trim() || null, footer_note_en: formData.footer_note_en?.trim() || null, status: formData.status,
       updated_at: new Date().toISOString(),
     };
-    const issuerSnapshot = { issuer_name: issuerProfile.name.trim(), issuer_address: issuerProfile.address.trim(), issuer_tax_id: issuerProfile.tax_id.trim(), issuer_country: issuerProfile.country.trim() || 'Portugal', issuer_email: issuerProfile.email.trim() || null, issuer_phone: issuerProfile.phone.trim() || null, issuer_registration_number: issuerProfile.registration_number.trim() || null, issuer_bank_details: issuerProfile.bank_details.trim() || null, issuer_logo_url: issuerProfile.logo_url.trim() || null };
+    const issuerSnapshot = { issuer_name: issuerProfile.name.trim(), issuer_address: issuerProfile.address.trim(), issuer_tax_id: issuerProfile.tax_id.trim(), issuer_country: issuerProfile.country.trim() || 'Georgia', issuer_email: issuerProfile.email.trim() || null, issuer_phone: issuerProfile.phone.trim() || null, issuer_registration_number: issuerProfile.registration_number.trim() || null, issuer_bank_details: issuerProfile.bank_details.trim() || null, issuer_logo_url: issuerProfile.logo_url.trim() || null };
     try {
       if (invoice?.id) {
         const { error } = await georgiaSupabase.from('georgia_invoices').update(payload).eq('id', invoice.id);

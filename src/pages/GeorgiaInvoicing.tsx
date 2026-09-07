@@ -41,7 +41,7 @@ export default function GeorgiaInvoicing() {
     name: settings?.georgia_company_name ?? '',
     address: settings?.georgia_company_address ?? '',
     tax_id: settings?.georgia_company_tax_id ?? '',
-    country: settings?.georgia_company_country ?? 'Portugal',
+    country: settings?.georgia_company_country ?? 'Georgia',
     email: settings?.georgia_company_email ?? '',
     phone: settings?.georgia_company_phone ?? '',
     registration_number: settings?.georgia_company_registration_number ?? '',
@@ -50,7 +50,11 @@ export default function GeorgiaInvoicing() {
     invoice_tax_label: settings?.georgia_invoice_tax_label ?? 'Tratamento de IVA a confirmar',
     invoice_tax_note: settings?.georgia_invoice_tax_note ?? 'O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.',
     invoice_payment_terms: settings?.georgia_invoice_payment_terms ?? 'Pagamento até 30 dias após a data de emissão.',
-    invoice_footer_note: settings?.georgia_invoice_footer_note ?? 'Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.',
+    invoice_footer_note: settings?.georgia_invoice_footer_note ?? '',
+    invoice_en_tax_label: settings?.georgia_invoice_en_tax_label ?? 'VAT treatment to be confirmed',
+    invoice_en_tax_note: settings?.georgia_invoice_en_tax_note ?? "The VAT treatment must be confirmed according to the type of service, the customer's tax status and the applicable place of taxation.",
+    invoice_en_payment_terms: settings?.georgia_invoice_en_payment_terms ?? 'Payment due within 30 days from the issue date.',
+    invoice_en_footer_note: settings?.georgia_invoice_en_footer_note ?? 'Commercial document. Confirm the applicable tax treatment before final issuance.',
   };
 
   useEffect(() => {

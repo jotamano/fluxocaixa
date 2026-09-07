@@ -52,7 +52,7 @@ export default function Settings() {
     name: "",
     address: "",
     tax_id: "",
-    country: "Portugal",
+    country: "Georgia",
     email: "",
     phone: "",
     registration_number: "",
@@ -62,6 +62,10 @@ export default function Settings() {
     invoice_tax_note: "O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.",
     invoice_payment_terms: "Pagamento até 30 dias após a data de emissão.",
     invoice_footer_note: "Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.",
+    invoice_en_tax_label: "VAT treatment to be confirmed",
+    invoice_en_tax_note: "The VAT treatment must be confirmed according to the type of service, the customer's tax status and the applicable place of taxation.",
+    invoice_en_payment_terms: "Payment due within 30 days from the issue date.",
+    invoice_en_footer_note: "Commercial document. Confirm the applicable tax treatment before final issuance.",
   });
   const issuerLoaded = useRef(false);
 
@@ -80,7 +84,7 @@ export default function Settings() {
       name: settings.georgia_company_name ?? "",
       address: settings.georgia_company_address ?? "",
       tax_id: settings.georgia_company_tax_id ?? "",
-      country: settings.georgia_company_country ?? "Portugal",
+      country: settings.georgia_company_country ?? "Georgia",
       email: settings.georgia_company_email ?? "",
       phone: settings.georgia_company_phone ?? "",
       registration_number: settings.georgia_company_registration_number ?? "",
@@ -90,6 +94,10 @@ export default function Settings() {
       invoice_tax_note: settings.georgia_invoice_tax_note ?? "O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.",
       invoice_payment_terms: settings.georgia_invoice_payment_terms ?? "Pagamento até 30 dias após a data de emissão.",
       invoice_footer_note: settings.georgia_invoice_footer_note ?? "Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.",
+      invoice_en_tax_label: settings.georgia_invoice_en_tax_label ?? "VAT treatment to be confirmed",
+      invoice_en_tax_note: settings.georgia_invoice_en_tax_note ?? "The VAT treatment must be confirmed according to the type of service, the customer's tax status and the applicable place of taxation.",
+      invoice_en_payment_terms: settings.georgia_invoice_en_payment_terms ?? "Payment due within 30 days from the issue date.",
+      invoice_en_footer_note: settings.georgia_invoice_en_footer_note ?? "Commercial document. Confirm the applicable tax treatment before final issuance.",
     });
   }, [settings]);
 
@@ -157,6 +165,10 @@ export default function Settings() {
         georgia_invoice_tax_note: issuer.invoice_tax_note.trim(),
         georgia_invoice_payment_terms: issuer.invoice_payment_terms.trim(),
         georgia_invoice_footer_note: issuer.invoice_footer_note.trim(),
+        georgia_invoice_en_tax_label: issuer.invoice_en_tax_label.trim(),
+        georgia_invoice_en_tax_note: issuer.invoice_en_tax_note.trim(),
+        georgia_invoice_en_payment_terms: issuer.invoice_en_payment_terms.trim(),
+        georgia_invoice_en_footer_note: issuer.invoice_en_footer_note.trim(),
       });
       toast({ title: "Dados da empresa guardados", description: "O perfil será usado nas próximas Faturas Geórgia." });
     } catch (err) {
@@ -439,6 +451,56 @@ export default function Settings() {
                 value={issuer.invoice_footer_note}
                 onChange={e => setIssuer(prev => ({ ...prev, invoice_footer_note: e.target.value }))}
                 placeholder="Nota final do documento…"
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+
+            <div className="sm:col-span-2 mt-4 rounded-xl border border-blue-200 bg-blue-50/60 p-4">
+              <h3 className="font-semibold text-slate-900">English version — editable invoice text</h3>
+              <p className="mt-1 text-xs text-slate-600">
+                Estes textos são usados apenas no botão de descarga da versão inglesa. A versão portuguesa permanece separada e inalterada.
+              </p>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="georgia-invoice-en-tax-label">English tax treatment title</Label>
+              <Input
+                id="georgia-invoice-en-tax-label"
+                value={issuer.invoice_en_tax_label}
+                onChange={e => setIssuer(prev => ({ ...prev, invoice_en_tax_label: e.target.value }))}
+                placeholder="VAT treatment to be confirmed"
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="georgia-invoice-en-tax-note">English tax note</Label>
+              <Textarea
+                id="georgia-invoice-en-tax-note"
+                rows={3}
+                value={issuer.invoice_en_tax_note}
+                onChange={e => setIssuer(prev => ({ ...prev, invoice_en_tax_note: e.target.value }))}
+                placeholder="English tax treatment note…"
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="georgia-invoice-en-payment-terms">English payment terms</Label>
+              <Textarea
+                id="georgia-invoice-en-payment-terms"
+                rows={3}
+                value={issuer.invoice_en_payment_terms}
+                onChange={e => setIssuer(prev => ({ ...prev, invoice_en_payment_terms: e.target.value }))}
+                placeholder="Payment due within 30 days from the issue date."
+                disabled={isLoading || updateMutation.isPending}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="georgia-invoice-en-footer-note">English footer note</Label>
+              <Textarea
+                id="georgia-invoice-en-footer-note"
+                rows={2}
+                value={issuer.invoice_en_footer_note}
+                onChange={e => setIssuer(prev => ({ ...prev, invoice_en_footer_note: e.target.value }))}
+                placeholder="English footer note…"
                 disabled={isLoading || updateMutation.isPending}
               />
             </div>
