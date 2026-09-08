@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAppSettings, useInvoices } from '@/hooks/use-data';
+import { useAppSettings, useInvoices, useServices } from '@/hooks/use-data';
 import { getNextGeorgiaInvoiceNumber, type GeorgiaCompanyProfile } from '@/lib/georgia';
 import { formatInvoiceItemPeriod, getClientLabel, getInvoiceTotalWithIva } from '@/lib/data';
 import type { GeorgiaInvoice, GeorgiaServiceItem } from '../components/GeorgiaInvoiceForm';
@@ -35,6 +35,7 @@ export default function GeorgiaInvoicing() {
   const [stats, setStats] = useState<DashboardStats>({ totalInvoices: 0, totalAmount: 0, monthAmount: 0 });
   const [importInvoiceId, setImportInvoiceId] = useState('');
   const { data: sourceInvoices = [], isLoading: sourceInvoicesLoading } = useInvoices();
+  const { data: services = [] } = useServices();
   const { data: settings } = useAppSettings();
   const importedSourceIds = new Set(invoices.map(invoice => invoice.source_invoice_id).filter((id): id is string => Boolean(id)));
   const availableSourceInvoices = sourceInvoices.filter(source => !importedSourceIds.has(source.id));
@@ -123,8 +124,10 @@ export default function GeorgiaInvoicing() {
     if (!source) return;
 
     const nextNumber = await getNextInvoiceNumber();
+    const serviceNamesEn = new Map(services.map(service => [service.id, service.name_en?.trim() || '']));
     const items: GeorgiaServiceItem[] = (source.invoice_items ?? []).map((item) => ({
       description: item.description,
+      description_en: item.service_id ? serviceNamesEn.get(item.service_id) || '' : '',
       quantity: Number(item.quantity) || 1,
       unit_price: Number(item.unit_price) || 0,
       service_period: formatInvoiceItemPeriod(item.service_start_date, item.service_end_date) ?? '',

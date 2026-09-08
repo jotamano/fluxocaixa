@@ -16,7 +16,7 @@ interface GeorgiaInvoice {
   client_company?: string;
   client_country?: string;
   service_description: string;
-  service_items?: { description: string; quantity: number; unit_price: number; service_period?: string | null }[] | null;
+  service_items?: { description: string; description_en?: string | null; quantity: number; unit_price: number; service_period?: string | null }[] | null;
   amount: number;
   currency: string;
   exchange_rate?: number;
@@ -129,7 +129,7 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
   const invoiceVersion = getGeorgiaInvoiceVersion(invoice.client_country);
   const serviceItems = invoice.service_items?.length
     ? invoice.service_items
-    : [{ description: invoice.service_description, quantity: 1, unit_price: (invoice.amount || 0) / 100, service_period: invoice.service_period }];
+    : [{ description: invoice.service_description, description_en: '', quantity: 1, unit_price: (invoice.amount || 0) / 100, service_period: invoice.service_period }];
   const amount = formatMoneyInHtml(invoice.amount, invoice.currency);
   const gelAmount = invoice.amount_gel && invoice.currency !== 'GEL'
     ? formatMoneyInHtml(invoice.amount_gel, 'GEL')
@@ -259,7 +259,8 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
               <tbody>${serviceItems.map(item => {
                 const lineTotal = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
                 const lineAmount = Math.round(lineTotal * 100);
-                return `<tr><td><div class="line-description">${withBreaks(item.description)}</div>${item.service_period ? `<div class="line-period">${copy.period}: ${text(item.service_period)}</div>` : ''}</td><td>${item.quantity}</td><td>${formatMoneyInHtml(Math.round((Number(item.unit_price) || 0) * 100), invoice.currency)}</td><td><strong>${formatMoneyInHtml(lineAmount, invoice.currency)}</strong></td></tr>`;
+                const itemDescription = language === 'en' ? (item.description_en?.trim() || item.description) : item.description;
+                return `<tr><td><div class="line-description">${withBreaks(itemDescription)}</div>${item.service_period ? `<div class="line-period">${copy.period}: ${text(item.service_period)}</div>` : ''}</td><td>${item.quantity}</td><td>${formatMoneyInHtml(Math.round((Number(item.unit_price) || 0) * 100), invoice.currency)}</td><td><strong>${formatMoneyInHtml(lineAmount, invoice.currency)}</strong></td></tr>`;
               }).join('')}</tbody>
             </table>
           </section>

@@ -48,13 +48,14 @@ export default function Services() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "",
+    nameEn: "",
     defaultPrice: "",
     active: true,
   });
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: "", defaultPrice: "", active: true });
+    setForm({ name: "", nameEn: "", defaultPrice: "", active: true });
     setDialogOpen(true);
   };
 
@@ -64,6 +65,7 @@ export default function Services() {
     setEditingId(id);
     setForm({
       name: s.name,
+      nameEn: s.name_en ?? "",
       defaultPrice: formatDecimalForInput(s.default_price),
       active: s.active,
     });
@@ -73,7 +75,7 @@ export default function Services() {
   const handleSave = () => {
     if (editingId) {
       updateService.mutate(
-        { id: editingId, updates: { name: form.name, default_price: parseDecimal(form.defaultPrice), active: form.active } },
+        { id: editingId, updates: { name: form.name, name_en: form.nameEn.trim() || null, default_price: parseDecimal(form.defaultPrice), active: form.active } },
         {
           onSuccess: () => { setDialogOpen(false); toast({ title: "Serviço atualizado!" }); },
           onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
@@ -81,7 +83,7 @@ export default function Services() {
       );
     } else {
       addService.mutate(
-        { name: form.name, default_price: parseDecimal(form.defaultPrice) },
+        { name: form.name, name_en: form.nameEn.trim() || null, default_price: parseDecimal(form.defaultPrice) },
         {
           onSuccess: () => { setDialogOpen(false); toast({ title: "Serviço criado!" }); },
           onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
@@ -217,6 +219,11 @@ export default function Services() {
             <div className="space-y-2">
               <Label>Nome do Serviço</Label>
               <Input placeholder="Ex: Gestão de Redes Sociais" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Nome do Serviço em Inglês</Label>
+              <Input placeholder="Ex: Social Media Management" value={form.nameEn} onChange={e => setForm(p => ({ ...p, nameEn: e.target.value }))} />
+              <p className="text-xs text-muted-foreground">Usado na versão inglesa das faturas. Se ficar vazio, será usado o nome português.</p>
             </div>
             <div className="space-y-2">
               <Label>Preço Base (€)</Label>

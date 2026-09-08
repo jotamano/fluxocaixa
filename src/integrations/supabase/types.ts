@@ -398,6 +398,7 @@ export type Database = {
           default_price: number
           id: string
           name: string
+          name_en: string | null
           service_type: Database["public"]["Enums"]["service_type"]
         }
         Insert: {
@@ -407,6 +408,7 @@ export type Database = {
           default_price?: number
           id?: string
           name: string
+          name_en?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
         }
         Update: {
@@ -416,6 +418,7 @@ export type Database = {
           default_price?: number
           id?: string
           name?: string
+          name_en?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
         }
         Relationships: [
