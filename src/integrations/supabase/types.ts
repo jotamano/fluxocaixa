@@ -41,6 +41,9 @@ export type Database = {
           whatsapp_instance: string | null
           whatsapp_auto_send: boolean
           whatsapp_message_template: string
+          ai_translation_provider: string
+          ai_translation_model: string
+          ai_translation_api_key: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -70,6 +73,9 @@ export type Database = {
           whatsapp_instance?: string | null
           whatsapp_auto_send?: boolean
           whatsapp_message_template?: string
+          ai_translation_provider?: string
+          ai_translation_model?: string
+          ai_translation_api_key?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -99,6 +105,9 @@ export type Database = {
           whatsapp_instance?: string | null
           whatsapp_auto_send?: boolean
           whatsapp_message_template?: string
+          ai_translation_provider?: string
+          ai_translation_model?: string
+          ai_translation_api_key?: string | null
           updated_at?: string
           updated_by?: string | null
         }

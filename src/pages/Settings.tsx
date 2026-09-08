@@ -67,6 +67,9 @@ export default function Settings() {
     invoice_en_tax_note: DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.taxNote,
     invoice_en_payment_terms: DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.paymentTerms,
     invoice_en_footer_note: DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.footerNote,
+    ai_translation_provider: "gemini",
+    ai_translation_model: "gemini-2.5-flash",
+    ai_translation_api_key: "",
   });
   const issuerLoaded = useRef(false);
 
@@ -99,6 +102,9 @@ export default function Settings() {
       invoice_en_tax_note: settings.georgia_invoice_en_tax_note || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.taxNote,
       invoice_en_payment_terms: settings.georgia_invoice_en_payment_terms || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.paymentTerms,
       invoice_en_footer_note: settings.georgia_invoice_en_footer_note || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.footerNote,
+      ai_translation_provider: settings.ai_translation_provider || "gemini",
+      ai_translation_model: settings.ai_translation_model || (settings.ai_translation_provider === "openrouter" ? "google/gemini-2.5-flash" : "gemini-2.5-flash"),
+      ai_translation_api_key: settings.ai_translation_api_key ?? "",
     });
   }, [settings]);
 
@@ -170,6 +176,9 @@ export default function Settings() {
         georgia_invoice_en_tax_note: issuer.invoice_en_tax_note.trim(),
         georgia_invoice_en_payment_terms: issuer.invoice_en_payment_terms.trim(),
         georgia_invoice_en_footer_note: issuer.invoice_en_footer_note.trim(),
+        ai_translation_provider: issuer.ai_translation_provider,
+        ai_translation_model: issuer.ai_translation_model.trim(),
+        ai_translation_api_key: issuer.ai_translation_api_key.trim() || null,
       });
       toast({ title: "Dados da empresa guardados", description: "O perfil será usado nas próximas Faturas Geórgia." });
     } catch (err) {
@@ -504,6 +513,27 @@ export default function Settings() {
                 placeholder="English footer note…"
                 disabled={isLoading || updateMutation.isPending}
               />
+            </div>
+
+            <div className="sm:col-span-2 mt-4 rounded-xl border border-violet-200 bg-violet-50/60 p-4">
+              <h3 className="font-semibold text-slate-900">Tradução IA dos nomes dos serviços</h3>
+              <p className="mt-1 text-xs text-slate-600">A app chama diretamente o provider escolhido. A tradução aparece primeiro num popup e só é guardada depois de confirmares.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ai-translation-provider">Provider</Label>
+              <select id="ai-translation-provider" value={issuer.ai_translation_provider} onChange={e => setIssuer(prev => ({ ...prev, ai_translation_provider: e.target.value }))} disabled={isLoading || updateMutation.isPending} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                <option value="gemini">Google Gemini</option>
+                <option value="openrouter">OpenRouter</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ai-translation-model">Modelo</Label>
+              <Input id="ai-translation-model" value={issuer.ai_translation_model} onChange={e => setIssuer(prev => ({ ...prev, ai_translation_model: e.target.value }))} placeholder={issuer.ai_translation_provider === "openrouter" ? "google/gemini-2.5-flash" : "gemini-2.5-flash"} disabled={isLoading || updateMutation.isPending} />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="ai-translation-api-key">API key</Label>
+              <Input id="ai-translation-api-key" type="password" value={issuer.ai_translation_api_key} onChange={e => setIssuer(prev => ({ ...prev, ai_translation_api_key: e.target.value }))} placeholder="Introduz a chave do provider escolhido" disabled={isLoading || updateMutation.isPending} />
+              <p className="text-xs text-muted-foreground">Gemini usa uma chave do Google AI Studio. OpenRouter usa uma chave <code>sk-or-...</code>. A chave fica na configuração local da aplicação.</p>
             </div>
           </div>
           <Button type="submit" disabled={isLoading || updateMutation.isPending}>
