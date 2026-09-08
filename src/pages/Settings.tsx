@@ -517,7 +517,7 @@ export default function Settings() {
 
             <div className="sm:col-span-2 mt-4 rounded-xl border border-violet-200 bg-violet-50/60 p-4">
               <h3 className="font-semibold text-slate-900">Tradução IA dos nomes dos serviços</h3>
-              <p className="mt-1 text-xs text-slate-600">A app chama diretamente o provider escolhido. A tradução aparece primeiro num popup e só é guardada depois de confirmares.</p>
+              <p className="mt-1 text-xs text-slate-600">A tradução só é iniciada ao clicar em “Traduzir em inglês” na página Serviços. Cada nome guardado fica em cache e não é enviado outra vez, a menos que apagues a tradução e peças uma nova.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="ai-translation-provider">Provider</Label>

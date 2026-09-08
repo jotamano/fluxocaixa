@@ -19,8 +19,51 @@ import {
 } from "@/hooks/use-data";
 import { formatCurrency, formatDecimalForInput, parseDecimal } from "@/lib/data";
 import { computeServiceUsageStats } from "@/lib/stats";
+import { getServicesMissingEnglishNames } from "@/lib/service-translation";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
+
+type TranslationSuggestion = { id: string; translation: string };
+
+function getObjectProperty(value: unknown, key: string): unknown {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
+}
+
+function getTranslationErrorMessage(body: unknown): string | undefined {
+  const error = getObjectProperty(body, "error");
+  const message = getObjectProperty(error, "message");
+  return typeof message === "string" && message.trim() ? message : undefined;
+}
+
+function getTranslationResponseText(body: unknown, provider: string): string {
+  if (provider === "openrouter") {
+    const choices = getObjectProperty(body, "choices");
+    const firstChoice = Array.isArray(choices) ? choices[0] : undefined;
+    const message = getObjectProperty(firstChoice, "message");
+    const content = getObjectProperty(message, "content");
+    return typeof content === "string" ? content : "";
+  }
+
+  const candidates = getObjectProperty(body, "candidates");
+  const firstCandidate = Array.isArray(candidates) ? candidates[0] : undefined;
+  const content = getObjectProperty(firstCandidate, "content");
+  const parts = getObjectProperty(content, "parts");
+  const firstPart = Array.isArray(parts) ? parts[0] : undefined;
+  const text = getObjectProperty(firstPart, "text");
+  return typeof text === "string" ? text : "";
+}
+
+function isTranslationSuggestion(value: unknown): value is TranslationSuggestion {
+  return Boolean(
+    value
+      && typeof value === "object"
+      && !Array.isArray(value)
+      && typeof (value as Record<string, unknown>).id === "string"
+      && typeof (value as Record<string, unknown>).translation === "string",
+  );
+}
 
 export default function Services() {
   const { toast } = useToast();
@@ -107,7 +150,9 @@ export default function Services() {
   };
 
   const translateMissingServices = async () => {
-    const pending = services.filter(service => service.name.trim() && !service.name_en?.trim());
+    // name_en is the durable translation cache. Only an explicit click on
+    // this action can call the provider, and saved translations are skipped.
+    const pending = getServicesMissingEnglishNames(services);
     if (!pending.length) { toast({ title: "Nada para traduzir", description: "Todos os serviços já têm nome em inglês." }); return; }
     if (!settings?.ai_translation_api_key?.trim()) { toast({ title: "Configura primeiro a API key", description: "Vai a Configurações → Tradução IA dos nomes dos serviços.", variant: "destructive" }); return; }
     setTranslateOpen(true); setTranslationBusy(true); setTranslationError(""); setSuggestions({});
@@ -121,11 +166,15 @@ export default function Services() {
       } else {
         response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": settings.ai_translation_api_key }, body: JSON.stringify({ generationConfig: { temperature: 0.1, responseMimeType: "application/json" }, contents: [{ role: "user", parts: [{ text: prompt }] }] }) });
       }
-      const body = await response.json() as any;
-      if (!response.ok) throw new Error(body?.error?.message || `O provider respondeu com HTTP ${response.status}.`);
-      const raw = provider === "openrouter" ? body?.choices?.[0]?.message?.content : body?.candidates?.[0]?.content?.parts?.[0]?.text;
-      const parsed = JSON.parse(String(raw).replace(/^```json\s*|\s*```$/g, "")) as { id: string; translation: string }[];
-      const next = Object.fromEntries(parsed.filter(item => pending.some(service => service.id === item.id) && item.translation?.trim()).map(item => [item.id, item.translation.trim()]));
+      const body: unknown = await response.json();
+      if (!response.ok) throw new Error(getTranslationErrorMessage(body) || `O provider respondeu com HTTP ${response.status}.`);
+      const raw = getTranslationResponseText(body, provider);
+      const parsed: unknown = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, ""));
+      if (!Array.isArray(parsed)) throw new Error("A IA não devolveu uma lista válida de traduções.");
+      const next = Object.fromEntries(parsed
+        .filter(isTranslationSuggestion)
+        .filter(item => pending.some(service => service.id === item.id) && item.translation.trim())
+        .map(item => [item.id, item.translation.trim()]));
       if (!Object.keys(next).length) throw new Error("A IA não devolveu traduções válidas.");
       setSuggestions(next);
     } catch (error) { setTranslationError(error instanceof Error ? error.message : "Não foi possível traduzir os serviços."); }
