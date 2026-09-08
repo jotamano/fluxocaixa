@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Pencil, Trash2, Package, BarChart3, Languages, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Package, BarChart3, Languages, Loader2, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,6 @@ import {
 } from "@/hooks/use-data";
 import { formatCurrency, formatDecimalForInput, parseDecimal } from "@/lib/data";
 import { computeServiceUsageStats } from "@/lib/stats";
-import { getServicesMissingEnglishNames } from "@/lib/service-translation";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 
@@ -149,17 +148,24 @@ export default function Services() {
     });
   };
 
-  const translateMissingServices = async () => {
-    // name_en is the durable translation cache. Only an explicit click on
-    // this action can call the provider, and saved translations are skipped.
-    const pending = getServicesMissingEnglishNames(services);
-    if (!pending.length) { toast({ title: "Nada para traduzir", description: "Todos os serviços já têm nome em inglês." }); return; }
-    if (!settings?.ai_translation_api_key?.trim()) { toast({ title: "Configura primeiro a API key", description: "Vai a Configurações → Tradução IA dos nomes dos serviços.", variant: "destructive" }); return; }
-    setTranslateOpen(true); setTranslationBusy(true); setTranslationError(""); setSuggestions({});
+  const openTranslationDialog = () => {
+    setTranslateOpen(true);
+    setTranslationError("");
+    setSuggestions({});
+  };
+
+  const translateServices = async (serviceIds: string[]) => {
+    const selected = services.filter(service => serviceIds.includes(service.id) && service.name.trim());
+    if (!selected.length) return;
+    if (!settings?.ai_translation_api_key?.trim()) {
+      toast({ title: "Configura primeiro a API key", description: "Vai a Configurações → Tradução IA dos nomes dos serviços.", variant: "destructive" });
+      return;
+    }
+    setTranslationBusy(true); setTranslationError("");
     try {
       const provider = settings.ai_translation_provider || "gemini";
       const model = settings.ai_translation_model || (provider === "openrouter" ? "google/gemini-2.5-flash" : "gemini-2.5-flash");
-      const prompt = `Translate each Portuguese service name into concise, natural English. Return ONLY a JSON array of objects with exactly the keys id and translation, preserving every id exactly. Do not add explanations. Services: ${JSON.stringify(pending.map(service => ({ id: service.id, name: service.name })))}`;
+      const prompt = `Translate each Portuguese service name into concise, natural English. Return ONLY a JSON array of objects with exactly the keys id and translation, preserving every id exactly. Do not add explanations. Services: ${JSON.stringify(selected.map(service => ({ id: service.id, name: service.name })))}`;
       let response: Response;
       if (provider === "openrouter") {
         response = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.ai_translation_api_key}` }, body: JSON.stringify({ model, temperature: 0.1, messages: [{ role: "user", content: prompt }] }) });
@@ -173,10 +179,10 @@ export default function Services() {
       if (!Array.isArray(parsed)) throw new Error("A IA não devolveu uma lista válida de traduções.");
       const next = Object.fromEntries(parsed
         .filter(isTranslationSuggestion)
-        .filter(item => pending.some(service => service.id === item.id) && item.translation.trim())
+        .filter(item => selected.some(service => service.id === item.id) && item.translation.trim())
         .map(item => [item.id, item.translation.trim()]));
       if (!Object.keys(next).length) throw new Error("A IA não devolveu traduções válidas.");
-      setSuggestions(next);
+      setSuggestions(prev => ({ ...prev, ...next }));
     } catch (error) { setTranslationError(error instanceof Error ? error.message : "Não foi possível traduzir os serviços."); }
     finally { setTranslationBusy(false); }
   };
@@ -189,6 +195,8 @@ export default function Services() {
     } catch (error) { setTranslationError(error instanceof Error ? error.message : "Não foi possível guardar as traduções."); }
     finally { setTranslationBusy(false); }
   };
+
+  const translateAll = () => translateServices(services.map(service => service.id));
 
   const activeServices = services.filter(s => s.active);
   const inactiveServices = services.filter(s => !s.active);
@@ -261,7 +269,7 @@ export default function Services() {
           <h1 className="text-3xl font-bold font-display text-foreground">Serviços</h1>
           <p className="mt-1 text-muted-foreground">Gere os serviços disponíveis para faturação</p>
         </div>
-        <div className="flex gap-2"><Button variant="outline" className="gap-2" onClick={translateMissingServices}><Languages className="h-4 w-4" /> Traduzir em inglês</Button><Button className="gap-2" onClick={openCreate}><Plus className="h-4 w-4" /> Novo Serviço</Button></div>
+        <div className="flex gap-2"><Button variant="outline" className="gap-2" onClick={openTranslationDialog}><Languages className="h-4 w-4" /> Traduções IA</Button><Button className="gap-2" onClick={openCreate}><Plus className="h-4 w-4" /> Novo Serviço</Button></div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -351,10 +359,27 @@ export default function Services() {
 
       <Dialog open={translateOpen} onOpenChange={open => { if (!translationBusy) setTranslateOpen(open); }}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle className="font-display">Tradução dos nomes dos serviços</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="font-display">Tradução dos nomes dos serviços</DialogTitle>
+            <p className="text-sm text-muted-foreground">Nada é enviado para a IA ao abrir esta janela. Usa a estrela para traduzir novamente um serviço ou o botão abaixo para traduzir todos.</p>
+          </DialogHeader>
+          <div className="flex flex-wrap justify-end gap-2 border-b border-border pb-3">
+            <Button variant="outline" onClick={translateAll} disabled={translationBusy || services.length === 0}>
+              <Languages className="mr-2 h-4 w-4" /> Traduzir tudo
+            </Button>
+          </div>
           {translationBusy && <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> A traduzir…</div>}
           {translationError && <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{translationError}</p>}
-          {!translationBusy && Object.keys(suggestions).length > 0 && <div className="max-h-[50vh] space-y-3 overflow-y-auto py-2">{Object.entries(suggestions).map(([id, value]) => { const service = services.find(item => item.id === id); return <div key={id} className="grid gap-2 sm:grid-cols-2"><div className="rounded-md bg-muted px-3 py-2 text-sm">{service?.name}</div><Input value={value} onChange={e => setSuggestions(prev => ({ ...prev, [id]: e.target.value }))} /></div>; })}</div>}
+          {!translationBusy && <div className="max-h-[50vh] space-y-3 overflow-y-auto py-2">{services.map(service => {
+            const value = suggestions[service.id] ?? service.name_en ?? "";
+            return <div key={service.id} className="grid items-center gap-2 sm:grid-cols-[auto_1fr_1fr]">
+              <Button type="button" variant="ghost" size="icon" className="text-amber-500 hover:text-amber-600" title={`Traduzir novamente ${service.name}`} aria-label={`Traduzir novamente ${service.name}`} onClick={() => translateServices([service.id])} disabled={translationBusy}>
+                <Star className="h-4 w-4" fill="currentColor" />
+              </Button>
+              <div className="rounded-md bg-muted px-3 py-2 text-sm">{service.name}</div>
+              <Input placeholder="Nome em inglês" value={value} onChange={e => setSuggestions(prev => ({ ...prev, [service.id]: e.target.value }))} />
+            </div>;
+          })}</div>}
           {!translationBusy && Object.keys(suggestions).length > 0 && <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setTranslateOpen(false)}>Cancelar</Button><Button onClick={saveTranslations}>Guardar traduções</Button></div>}
         </DialogContent>
       </Dialog>
