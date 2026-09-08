@@ -2,16 +2,32 @@ interface DocumentPreviewOptions {
   title: string;
   html: string;
   singlePage?: boolean;
+  language?: 'pt' | 'en';
 }
 
 /**
  * Opens a rendered document in a new tab. Printing is deliberately opt-in:
  * the user can use the native print dialog to print or choose "Save as PDF".
  */
-export function openDocumentPreview({ title, html, singlePage = false }: DocumentPreviewOptions): boolean {
+export function openDocumentPreview({ title, html, singlePage = false, language = 'pt' }: DocumentPreviewOptions): boolean {
+  const copy = language === 'en'
+    ? {
+      blocked: 'Unable to open a new tab. Allow pop-ups to preview the PDF.',
+      download: 'Download PDF',
+      print: 'Print',
+      close: 'Close',
+      pdfError: 'Unable to prepare the PDF. Check the internet connection and try again.',
+    }
+    : {
+      blocked: 'Não foi possível abrir uma nova aba. Permita pop-ups para visualizar o PDF.',
+      download: 'Descarregar PDF',
+      print: 'Imprimir',
+      close: 'Fechar',
+      pdfError: 'Não foi possível preparar o PDF. Verifica a ligação à internet e tenta novamente.',
+    };
   const previewWindow = window.open("", "_blank");
   if (!previewWindow) {
-    window.alert("Não foi possível abrir uma nova aba. Permita pop-ups para visualizar o PDF.");
+    window.alert(copy.blocked);
     return false;
   }
 
@@ -20,9 +36,9 @@ export function openDocumentPreview({ title, html, singlePage = false }: Documen
     <div class="document-preview-toolbar" data-document-preview-toolbar>
       <strong>${safeTitle}</strong>
       <div class="document-preview-actions">
-        <button type="button" onclick="downloadDocumentPdf()">Descarregar PDF</button>
-        <button type="button" onclick="window.print()">Imprimir</button>
-        <button type="button" onclick="window.close()">Fechar</button>
+        <button type="button" onclick="downloadDocumentPdf()">${copy.download}</button>
+        <button type="button" onclick="window.print()">${copy.print}</button>
+        <button type="button" onclick="window.close()">${copy.close}</button>
       </div>
     </div>
   `;
@@ -84,7 +100,7 @@ export function openDocumentPreview({ title, html, singlePage = false }: Documen
         const content = document.querySelector('[data-document-preview-content]');
         const page = content?.querySelector('[data-document-page]') || content;
         if (!page || typeof window.html2canvas !== 'function') {
-          window.alert('Não foi possível preparar o PDF. Verifica a ligação à internet e tenta novamente.');
+          window.alert('${copy.pdfError}');
           return;
         }
         const toolbar = document.querySelector('[data-document-preview-toolbar]');
@@ -118,7 +134,7 @@ export function openDocumentPreview({ title, html, singlePage = false }: Documen
           pdf.save('${pdfFilename}');
         } catch (error) {
           console.error(error);
-          window.alert('Não foi possível preparar o PDF. Tenta novamente.');
+          window.alert('${copy.pdfError}');
         } finally {
           if (toolbar) toolbar.style.display = '';
         }
@@ -132,7 +148,7 @@ export function openDocumentPreview({ title, html, singlePage = false }: Documen
         const content = document.querySelector('[data-document-preview-content]');
         const page = content?.querySelector('[data-document-page]') || content;
         if (!page || typeof window.html2pdf !== 'function') {
-          window.alert('Não foi possível preparar o PDF. Verifica a ligação à internet e tenta novamente.');
+          window.alert('${copy.pdfError}');
           return;
         }
         const toolbar = document.querySelector('[data-document-preview-toolbar]');

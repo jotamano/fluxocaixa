@@ -5,6 +5,7 @@ import { formatInvoiceItemPeriod, getClientLabel, getInvoiceTotalWithIva } from 
 import type { GeorgiaInvoice, GeorgiaServiceItem } from '../components/GeorgiaInvoiceForm';
 import { supabase } from '@/integrations/supabase/client';
 import { DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY } from '@/lib/georgia-invoice-copy';
+import { getEnglishServiceDescription } from '@/lib/service-translation';
 import GeorgiaInvoiceList from '../components/GeorgiaInvoiceList';
 import GeorgiaInvoiceForm from '../components/GeorgiaInvoiceForm';
 import GeorgiaInvoicePreview from '../components/GeorgiaInvoicePreview';
@@ -124,10 +125,9 @@ export default function GeorgiaInvoicing() {
     if (!source) return;
 
     const nextNumber = await getNextInvoiceNumber();
-    const serviceNamesEn = new Map(services.map(service => [service.id, service.name_en?.trim() || '']));
     const items: GeorgiaServiceItem[] = (source.invoice_items ?? []).map((item) => ({
       description: item.description,
-      description_en: item.service_id ? serviceNamesEn.get(item.service_id) || '' : '',
+      description_en: getEnglishServiceDescription(item.description, item.service_id, services),
       quantity: Number(item.quantity) || 1,
       unit_price: Number(item.unit_price) || 0,
       service_period: formatInvoiceItemPeriod(item.service_start_date, item.service_end_date) ?? '',
@@ -261,6 +261,7 @@ export default function GeorgiaInvoicing() {
         <GeorgiaInvoicePreview
           invoice={previewInvoice}
           companyProfile={companyProfile}
+          services={services}
           onClose={() => setPreviewInvoice(null)}
         />
       )}

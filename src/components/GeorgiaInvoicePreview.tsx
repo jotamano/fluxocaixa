@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { openDocumentPreview } from '@/lib/document-preview';
-import { formatGeorgiaClientTaxId, getGeorgiaInvoiceVersion, type GeorgiaCompanyProfile } from '@/lib/georgia';
+import { formatGeorgiaClientTaxId, type GeorgiaCompanyProfile } from '@/lib/georgia';
 import { DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY } from '@/lib/georgia-invoice-copy';
+import { getEnglishServiceDescription, type ServiceNameTranslation } from '@/lib/service-translation';
 
 interface GeorgiaInvoice {
   id?: string;
@@ -44,6 +46,7 @@ interface GeorgiaInvoice {
 interface Props {
   invoice: GeorgiaInvoice;
   companyProfile: GeorgiaCompanyProfile;
+  services?: ServiceNameTranslation[];
   onClose: () => void;
 }
 
@@ -62,19 +65,19 @@ const escapeHtml = (value: string) => value
 const text = (value?: string | null) => escapeHtml(value?.trim() || '—');
 const withBreaks = (value?: string | null) => text(value).replace(/\n/g, '<br/>');
 
-function formatMoneyInHtml(valueInCents: number, currency: string) {
+function formatMoneyInHtml(valueInCents: number, currency: string, locale: string) {
   const amount = (valueInCents || 0) / 100;
   try {
-    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency, minimumFractionDigits: 2 }).format(amount);
+    return new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: 2 }).format(amount);
   } catch {
     return `${amount.toFixed(2)} ${currency}`;
   }
 }
 
-function formatDate(value?: string | null) {
+function formatDate(value: string | null | undefined, locale: string) {
   if (!value) return '—';
   const date = new Date(`${value.slice(0, 10)}T12:00:00`);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('pt-PT');
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(locale);
 }
 
 function statusLabel(status?: string) {
@@ -111,11 +114,17 @@ function getIssuerProfile(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompan
   };
 }
 
-type InvoiceLanguage = 'pt' | 'en';
+export type InvoiceLanguage = 'pt' | 'en';
 
-function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompanyProfile, language: InvoiceLanguage = 'pt'): string {
+export function buildGeorgiaInvoiceHtml(
+  invoice: GeorgiaInvoice,
+  companyProfile: GeorgiaCompanyProfile,
+  language: InvoiceLanguage = 'pt',
+  services: ServiceNameTranslation[] = [],
+): string {
   const issuer = getIssuerProfile(invoice, companyProfile);
   const status = statusColor(invoice.status);
+  const locale = language === 'en' ? 'en-GB' : 'pt-PT';
   const taxLabel = language === 'en' ? (issuer.invoice_en_tax_label || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.taxLabel) : (issuer.invoice_tax_label || DEFAULT_TAX_LABEL);
   const taxNote = language === 'en' ? (issuer.invoice_en_tax_note || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.taxNote) : (issuer.invoice_tax_note || DEFAULT_TAX_NOTE);
   const paymentTerms = language === 'en' ? (issuer.invoice_en_payment_terms || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.paymentTerms) : (issuer.invoice_payment_terms || DEFAULT_PAYMENT_TERMS);
@@ -126,16 +135,15 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
     htmlLang: 'pt-PT', kicker: 'Invoice · Fatura', title: 'FATURA', issued: 'Data de emissão', due: 'Vencimento', items: 'Itens de serviço', currencyVersion: 'Moeda · Versão', version: 'Versão portuguesa', issuer: 'Emitente · Issuer', billTo: 'Cliente · Bill to', services: 'Serviços prestados', caption: 'Descrição detalhada e valor faturado', description: 'Descrição', quantity: 'Qtd.', unitPrice: 'Preço unitário', total: 'Total', gelReference: 'Referência em GEL', exchangeRate: 'taxa de câmbio', subtotal: 'Subtotal', vat: 'IVA / VAT', totalDue: 'Total a pagar', payment: 'Pagamento', bank: 'Dados bancários', status: statusLabel(invoice.status), register: 'Registo', period: 'Período', footerInvoice: 'Invoice · Fatura', taxLabel, taxNote, paymentTerms,
   };
   const clientTaxId = formatGeorgiaClientTaxId(invoice.client_nif, invoice.client_country);
-  const invoiceVersion = getGeorgiaInvoiceVersion(invoice.client_country);
   const serviceItems = invoice.service_items?.length
     ? invoice.service_items
     : [{ description: invoice.service_description, description_en: '', quantity: 1, unit_price: (invoice.amount || 0) / 100, service_period: invoice.service_period }];
-  const amount = formatMoneyInHtml(invoice.amount, invoice.currency);
+  const amount = formatMoneyInHtml(invoice.amount, invoice.currency, locale);
   const gelAmount = invoice.amount_gel && invoice.currency !== 'GEL'
-    ? formatMoneyInHtml(invoice.amount_gel, 'GEL')
+    ? formatMoneyInHtml(invoice.amount_gel, 'GEL', locale)
     : '';
   const issuerLogo = issuer.logo_url
-    ? `<img src="${text(issuer.logo_url)}" alt="Logótipo" class="brand-logo" />`
+    ? `<img src="${text(issuer.logo_url)}" alt="${language === 'en' ? 'Logo' : 'Logótipo'}" class="brand-logo" />`
     : `<div class="brand-mark">F</div>`;
   const issuerContact = [issuer.email, issuer.phone].filter(Boolean).map(item => `<span>${text(item)}</span>`).join('');
   const clientContact = [invoice.client_email, invoice.client_phone].filter(Boolean).map(item => `<span>${text(item)}</span>`).join('');
@@ -226,8 +234,8 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
           </header>
 
           <section class="meta-grid">
-            <div class="meta-card"><div class="meta-label">${copy.issued}</div><div class="meta-value">${formatDate(invoice.invoice_date)}</div></div>
-            <div class="meta-card"><div class="meta-label">${copy.due}</div><div class="meta-value">${formatDate(invoice.due_date)}</div></div>
+            <div class="meta-card"><div class="meta-label">${copy.issued}</div><div class="meta-value">${formatDate(invoice.invoice_date, locale)}</div></div>
+            <div class="meta-card"><div class="meta-label">${copy.due}</div><div class="meta-value">${formatDate(invoice.due_date, locale)}</div></div>
             <div class="meta-card"><div class="meta-label">${copy.items}</div><div class="meta-value">${serviceItems.length}</div></div>
             <div class="meta-card"><div class="meta-label">${copy.currencyVersion}</div><div class="meta-value">${text(invoice.currency)} · ${text(copy.version)}</div></div>
           </section>
@@ -259,8 +267,10 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
               <tbody>${serviceItems.map(item => {
                 const lineTotal = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
                 const lineAmount = Math.round(lineTotal * 100);
-                const itemDescription = language === 'en' ? (item.description_en?.trim() || item.description) : item.description;
-                return `<tr><td><div class="line-description">${withBreaks(itemDescription)}</div>${item.service_period ? `<div class="line-period">${copy.period}: ${text(item.service_period)}</div>` : ''}</td><td>${item.quantity}</td><td>${formatMoneyInHtml(Math.round((Number(item.unit_price) || 0) * 100), invoice.currency)}</td><td><strong>${formatMoneyInHtml(lineAmount, invoice.currency)}</strong></td></tr>`;
+                const itemDescription = language === 'en'
+                  ? item.description_en?.trim() || getEnglishServiceDescription(item.description, null, services) || item.description
+                  : item.description;
+                return `<tr><td><div class="line-description">${withBreaks(itemDescription)}</div>${item.service_period ? `<div class="line-period">${copy.period}: ${text(item.service_period)}</div>` : ''}</td><td>${item.quantity}</td><td>${formatMoneyInHtml(Math.round((Number(item.unit_price) || 0) * 100), invoice.currency, locale)}</td><td><strong>${formatMoneyInHtml(lineAmount, invoice.currency, locale)}</strong></td></tr>`;
               }).join('')}</tbody>
             </table>
           </section>
@@ -289,21 +299,17 @@ function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: Georgi
   `;
 }
 
-export default function GeorgiaInvoicePreview({ invoice, companyProfile, onClose }: Props) {
-  const html = buildGeorgiaInvoiceHtml(invoice, companyProfile);
+export default function GeorgiaInvoicePreview({ invoice, companyProfile, services = [], onClose }: Props) {
+  const [language, setLanguage] = useState<InvoiceLanguage>('pt');
+  const isEnglish = language === 'en';
+  const html = buildGeorgiaInvoiceHtml(invoice, companyProfile, language, services);
 
   const handleOpenPdf = () => {
     openDocumentPreview({
-      title: `Fatura Geórgia ${invoice.invoice_number}`,
+      title: isEnglish ? `Georgia Invoice ${invoice.invoice_number} - EN` : `Fatura Geórgia ${invoice.invoice_number}`,
       html,
       singlePage: true,
-    });
-  };
-  const handleOpenEnglishPdf = () => {
-    openDocumentPreview({
-      title: `Georgia Invoice ${invoice.invoice_number} - EN`,
-      html: buildGeorgiaInvoiceHtml(invoice, companyProfile, 'en'),
-      singlePage: true,
+      language,
     });
   };
 
@@ -311,18 +317,21 @@ export default function GeorgiaInvoicePreview({ invoice, companyProfile, onClose
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-xl">
       <div className="flex flex-col gap-3 border-b border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Pré-visualização</p>
-          <h2 className="mt-1 text-lg font-bold text-slate-900">Fatura {invoice.invoice_number}</h2>
-          <p className="mt-1 text-sm text-slate-500">Documento em formato A4, pronto para abrir e imprimir.</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{isEnglish ? 'Preview' : 'Pré-visualização'}</p>
+          <h2 className="mt-1 text-lg font-bold text-slate-900">{isEnglish ? 'Invoice' : 'Fatura'} {invoice.invoice_number}</h2>
+          <p className="mt-1 text-sm text-slate-500">{isEnglish ? 'English A4 document, ready to open and print.' : 'Documento em formato A4, pronto para abrir e imprimir.'}</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleOpenPdf} className="rounded-lg bg-[#183b73] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#102a52]">Descarregar PT</button>
-          <button onClick={handleOpenEnglishPdf} className="rounded-lg bg-[#2f7d70] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#246458]">Download EN</button>
-          <button onClick={onClose} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Fechar</button>
+          <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1" role="group" aria-label="Idioma da fatura">
+            <button type="button" onClick={() => setLanguage('pt')} aria-pressed={!isEnglish} className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${!isEnglish ? 'bg-[#183b73] text-white shadow-sm' : 'text-slate-600 hover:bg-white'}`}>PT</button>
+            <button type="button" onClick={() => setLanguage('en')} aria-pressed={isEnglish} className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${isEnglish ? 'bg-[#2f7d70] text-white shadow-sm' : 'text-slate-600 hover:bg-white'}`}>EN</button>
+          </div>
+          <button onClick={handleOpenPdf} className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition ${isEnglish ? 'bg-[#2f7d70] hover:bg-[#246458]' : 'bg-[#183b73] hover:bg-[#102a52]'}`}>{isEnglish ? 'Open / Print EN' : 'Abrir / Imprimir PT'}</button>
+          <button onClick={onClose} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">{isEnglish ? 'Close' : 'Fechar'}</button>
         </div>
       </div>
       <div className="p-3 sm:p-6">
-        <iframe title={`Pré-visualização da fatura ${invoice.invoice_number}`} srcDoc={html} className="h-[1120px] w-full rounded-xl border border-slate-200 bg-white shadow-lg" />
+        <iframe key={language} title={`${isEnglish ? 'Invoice preview' : 'Pré-visualização da fatura'} ${invoice.invoice_number}`} srcDoc={html} className="h-[1120px] w-full rounded-xl border border-slate-200 bg-white shadow-lg" />
       </div>
     </div>
   );
