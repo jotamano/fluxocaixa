@@ -710,7 +710,11 @@ export function useUpdateInvoiceItems() {
         if (spawnedSubIds.length > 0) {
           const now = new Date().toISOString();
           for (const subId of spawnedSubIds) {
-            await cascadeSoftDeleteSubscription(subId, now);
+            // The invoice being edited is the source invoice for these
+            // subscriptions. Removing its line must not remove the
+            // invoice itself; only the orphaned subscription and its
+            // other unpaid generated invoices should be cascaded.
+            await cascadeSoftDeleteSubscription(subId, now, invoiceId);
           }
           result.cascadedSubscriptionIds = spawnedSubIds;
         }
