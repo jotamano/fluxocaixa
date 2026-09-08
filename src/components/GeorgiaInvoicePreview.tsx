@@ -1,5 +1,6 @@
 import { openDocumentPreview } from '@/lib/document-preview';
 import { formatGeorgiaClientTaxId, getGeorgiaInvoiceVersion, type GeorgiaCompanyProfile } from '@/lib/georgia';
+import { DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY } from '@/lib/georgia-invoice-copy';
 
 interface GeorgiaInvoice {
   id?: string;
@@ -115,12 +116,12 @@ type InvoiceLanguage = 'pt' | 'en';
 function buildGeorgiaInvoiceHtml(invoice: GeorgiaInvoice, companyProfile: GeorgiaCompanyProfile, language: InvoiceLanguage = 'pt'): string {
   const issuer = getIssuerProfile(invoice, companyProfile);
   const status = statusColor(invoice.status);
-  const taxLabel = issuer.invoice_tax_label || DEFAULT_TAX_LABEL;
-  const taxNote = issuer.invoice_tax_note || DEFAULT_TAX_NOTE;
-  const paymentTerms = issuer.invoice_payment_terms || DEFAULT_PAYMENT_TERMS;
-  const footerNote = language === 'en' ? (issuer.invoice_en_footer_note || 'Commercial document. Confirm the applicable tax treatment before final issuance.') : (issuer.invoice_footer_note || DEFAULT_FOOTER_NOTE);
+  const taxLabel = language === 'en' ? (issuer.invoice_en_tax_label || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.taxLabel) : (issuer.invoice_tax_label || DEFAULT_TAX_LABEL);
+  const taxNote = language === 'en' ? (issuer.invoice_en_tax_note || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.taxNote) : (issuer.invoice_tax_note || DEFAULT_TAX_NOTE);
+  const paymentTerms = language === 'en' ? (issuer.invoice_en_payment_terms || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.paymentTerms) : (issuer.invoice_payment_terms || DEFAULT_PAYMENT_TERMS);
+  const footerNote = language === 'en' ? (issuer.invoice_en_footer_note || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.footerNote) : (issuer.invoice_footer_note || DEFAULT_FOOTER_NOTE);
   const copy = language === 'en' ? {
-    htmlLang: 'en', kicker: 'Invoice', title: 'INVOICE', issued: 'Issue date', due: 'Due date', items: 'Service items', currencyVersion: 'Currency · Version', version: 'English version', issuer: 'Issuer', billTo: 'Bill to', services: 'Services provided', caption: 'Detailed description and billed amount', description: 'Description', quantity: 'Qty.', unitPrice: 'Unit price', total: 'Total', gelReference: 'GEL reference', exchangeRate: 'exchange rate', subtotal: 'Subtotal', vat: 'VAT', totalDue: 'Total due', payment: 'Payment', bank: 'Bank details', status: invoice.status === 'issued' ? 'Issued' : invoice.status === 'sent' ? 'Sent' : 'Draft', register: 'Registration', period: 'Period', footerInvoice: 'Invoice', taxLabel: issuer.invoice_en_tax_label || 'VAT treatment to be confirmed', taxNote: issuer.invoice_en_tax_note || "The VAT treatment must be confirmed according to the type of service, the customer's tax status and the applicable place of taxation.", paymentTerms: issuer.invoice_en_payment_terms || 'Payment due within 30 days from the issue date.',
+    htmlLang: 'en', kicker: 'Invoice', title: 'INVOICE', issued: 'Issue date', due: 'Due date', items: 'Service items', currencyVersion: 'Currency · Version', version: 'English version', issuer: 'Issuer', billTo: 'Bill to', services: 'Services provided', caption: 'Detailed description and billed amount', description: 'Description', quantity: 'Qty.', unitPrice: 'Unit price', total: 'Total', gelReference: 'GEL reference', exchangeRate: 'exchange rate', subtotal: 'Subtotal', vat: 'VAT', totalDue: 'Total due', payment: 'Payment', bank: 'Bank details', status: invoice.status === 'issued' ? 'Issued' : invoice.status === 'sent' ? 'Sent' : 'Draft', register: 'Registration', period: 'Period', footerInvoice: 'Invoice', taxLabel, taxNote, paymentTerms,
   } : {
     htmlLang: 'pt-PT', kicker: 'Invoice · Fatura', title: 'FATURA', issued: 'Data de emissão', due: 'Vencimento', items: 'Itens de serviço', currencyVersion: 'Moeda · Versão', version: 'Versão portuguesa', issuer: 'Emitente · Issuer', billTo: 'Cliente · Bill to', services: 'Serviços prestados', caption: 'Descrição detalhada e valor faturado', description: 'Descrição', quantity: 'Qtd.', unitPrice: 'Preço unitário', total: 'Total', gelReference: 'Referência em GEL', exchangeRate: 'taxa de câmbio', subtotal: 'Subtotal', vat: 'IVA / VAT', totalDue: 'Total a pagar', payment: 'Pagamento', bank: 'Dados bancários', status: statusLabel(invoice.status), register: 'Registo', period: 'Período', footerInvoice: 'Invoice · Fatura', taxLabel, taxNote, paymentTerms,
   };

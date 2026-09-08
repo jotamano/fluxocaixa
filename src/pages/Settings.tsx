@@ -13,6 +13,7 @@ import {
   useAppSettings,
   useUpdateAppSettings,
 } from "@/hooks/use-data";
+import { DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY } from "@/lib/georgia-invoice-copy";
 
 // Hard cap mirrors the CHECK constraint in the migration
 // (20260508140000_app_settings.sql). A wider range would let a typo
@@ -62,10 +63,10 @@ export default function Settings() {
     invoice_tax_note: "O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.",
     invoice_payment_terms: "Pagamento até 30 dias após a data de emissão.",
     invoice_footer_note: "Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.",
-    invoice_en_tax_label: "VAT treatment to be confirmed",
-    invoice_en_tax_note: "The VAT treatment must be confirmed according to the type of service, the customer's tax status and the applicable place of taxation.",
-    invoice_en_payment_terms: "Payment due within 30 days from the issue date.",
-    invoice_en_footer_note: "Commercial document. Confirm the applicable tax treatment before final issuance.",
+    invoice_en_tax_label: DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.taxLabel,
+    invoice_en_tax_note: DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.taxNote,
+    invoice_en_payment_terms: DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.paymentTerms,
+    invoice_en_footer_note: DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.footerNote,
   });
   const issuerLoaded = useRef(false);
 
@@ -94,10 +95,10 @@ export default function Settings() {
       invoice_tax_note: settings.georgia_invoice_tax_note ?? "O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.",
       invoice_payment_terms: settings.georgia_invoice_payment_terms ?? "Pagamento até 30 dias após a data de emissão.",
       invoice_footer_note: settings.georgia_invoice_footer_note ?? "Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.",
-      invoice_en_tax_label: settings.georgia_invoice_en_tax_label ?? "VAT treatment to be confirmed",
-      invoice_en_tax_note: settings.georgia_invoice_en_tax_note ?? "The VAT treatment must be confirmed according to the type of service, the customer's tax status and the applicable place of taxation.",
-      invoice_en_payment_terms: settings.georgia_invoice_en_payment_terms ?? "Payment due within 30 days from the issue date.",
-      invoice_en_footer_note: settings.georgia_invoice_en_footer_note ?? "Commercial document. Confirm the applicable tax treatment before final issuance.",
+      invoice_en_tax_label: settings.georgia_invoice_en_tax_label || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.taxLabel,
+      invoice_en_tax_note: settings.georgia_invoice_en_tax_note || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.taxNote,
+      invoice_en_payment_terms: settings.georgia_invoice_en_payment_terms || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.paymentTerms,
+      invoice_en_footer_note: settings.georgia_invoice_en_footer_note || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.footerNote,
     });
   }, [settings]);
 

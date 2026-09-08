@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { GeorgiaCompanyProfile } from '@/lib/georgia';
 import { formatGeorgiaClientTaxId, isGeorgiaCompanyProfileComplete } from '@/lib/georgia';
 import { fetchNbgEurRate } from '@/lib/nbg-currency';
+import { DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY } from '@/lib/georgia-invoice-copy';
 
 const georgiaSupabase = supabase as any;
 
@@ -75,10 +76,10 @@ export default function GeorgiaInvoiceForm({ invoice, issuerProfile, initialInvo
   const defaultTaxNote = issuerProfile.invoice_tax_note ?? 'O tratamento de IVA deve ser confirmado para o tipo de serviço, o estatuto fiscal do cliente e o local de tributação aplicável.';
   const defaultPaymentTerms = issuerProfile.invoice_payment_terms ?? 'Pagamento até 30 dias após a data de emissão.';
   const defaultFooterNote = issuerProfile.invoice_footer_note ?? 'Documento comercial. Confirma o enquadramento fiscal aplicável antes da emissão final.';
-  const defaultEnTaxLabel = issuerProfile.invoice_en_tax_label ?? 'VAT treatment to be confirmed';
-  const defaultEnTaxNote = issuerProfile.invoice_en_tax_note ?? "The VAT treatment must be confirmed according to the type of service, the customer's tax status and the applicable place of taxation.";
-  const defaultEnPaymentTerms = issuerProfile.invoice_en_payment_terms ?? 'Payment due within 30 days from the issue date.';
-  const defaultEnFooterNote = issuerProfile.invoice_en_footer_note ?? 'Commercial document. Confirm the applicable tax treatment before final issuance.';
+  const defaultEnTaxLabel = issuerProfile.invoice_en_tax_label || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.taxLabel;
+  const defaultEnTaxNote = issuerProfile.invoice_en_tax_note || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.taxNote;
+  const defaultEnPaymentTerms = issuerProfile.invoice_en_payment_terms || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.paymentTerms;
+  const defaultEnFooterNote = issuerProfile.invoice_en_footer_note || DEFAULT_GEORGIA_ENGLISH_INVOICE_COPY.footerNote;
   const [formData, setFormData] = useState<GeorgiaInvoice>({
     invoice_number: initialInvoiceNumber, invoice_date: new Date().toISOString().split('T')[0], client_name: '', client_nif: '', client_address: '',
     client_email: '', client_phone: '', client_company: '', client_country: 'Portugal', service_description: '', service_items: [makeBlankItem()],
