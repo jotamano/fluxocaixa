@@ -118,6 +118,34 @@ export function openDocumentPreview({ title, html, singlePage = false, language 
             backgroundColor: '#fff',
             logging: false,
           });
+          // A CSS sheet can end a few pixels below the A4 ratio because of
+          // fractional font/layout measurements. Trim only trailing rows
+          // that are effectively white so that this does not become a blank
+          // second PDF page.
+          const sourceContext = canvas.getContext('2d');
+          let sourceCanvas = canvas;
+          if (sourceContext) {
+            const pixels = sourceContext.getImageData(0, 0, canvas.width, canvas.height).data;
+            let lastContentRow = canvas.height - 1;
+            while (lastContentRow > 0) {
+              let hasContent = false;
+              for (let x = 0; x < canvas.width; x += 4) {
+                const offset = (lastContentRow * canvas.width + x) * 4;
+                if (pixels[offset] < 245 || pixels[offset + 1] < 245 || pixels[offset + 2] < 245) {
+                  hasContent = true;
+                  break;
+                }
+              }
+              if (hasContent) break;
+              lastContentRow -= 1;
+            }
+            if (lastContentRow < canvas.height - 1) {
+              sourceCanvas = document.createElement('canvas');
+              sourceCanvas.width = canvas.width;
+              sourceCanvas.height = lastContentRow + 1;
+              sourceCanvas.getContext('2d')?.drawImage(canvas, 0, 0);
+            }
+          }
           const JsPdf = window.jspdf?.jsPDF || window.jsPDF;
           if (typeof JsPdf !== 'function') {
             throw new Error('jsPDF não está disponível.');
@@ -129,19 +157,19 @@ export function openDocumentPreview({ title, html, singlePage = false, language 
           // of letting html2pdf guess where a large sheet should break. The
           // latter can move content to a mostly blank second page when a
           // document is taller than one sheet.
-          const sliceHeight = Math.max(1, Math.floor(canvas.width * pageHeight / pageWidth));
+          const sliceHeight = Math.max(1, Math.floor(sourceCanvas.width * pageHeight / pageWidth));
           const pageCanvas = document.createElement('canvas');
-          pageCanvas.width = canvas.width;
+          pageCanvas.width = sourceCanvas.width;
           let offset = 0;
           let pageIndex = 0;
-          while (offset < canvas.height) {
-            const currentHeight = Math.min(sliceHeight, canvas.height - offset);
+          while (offset < sourceCanvas.height) {
+            const currentHeight = Math.min(sliceHeight, sourceCanvas.height - offset);
             pageCanvas.height = currentHeight;
             const context = pageCanvas.getContext('2d');
             if (!context) throw new Error('Não foi possível preparar a página PDF.');
             context.fillStyle = '#fff';
             context.fillRect(0, 0, pageCanvas.width, currentHeight);
-            context.drawImage(canvas, 0, offset, canvas.width, currentHeight, 0, 0, pageCanvas.width, currentHeight);
+            context.drawImage(sourceCanvas, 0, offset, sourceCanvas.width, currentHeight, 0, 0, pageCanvas.width, currentHeight);
             if (pageIndex > 0) pdf.addPage();
             pdf.addImage(
               pageCanvas.toDataURL('image/jpeg', 0.98),

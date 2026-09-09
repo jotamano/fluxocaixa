@@ -216,7 +216,12 @@ export function buildGeorgiaInvoiceHtml(
           .footer-left { max-width: 62%; }
           .footer-right { text-align: right; }
           .footer strong { display: block; margin-bottom: 3px; color: #526078; font-size: 9px; }
-          @media print { body { background: #fff; } .sheet { margin: 0; box-shadow: none; } .summary-grid, .note-grid, .footer { break-inside: avoid; page-break-inside: avoid; } }
+          @media print {
+            @page { size: A4; margin: 0; }
+            body { background: #fff; }
+            .sheet { width: 210mm; min-height: 0; margin: 0; padding-bottom: 16px; box-shadow: none; }
+            .summary-grid, .note-grid, .footer { break-inside: avoid; page-break-inside: avoid; }
+          }
           @media (max-width: 820px) { .sheet { width: 100%; min-height: auto; margin: 0; padding: 38px 24px 28px; } .meta-grid { grid-template-columns: repeat(2, 1fr); } }
         </style>
       </head>
