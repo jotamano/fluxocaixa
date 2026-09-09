@@ -105,6 +105,11 @@ export function openDocumentPreview({ title, html, singlePage = false, language 
         }
         const toolbar = document.querySelector('[data-document-preview-toolbar]');
         if (toolbar) toolbar.style.display = 'none';
+        const originalMargin = page.style.margin;
+        // The preview intentionally has an outer margin for readability,
+        // but keeping it during A4 capture makes an otherwise exact A4 sheet
+        // taller than one PDF page and pushes the footer onto page two.
+        page.style.margin = '0';
         try {
           await prepareImagesForPdf(page);
           const canvas = await window.html2canvas(page, {
@@ -156,6 +161,7 @@ export function openDocumentPreview({ title, html, singlePage = false, language 
           console.error(error);
           window.alert('${copy.pdfError}');
         } finally {
+          page.style.margin = originalMargin;
           if (toolbar) toolbar.style.display = '';
         }
       }

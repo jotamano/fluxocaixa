@@ -176,15 +176,15 @@ export function buildGeorgiaInvoiceHtml(
           .meta-card { min-height: 66px; padding: 12px 13px; border: 1px solid #e3eaf3; border-radius: 12px; background: #f8fafc; }
           .meta-label { color: #7b879a; font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
           .meta-value { margin-top: 7px; color: #172033; font-size: 12px; font-weight: 750; line-height: 1.3; }
-          .party-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 28px; }
-          .party-card { min-height: 140px; padding: 17px 18px; border: 1px solid #e3eaf3; border-radius: 14px; }
+          .party-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+          .party-card { min-height: 108px; padding: 12px 14px; border: 1px solid #e3eaf3; border-radius: 12px; }
           .party-card.client { border-color: #cfe4e3; background: linear-gradient(145deg, #f8fdfd, #eff8f7); }
-          .section-label { margin: 0 0 12px; color: #748197; font-size: 9px; font-weight: 850; letter-spacing: .13em; text-transform: uppercase; }
-          .party-name { margin: 0 0 5px; color: #102a52; font-size: 14px; font-weight: 800; }
-          .party-line { margin: 3px 0; color: #536175; font-size: 10.5px; line-height: 1.45; }
+          .section-label { margin: 0 0 8px; color: #748197; font-size: 8px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+          .party-name { margin: 0 0 3px; color: #102a52; font-size: 12px; font-weight: 800; }
+          .party-line { margin: 2px 0; color: #536175; font-size: 9px; line-height: 1.3; }
           .party-line strong { color: #2a3548; font-weight: 700; }
-          .contact-row { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 7px; color: #718096; font-size: 9.5px; }
-          .services { margin-top: 30px; }
+          .contact-row { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 5px; color: #718096; font-size: 8px; }
+          .services { margin-top: 24px; }
           .services-heading { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 10px; }
           .services-title { margin: 0; color: #102a52; font-size: 14px; font-weight: 800; }
           .services-caption { color: #8a95a7; font-size: 9.5px; }
@@ -207,11 +207,11 @@ export function buildGeorgiaInvoiceHtml(
           .total-row.grand { margin: 8px -16px -15px; padding: 14px 16px; border-top: 1px solid #d4dfed; border-radius: 0 0 12px 12px; background: #f6f9fc; color: #183b73; font-size: 12px; }
           .total-row.grand strong { color: #183b73; font-size: 17px; }
           .note-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px; }
-          .note-card { padding: 15px 16px; border-radius: 12px; border: 1px solid #e3eaf3; background: #fbfcfe; }
+          .note-card { padding: 11px 12px; border-radius: 12px; border: 1px solid #e3eaf3; background: #fbfcfe; }
           .note-card.tax { border-color: #f0dfba; background: #fffaf0; }
-          .note-title { margin: 0 0 7px; color: #21304a; font-size: 10px; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
+          .note-title { margin: 0 0 5px; color: #21304a; font-size: 8.5px; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; }
           .note-card.tax .note-title { color: #8a5a13; }
-          .note-body { margin: 0; color: #66748a; font-size: 9.5px; line-height: 1.55; white-space: pre-line; }
+          .note-body { margin: 0; color: #66748a; font-size: 8.5px; line-height: 1.35; white-space: pre-line; }
           .footer { display: flex; justify-content: space-between; gap: 22px; margin-top: 18px; padding-top: 12px; border-top: 1px solid #dfe7f0; color: #8793a5; font-size: 8.5px; line-height: 1.5; }
           .footer-left { max-width: 62%; }
           .footer-right { text-align: right; }
