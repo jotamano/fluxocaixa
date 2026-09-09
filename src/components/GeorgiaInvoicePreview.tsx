@@ -159,7 +159,7 @@ export function buildGeorgiaInvoiceHtml(
           * { box-sizing: border-box; }
           :root { color-scheme: light; }
           body { margin: 0; background: #e9eef5; color: #172033; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .sheet { width: 210mm; height: 297mm; min-height: 0; margin: 24px auto; padding: 48px 52px 36px; background: #fff; box-shadow: 0 20px 60px rgba(15, 23, 42, .14); position: relative; overflow: hidden; break-after: avoid-page; page-break-after: avoid; }
+          .sheet { width: 210mm; min-height: 297mm; margin: 24px auto; padding: 48px 52px 36px; background: #fff; box-shadow: 0 20px 60px rgba(15, 23, 42, .14); position: relative; }
           .sheet:before { content: ""; position: absolute; inset: 0 0 auto; height: 8px; background: linear-gradient(90deg, #183b73 0%, #2563a8 58%, #38b3a0 100%); }
           .topline { display: flex; justify-content: space-between; gap: 28px; align-items: flex-start; padding-top: 8px; }
           .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
@@ -188,7 +188,9 @@ export function buildGeorgiaInvoiceHtml(
           .services-heading { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 10px; }
           .services-title { margin: 0; color: #102a52; font-size: 14px; font-weight: 800; }
           .services-caption { color: #8a95a7; font-size: 9.5px; }
-          table { width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid #e3eaf3; border-radius: 12px; }
+          table { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid #e3eaf3; border-radius: 12px; }
+          thead { display: table-header-group; }
+          tr { break-inside: avoid; page-break-inside: avoid; }
           th { padding: 11px 13px; background: #183b73; color: #fff; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-align: left; text-transform: uppercase; }
           td { padding: 15px 13px; border-top: 1px solid #e8edf4; color: #435167; font-size: 10.5px; vertical-align: top; }
           td:first-child { width: 57%; color: #172033; font-weight: 700; }
@@ -214,8 +216,8 @@ export function buildGeorgiaInvoiceHtml(
           .footer-left { max-width: 62%; }
           .footer-right { text-align: right; }
           .footer strong { display: block; margin-bottom: 3px; color: #526078; font-size: 9px; }
-          @media print { body { background: #fff; } .sheet { margin: 0; box-shadow: none; } }
-          @media (max-width: 820px) { .sheet { width: 100%; height: auto; min-height: auto; margin: 0; padding: 38px 24px 28px; } .meta-grid { grid-template-columns: repeat(2, 1fr); } }
+          @media print { body { background: #fff; } .sheet { margin: 0; box-shadow: none; } .summary-grid, .note-grid, .footer { break-inside: avoid; page-break-inside: avoid; } }
+          @media (max-width: 820px) { .sheet { width: 100%; min-height: auto; margin: 0; padding: 38px 24px 28px; } .meta-grid { grid-template-columns: repeat(2, 1fr); } }
         </style>
       </head>
       <body>
@@ -308,7 +310,6 @@ export default function GeorgiaInvoicePreview({ invoice, companyProfile, service
     openDocumentPreview({
       title: isEnglish ? `Georgia Invoice ${invoice.invoice_number} - EN` : `Fatura Geórgia ${invoice.invoice_number}`,
       html,
-      singlePage: true,
       language,
     });
   };
