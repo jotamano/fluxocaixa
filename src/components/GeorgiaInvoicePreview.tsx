@@ -159,7 +159,7 @@ export function buildGeorgiaInvoiceHtml(
           * { box-sizing: border-box; }
           :root { color-scheme: light; }
           body { margin: 0; background: #e9eef5; color: #172033; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .sheet { width: 210mm; min-height: 297mm; margin: 24px auto; padding: 48px 52px 36px; background: #fff; box-shadow: 0 20px 60px rgba(15, 23, 42, .14); position: relative; }
+          .sheet { width: 210mm; min-height: 297mm; margin: 24px auto; padding: 48px 52px 24px; background: #fff; box-shadow: 0 20px 60px rgba(15, 23, 42, .14); position: relative; }
           .sheet:before { content: ""; position: absolute; inset: 0 0 auto; height: 8px; background: linear-gradient(90deg, #183b73 0%, #2563a8 58%, #38b3a0 100%); }
           .topline { display: flex; justify-content: space-between; gap: 28px; align-items: flex-start; padding-top: 8px; }
           .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
@@ -206,13 +206,13 @@ export function buildGeorgiaInvoiceHtml(
           .total-row strong { color: #172033; font-weight: 750; }
           .total-row.grand { margin: 8px -16px -15px; padding: 14px 16px; border-top: 1px solid #d4dfed; border-radius: 0 0 12px 12px; background: #f6f9fc; color: #183b73; font-size: 12px; }
           .total-row.grand strong { color: #183b73; font-size: 17px; }
-          .note-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 26px; }
+          .note-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px; }
           .note-card { padding: 15px 16px; border-radius: 12px; border: 1px solid #e3eaf3; background: #fbfcfe; }
           .note-card.tax { border-color: #f0dfba; background: #fffaf0; }
           .note-title { margin: 0 0 7px; color: #21304a; font-size: 10px; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
           .note-card.tax .note-title { color: #8a5a13; }
           .note-body { margin: 0; color: #66748a; font-size: 9.5px; line-height: 1.55; white-space: pre-line; }
-          .footer { display: flex; justify-content: space-between; gap: 22px; margin-top: 42px; padding-top: 16px; border-top: 1px solid #dfe7f0; color: #8793a5; font-size: 8.5px; line-height: 1.5; }
+          .footer { display: flex; justify-content: space-between; gap: 22px; margin-top: 18px; padding-top: 12px; border-top: 1px solid #dfe7f0; color: #8793a5; font-size: 8.5px; line-height: 1.5; }
           .footer-left { max-width: 62%; }
           .footer-right { text-align: right; }
           .footer strong { display: block; margin-bottom: 3px; color: #526078; font-size: 9px; }
