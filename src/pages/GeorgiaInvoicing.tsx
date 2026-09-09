@@ -51,6 +51,14 @@ function addDaysToDate(date: string, days: number): string {
   return value.toISOString().slice(0, 10);
 }
 
+function getLocalToday(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function GeorgiaInvoicing() {
   const [invoices, setInvoices] = useState<GeorgiaInvoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -172,11 +180,15 @@ export default function GeorgiaInvoicing() {
       service_period: formatInvoiceItemPeriod(item.service_start_date, item.service_end_date) ?? '',
     }));
     const description = items.map((item) => `${item.quantity} × ${item.description}`).join('\n');
+    // Imported Georgia invoices are issued when the import happens. The
+    // original invoice date is deliberately not copied; the user can still
+    // edit both dates in the form before saving.
+    const importDate = getLocalToday();
 
     setEditingInvoice({
       source_invoice_id: source.id,
       invoice_number: nextNumber,
-      invoice_date: source.issue_date,
+      invoice_date: importDate,
       client_name: getClientLabel(source, 'Sem cliente'),
       client_nif: source.clients?.nif ?? '',
       client_address: source.clients?.address ?? '',
@@ -186,7 +198,7 @@ export default function GeorgiaInvoicing() {
       client_country: 'Portugal',
       service_description: description || source.notes || '',
       service_items: items,
-      due_date: addDaysToDate(source.issue_date, 7),
+      due_date: addDaysToDate(importDate, 7),
       amount: getInvoiceTotalWithIva(source.invoice_items ?? [], source),
       currency: 'EUR',
       exchange_rate: 0,
