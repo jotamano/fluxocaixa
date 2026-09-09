@@ -24,7 +24,6 @@ interface DashboardStats {
   issued: number;
   sent: number;
   drafts: number;
-  overdue: number;
 }
 
 function amountInEur(invoice: GeorgiaInvoice): number {
@@ -59,7 +58,7 @@ export default function GeorgiaInvoicing() {
   const [editingInvoice, setEditingInvoice] = useState<GeorgiaInvoice | null>(null);
   const [previewInvoice, setPreviewInvoice] = useState<GeorgiaInvoice | null>(null);
   const [nextInvoiceNumber, setNextInvoiceNumber] = useState('');
-  const [stats, setStats] = useState<DashboardStats>({ totalInvoices: 0, totalAmount: 0, monthAmount: 0, totalEur: 0, monthEur: 0, monthGel: 0, totalGel: 0, issued: 0, sent: 0, drafts: 0, overdue: 0 });
+  const [stats, setStats] = useState<DashboardStats>({ totalInvoices: 0, totalAmount: 0, monthAmount: 0, totalEur: 0, monthEur: 0, monthGel: 0, totalGel: 0, issued: 0, sent: 0, drafts: 0 });
   const [importInvoiceId, setImportInvoiceId] = useState('');
   const { data: sourceInvoices = [], isLoading: sourceInvoicesLoading } = useInvoices();
   const { data: services = [] } = useServices();
@@ -125,8 +124,6 @@ export default function GeorgiaInvoicing() {
     const monthAmount = monthInvoices.reduce((sum, inv) => sum + (inv.amount_gel || inv.amount), 0);
     const monthEur = monthInvoices.reduce((sum, inv) => sum + amountInEur(inv), 0);
     const monthGel = monthInvoices.reduce((sum, inv) => sum + amountInGel(inv), 0);
-    const today = new Date().toISOString().slice(0, 10);
-    
     setStats({
       totalInvoices,
       totalAmount,
@@ -138,7 +135,6 @@ export default function GeorgiaInvoicing() {
       issued: data.filter(inv => inv.status === 'issued').length,
       sent: data.filter(inv => inv.status === 'sent').length,
       drafts: data.filter(inv => !inv.status || inv.status === 'draft').length,
-      overdue: data.filter(inv => !!inv.due_date && inv.due_date.slice(0, 10) < today && inv.status !== 'draft').length,
     });
   }
 
@@ -264,9 +260,9 @@ export default function GeorgiaInvoicing() {
           <div className="mt-2 text-xs text-emerald-800/70">Base total: {formatDashboardMoney(stats.totalGel, 'GEL')}</div>
         </div>
         <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-5 shadow-sm">
-          <div className="text-xs font-bold uppercase tracking-wide text-amber-700">Atenção</div>
-          <div className="mt-2 text-2xl font-bold text-amber-950">{stats.overdue}</div>
-          <div className="mt-2 text-xs text-amber-800/70">fatura(s) vencida(s) · {stats.drafts} por concluir</div>
+          <div className="text-xs font-bold uppercase tracking-wide text-amber-700">Por concluir</div>
+          <div className="mt-2 text-2xl font-bold text-amber-950">{stats.drafts}</div>
+          <div className="mt-2 text-xs text-amber-800/70">rascunho(s) aguardam confirmação</div>
         </div>
       </div>
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
@@ -285,13 +281,12 @@ export default function GeorgiaInvoicing() {
             <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Emitidas</div><div className="mt-1 font-bold text-slate-900">{stats.issued}</div></div>
             <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Enviadas</div><div className="mt-1 font-bold text-slate-900">{stats.sent}</div></div>
             <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Rascunhos</div><div className="mt-1 font-bold text-slate-900">{stats.drafts}</div></div>
-            <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Vencidas</div><div className="mt-1 font-bold text-amber-700">{stats.overdue}</div></div>
+            <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Por concluir</div><div className="mt-1 font-bold text-amber-700">{stats.drafts}</div></div>
           </div>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="font-semibold text-slate-900">Sugestões</h2>
           <ul className="mt-3 space-y-2 text-sm text-slate-600">
-            <li>• Confirma as faturas vencidas e atualiza o estado depois do envio.</li>
             <li>• Usa a conversão em EUR para comparar clientes e meses.</li>
             <li>• Mantém rascunhos apenas enquanto os dados fiscais estão a ser confirmados.</li>
           </ul>
