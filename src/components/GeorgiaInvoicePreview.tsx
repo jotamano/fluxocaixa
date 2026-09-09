@@ -310,6 +310,7 @@ export default function GeorgiaInvoicePreview({ invoice, companyProfile, service
     openDocumentPreview({
       title: isEnglish ? `Georgia Invoice ${invoice.invoice_number} - EN` : `Fatura Geórgia ${invoice.invoice_number}`,
       html,
+      singlePage: true,
       language,
     });
   };

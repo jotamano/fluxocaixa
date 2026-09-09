@@ -120,17 +120,37 @@ export function openDocumentPreview({ title, html, singlePage = false, language 
           const pdf = new JsPdf({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
           const pageWidth = pdf.internal.pageSize.getWidth();
           const pageHeight = pdf.internal.pageSize.getHeight();
-          const imageHeight = canvas.height * pageWidth / canvas.width;
-          pdf.addImage(
-            canvas.toDataURL('image/jpeg', 0.98),
-            'JPEG',
-            0,
-            0,
-            pageWidth,
-            Math.min(imageHeight, pageHeight),
-            undefined,
-            'FAST',
-          );
+          // Split the rendered document into exact A4-height slices instead
+          // of letting html2pdf guess where a large sheet should break. The
+          // latter can move content to a mostly blank second page when a
+          // document is taller than one sheet.
+          const sliceHeight = Math.max(1, Math.floor(canvas.width * pageHeight / pageWidth));
+          const pageCanvas = document.createElement('canvas');
+          pageCanvas.width = canvas.width;
+          let offset = 0;
+          let pageIndex = 0;
+          while (offset < canvas.height) {
+            const currentHeight = Math.min(sliceHeight, canvas.height - offset);
+            pageCanvas.height = currentHeight;
+            const context = pageCanvas.getContext('2d');
+            if (!context) throw new Error('Não foi possível preparar a página PDF.');
+            context.fillStyle = '#fff';
+            context.fillRect(0, 0, pageCanvas.width, currentHeight);
+            context.drawImage(canvas, 0, offset, canvas.width, currentHeight, 0, 0, pageCanvas.width, currentHeight);
+            if (pageIndex > 0) pdf.addPage();
+            pdf.addImage(
+              pageCanvas.toDataURL('image/jpeg', 0.98),
+              'JPEG',
+              0,
+              0,
+              pageWidth,
+              currentHeight * pageWidth / pageCanvas.width,
+              undefined,
+              'FAST',
+            );
+            offset += currentHeight;
+            pageIndex += 1;
+          }
           pdf.save('${pdfFilename}');
         } catch (error) {
           console.error(error);
