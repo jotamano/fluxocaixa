@@ -64,7 +64,7 @@ export default function Invoices() {
   // sees totals for the slice they're inspecting (e.g. "all overdue in
   // the last 30 days"). When the user resets filters this naturally
   // collapses to lifetime totals.
-  const summary = useMemo(() => summarizeInvoices(filtered), [filtered]);
+  const summary = useMemo(() => summarizeInvoices(filtered, payments), [filtered, payments]);
 
   // Outstanding balance per invoice (total − sum of payments). Drives
   // the bulk "marcar como pago" path: register a payment for the
@@ -228,8 +228,9 @@ export default function Invoices() {
           <p className="mt-1 text-xs text-muted-foreground">{summary.totalGross > 0 ? Math.round((summary.paidGross / summary.totalGross) * 100) : 0}% recebido</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-card">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Pendentes</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Pendentes · saldo em falta</p>
           <p className="mt-1 font-display text-lg sm:text-xl font-bold text-warning">{formatCurrency(summary.pendingGross)}</p>
+          {summary.partiallyPaidCount > 0 && <p className="mt-1 text-xs text-muted-foreground">Inclui {summary.partiallyPaidCount} parcialmente paga(s)</p>}
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-card">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Vencidas</p>
