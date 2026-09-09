@@ -204,8 +204,10 @@ export interface InvoiceListSummary {
   count: number;
   totalGross: number;
   paidGross: number;
+  receivedGross: number;
   pendingGross: number;
   overdueGross: number;
+  outstandingGross: number;
   partiallyPaidGross: number;
   partiallyPaidCount: number;
   averageTicket: number;
@@ -222,6 +224,7 @@ export interface InvoiceListSummary {
 export function summarizeInvoices(invoices: Invoice[], payments: Payment[] = []): InvoiceListSummary {
   let totalGross = 0;
   let paidGross = 0;
+  let receivedGross = 0;
   let pendingGross = 0;
   let overdueGross = 0;
   let partiallyPaidGross = 0;
@@ -232,24 +235,31 @@ export function summarizeInvoices(invoices: Invoice[], payments: Payment[] = [])
     const gross = getInvoiceTotalWithIva(inv.invoice_items, inv);
     totalGross += gross;
     counted += 1;
-    if (inv.status === "paid") paidGross += gross;
-    else if (inv.status === "overdue") overdueGross += gross;
-    else if (inv.status === "partially_paid") {
-      const paid = payments
+    const paid = payments
         .filter(payment => payment.invoice_id === inv.id)
         .reduce((sum, payment) => sum + Number(payment.amount), 0);
+    if (inv.status === "paid") {
+      paidGross += gross;
+      receivedGross += Math.min(paid > 0 ? paid : gross, gross);
+    } else if (inv.status === "overdue") {
+      overdueGross += Math.max(gross - paid, 0);
+      receivedGross += Math.min(paid, gross);
+    } else if (inv.status === "partially_paid") {
       const outstanding = Math.max(gross - paid, 0);
       pendingGross += outstanding;
       partiallyPaidGross += outstanding;
       partiallyPaidCount += 1;
+      receivedGross += Math.min(paid, gross);
     } else if (inv.status === "pending") pendingGross += gross;
   }
   return {
     count: invoices.length,
     totalGross: round2(totalGross),
     paidGross: round2(paidGross),
+    receivedGross: round2(receivedGross),
     pendingGross: round2(pendingGross),
     overdueGross: round2(overdueGross),
+    outstandingGross: round2(pendingGross + overdueGross),
     partiallyPaidGross: round2(partiallyPaidGross),
     partiallyPaidCount,
     averageTicket: counted > 0 ? round2(totalGross / counted) : 0,

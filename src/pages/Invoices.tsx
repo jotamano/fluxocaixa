@@ -81,6 +81,14 @@ export default function Invoices() {
     return map;
   }, [invoices, payments]);
 
+  const paidByInvoice = useMemo(() => {
+    const map = new Map<string, number>();
+    payments.forEach(payment => {
+      map.set(payment.invoice_id, (map.get(payment.invoice_id) ?? 0) + Number(payment.amount));
+    });
+    return map;
+  }, [payments]);
+
   const filteredIds = useMemo(() => filtered.map(i => i.id), [filtered]);
   const selectedInvoices = useMemo(
     () => filtered.filter(i => selectedIds.has(i.id)),
@@ -223,13 +231,13 @@ export default function Invoices() {
           <p className="mt-1 text-xs text-muted-foreground">{summary.count} fatura(s)</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-card">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Pagas</p>
-          <p className="mt-1 font-display text-lg sm:text-xl font-bold text-success">{formatCurrency(summary.paidGross)}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{summary.totalGross > 0 ? Math.round((summary.paidGross / summary.totalGross) * 100) : 0}% recebido</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Recebido</p>
+          <p className="mt-1 font-display text-lg sm:text-xl font-bold text-success">{formatCurrency(summary.receivedGross)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{summary.totalGross > 0 ? Math.round((summary.receivedGross / summary.totalGross) * 100) : 0}% do faturado</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-card">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Pendentes · saldo em falta</p>
-          <p className="mt-1 font-display text-lg sm:text-xl font-bold text-warning">{formatCurrency(summary.pendingGross)}</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Por receber</p>
+          <p className="mt-1 font-display text-lg sm:text-xl font-bold text-warning">{formatCurrency(summary.outstandingGross)}</p>
           {summary.partiallyPaidCount > 0 && <p className="mt-1 text-xs text-muted-foreground">Inclui {summary.partiallyPaidCount} parcialmente paga(s)</p>}
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-card">
@@ -370,7 +378,21 @@ export default function Invoices() {
                   <td className="px-4 py-4 text-sm text-muted-foreground">{new Date(invoice.issue_date).toLocaleDateString('pt-PT')}</td>
                   <td className="px-4 py-4 text-sm text-muted-foreground">{new Date(invoice.due_date).toLocaleDateString('pt-PT')}</td>
                   <td className="px-4 py-4"><StatusBadge status={invoice.status} /></td>
-                  <td className="px-4 py-4 text-right text-sm font-semibold text-card-foreground">{formatCurrency(getInvoiceTotalWithIva(invoice.invoice_items, invoice))}</td>
+                  <td className="px-4 py-4 text-right text-sm font-semibold text-card-foreground">
+                    {(() => {
+                      const total = getInvoiceTotalWithIva(invoice.invoice_items, invoice);
+                      const paid = Math.min(paidByInvoice.get(invoice.id) ?? 0, total);
+                      const isPartial = invoice.status === "partially_paid" && total > 0;
+                      const progress = isPartial ? Math.round((paid / total) * 100) : 0;
+                      return <>
+                        <div>{formatCurrency(total)}</div>
+                        {isPartial && <div className="mt-1 min-w-[120px] text-left text-[11px] font-normal text-muted-foreground">
+                          <div className="mb-0.5 flex justify-between gap-2"><span>{progress}% pago</span><span>{formatCurrency(Math.max(total - paid, 0))} em falta</span></div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} /></div>
+                        </div>}
+                      </>;
+                    })()}
+                  </td>
                   <td className="px-4 py-4 text-center text-xs text-muted-foreground tabular-nums">
                     {(() => {
                       const pct = getEffectiveIvaPercentage(invoice);
